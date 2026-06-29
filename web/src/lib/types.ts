@@ -64,3 +64,14 @@ export const STATUS_LABELS: Record<AppointmentStatus, string> = {
   cancelled: "Отменён",
   no_show: "Не пришёл",
 };
+
+export interface AdminStats {
+  total_patients: number;
+  total_doctors: number;
+  total_users: number;
+  scheduled_count: number;
+  completed_count: number;
+  cancelled_count: number;
+  no_show_count: number;
+  archived_count: number;
+}

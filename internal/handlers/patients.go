@@ -104,6 +104,20 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusCreated, toPatientDTO(p))
 }
 
+// DeletePatient removes a patient record.
+func (h *Handlers) DeletePatient(w http.ResponseWriter, r *http.Request) {
+	id, err := idParam(r)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if err := h.q.DeletePatient(r.Context(), id); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // UpdatePatient edits an existing patient.
 func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 	id, err := idParam(r)

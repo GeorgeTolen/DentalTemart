@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
 import PatientDetail from "./pages/PatientDetail";
 import Doctors from "./pages/Doctors";
+import Admin from "./pages/Admin";
 
 function FullScreen({ children }: { children: React.ReactNode }) {
   return (
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/patients" element={<Patients />} />
         <Route path="/patients/:id" element={<PatientDetail />} />
         <Route path="/doctors" element={<Doctors />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

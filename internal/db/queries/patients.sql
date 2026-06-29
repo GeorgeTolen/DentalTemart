@@ -20,3 +20,6 @@ UPDATE patients
 SET full_name = $2, phone = $3, birth_date = $4, notes = $5
 WHERE id = $1
 RETURNING *;
+
+-- name: DeletePatient :exec
+DELETE FROM patients WHERE id = $1;

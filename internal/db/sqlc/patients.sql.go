@@ -99,6 +99,15 @@ func (q *Queries) ListPatients(ctx context.Context, search pgtype.Text) ([]Patie
 	return items, nil
 }
 
+const deletePatient = `-- name: DeletePatient :exec
+DELETE FROM patients WHERE id = $1
+`
+
+func (q *Queries) DeletePatient(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deletePatient, id)
+	return err
+}
+
 const updatePatient = `-- name: UpdatePatient :one
 UPDATE patients
 SET full_name = $2, phone = $3, birth_date = $4, notes = $5

@@ -6,6 +6,7 @@ const links = [
   { to: "/dashboard", label: "Дашборд" },
   { to: "/patients", label: "Пациенты" },
   { to: "/doctors", label: "Врачи" },
+  { to: "/admin", label: "Администратор" },
 ];
 
 export default function Layout() {
