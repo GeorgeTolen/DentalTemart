@@ -43,6 +43,8 @@ func (h *Handlers) Router() http.Handler {
 			r.Route("/appointments", func(r chi.Router) {
 				r.Get("/", h.ListAppointments)
 				r.Post("/", h.CreateAppointment)
+				r.Get("/archive", h.CountArchivedAppointments)
+				r.Delete("/archive", h.DeleteArchivedAppointments)
 				r.Get("/{id}", h.GetAppointment)
 				r.Put("/{id}", h.UpdateAppointment)
 				r.Delete("/{id}", h.DeleteAppointment)
@@ -53,6 +55,7 @@ func (h *Handlers) Router() http.Handler {
 				r.Post("/", h.CreatePatient)
 				r.Get("/{id}", h.GetPatient)
 				r.Put("/{id}", h.UpdatePatient)
+				r.Delete("/{id}", h.DeletePatient)
 				r.Get("/{id}/appointments", h.GetPatientAppointments)
 			})
 
@@ -65,7 +68,15 @@ func (h *Handlers) Router() http.Handler {
 				r.Put("/{id}/schedule", h.PutSchedule)
 			})
 
+			r.Route("/users", func(r chi.Router) {
+				r.Get("/", h.ListUsers)
+				r.Post("/", h.CreateUser)
+				r.Put("/{id}", h.UpdateUser)
+				r.Delete("/{id}", h.DeleteUser)
+			})
+
 			r.Get("/dashboard", h.Dashboard)
+			r.Get("/admin/stats", h.AdminStats)
 		})
 	})
 

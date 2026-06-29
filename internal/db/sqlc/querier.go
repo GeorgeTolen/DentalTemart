@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	CountAppointmentsInRange(ctx context.Context, arg CountAppointmentsInRangeParams) (int64, error)
+	CountArchivedAppointments(ctx context.Context) (int64, error)
 	CountOverlappingAppointments(ctx context.Context, arg CountOverlappingAppointmentsParams) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error)
@@ -20,8 +21,11 @@ type Querier interface {
 	CreatePatient(ctx context.Context, arg CreatePatientParams) (Patient, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteAppointment(ctx context.Context, id int64) error
+	DeleteArchivedAppointments(ctx context.Context) error
 	DeleteDoctor(ctx context.Context, id int64) error
 	DeleteDoctorSchedules(ctx context.Context, doctorID int64) error
+	DeletePatient(ctx context.Context, id int64) error
+	DeleteUser(ctx context.Context, id int64) error
 	GetAppointment(ctx context.Context, id int64) (GetAppointmentRow, error)
 	GetDoctor(ctx context.Context, id int64) (Doctor, error)
 	GetPatient(ctx context.Context, id int64) (Patient, error)
@@ -33,9 +37,11 @@ type Querier interface {
 	ListDoctorSchedules(ctx context.Context, doctorID int64) ([]DoctorSchedule, error)
 	ListDoctors(ctx context.Context) ([]Doctor, error)
 	ListPatients(ctx context.Context, search pgtype.Text) ([]Patient, error)
+	ListUsers(ctx context.Context) ([]ListUsersRow, error)
 	UpdateAppointment(ctx context.Context, arg UpdateAppointmentParams) (Appointment, error)
 	UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error)
 	UpdatePatient(ctx context.Context, arg UpdatePatientParams) (Patient, error)
+	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -73,3 +73,9 @@ DELETE FROM appointments WHERE id = $1;
 SELECT count(*) FROM appointments
 WHERE start_time >= sqlc.arg('from') AND start_time < sqlc.arg('to')
   AND status <> 'cancelled';
+
+-- name: DeleteArchivedAppointments :exec
+DELETE FROM appointments WHERE status IN ('completed', 'cancelled');
+
+-- name: CountArchivedAppointments :one
+SELECT count(*) FROM appointments WHERE status IN ('completed', 'cancelled');

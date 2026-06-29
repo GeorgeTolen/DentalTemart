@@ -116,6 +116,26 @@ func (q *Queries) DeleteAppointment(ctx context.Context, id int64) error {
 	return err
 }
 
+const deleteArchivedAppointments = `-- name: DeleteArchivedAppointments :exec
+DELETE FROM appointments WHERE status IN ('completed', 'cancelled')
+`
+
+func (q *Queries) DeleteArchivedAppointments(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteArchivedAppointments)
+	return err
+}
+
+const countArchivedAppointments = `-- name: CountArchivedAppointments :one
+SELECT count(*) FROM appointments WHERE status IN ('completed', 'cancelled')
+`
+
+func (q *Queries) CountArchivedAppointments(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countArchivedAppointments)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getAppointment = `-- name: GetAppointment :one
 SELECT
     a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at,

@@ -185,6 +185,25 @@ func (h *Handlers) DeleteAppointment(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// DeleteArchivedAppointments bulk-deletes all completed and cancelled appointments.
+func (h *Handlers) DeleteArchivedAppointments(w http.ResponseWriter, r *http.Request) {
+	if err := h.q.DeleteArchivedAppointments(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// CountArchivedAppointments returns the count of completed/cancelled appointments.
+func (h *Handlers) CountArchivedAppointments(w http.ResponseWriter, r *http.Request) {
+	count, err := h.q.CountArchivedAppointments(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]int64{"count": count})
+}
+
 // respondAppointment re-fetches the joined row so the response includes
 // patient/doctor names and colour.
 func (h *Handlers) respondAppointment(w http.ResponseWriter, r *http.Request, status int, id int64) {
