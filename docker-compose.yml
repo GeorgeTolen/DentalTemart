@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-temart}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-temart}
+      POSTGRES_DB: ${POSTGRES_DB:-temart}
+    ports:
+      # Host 5433 to avoid clashing with a native PostgreSQL on 5432.
+      # Container-internal port stays 5432 (used by the backend service).
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-temart} -d ${POSTGRES_DB:-temart}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-temart}:${POSTGRES_PASSWORD:-temart}@postgres:5432/${POSTGRES_DB:-temart}?sslmode=disable
+      PORT: "8080"
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      ACCESS_TTL: ${ACCESS_TTL:-15m}
+      REFRESH_TTL: ${REFRESH_TTL:-168h}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      OWNER_NAME: ${OWNER_NAME:-Владелец}
+      OWNER_EMAIL: ${OWNER_EMAIL:-owner@temart.local}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-changeme123}
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

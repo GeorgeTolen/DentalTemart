@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-canvas text-ink font-sans antialiased;
+  margin: 0;
+}
+
+/* --- FullCalendar tuning to match the clean blue/white theme --- */
+.fc {
+  --fc-border-color: #e2e8f0;
+  --fc-today-bg-color: #eff6ff;
+  --fc-page-bg-color: #ffffff;
+}
+.fc .fc-toolbar-title {
+  @apply text-lg font-semibold text-ink;
+}
+.fc .fc-button {
+  @apply bg-brand border-brand text-white capitalize;
+  box-shadow: none !important;
+}
+.fc .fc-button:hover {
+  @apply bg-brand-dark border-brand-dark;
+}
+.fc .fc-button-primary:disabled {
+  @apply bg-brand-light border-brand-light text-brand;
+}
+.fc .fc-event {
+  @apply border-0 rounded-md px-1 text-xs cursor-pointer;
+}
