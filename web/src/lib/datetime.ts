@@ -1,30 +1,22 @@
 // All times come from the API as RFC3339 UTC strings. The browser's Date
-// renders them in the user's local timezone automatically.
+// renders them in the user's local timezone automatically. Dates are shown in
+// the DD.MM.YYYY format used in Russia.
+
+const pad = (n: number) => String(n).padStart(2, "0");
 
 export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("ru-RU", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const d = new Date(iso);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function formatDate(value: string | null): string {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const d = new Date(value);
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+}
+
+export function formatDateTime(iso: string): string {
+  return `${formatDate(iso)} ${formatTime(iso)}`;
 }
 
 // Convert a local <input type="datetime-local"> value into an RFC3339 UTC
