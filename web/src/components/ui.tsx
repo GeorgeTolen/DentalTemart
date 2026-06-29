@@ -46,7 +46,7 @@ export function Field({
 }
 
 const fieldClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand-light";
+  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand-light disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={fieldClass} {...props} />;

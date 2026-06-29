@@ -46,11 +46,11 @@ func Fail(w http.ResponseWriter, err error) {
 	JSON(w, http.StatusInternalServerError, map[string]string{"error": "внутренняя ошибка сервера"})
 }
 
-// Decode reads and decodes a JSON request body into dst, rejecting unknown fields.
+// Decode reads and decodes a JSON request body into dst. Unknown fields are
+// ignored so clients may echo back extra fields (e.g. the resource "id" on an
+// update) without being rejected.
 func Decode(r *http.Request, dst any) error {
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
 		return NewError(http.StatusBadRequest, "некорректный JSON в теле запроса")
 	}
 	return nil

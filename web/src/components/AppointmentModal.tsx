@@ -8,8 +8,16 @@ import {
 import { errorMessage } from "../api/client";
 import type { Appointment, AppointmentStatus, Doctor } from "../lib/types";
 import { STATUS_LABELS } from "../lib/types";
-import { isoToLocalInput, localInputToISO } from "../lib/datetime";
-import { Button, Field, Input, Modal, Select, Textarea } from "./ui";
+import { formatDateTime, isoToLocalInput, localInputToISO } from "../lib/datetime";
+import {
+  Button,
+  Field,
+  Input,
+  Modal,
+  Select,
+  StatusBadge,
+  Textarea,
+} from "./ui";
 
 interface Props {
   doctors: Doctor[];
@@ -27,7 +35,18 @@ const STATUSES: AppointmentStatus[] = [
   "no_show",
 ];
 
-export default function AppointmentModal({
+export default function AppointmentModal(props: Props) {
+  // A completed appointment can no longer be edited — instead the card turns
+  // into a "schedule the follow-up visit" form.
+  if (props.existing?.status === "completed") {
+    return <CompletedCard {...props} existing={props.existing} />;
+  }
+  return <EditCard {...props} />;
+}
+
+// --- editable appointment (new or not-yet-completed) ---
+
+function EditCard({
   doctors,
   existing,
   initialStart,
@@ -247,5 +266,187 @@ export default function AppointmentModal({
         )}
       </div>
     </Modal>
+  );
+}
+
+// --- completed appointment: read-only details + schedule the next visit ---
+
+function CompletedCard({
+  doctors,
+  existing,
+  onClose,
+}: Props & { existing: Appointment }) {
+  const saveAppt = useSaveAppointment();
+  const deleteAppt = useDeleteAppointment();
+
+  const activeDoctors = useMemo(
+    () => doctors.filter((d) => d.is_active || d.id === existing.doctor_id),
+    [doctors, existing]
+  );
+
+  // Default the follow-up to the same time-of-day and duration as this visit.
+  const originalTime = isoToLocalInput(existing.start_time).slice(11, 16); // "HH:MM"
+  const durationMs =
+    new Date(existing.end_time).getTime() -
+    new Date(existing.start_time).getTime();
+
+  const [nextDate, setNextDate] = useState(existing.next_visit_date ?? "");
+  const [nextTime, setNextTime] = useState(originalTime);
+  const [nextDoctorId, setNextDoctorId] = useState<number>(existing.doctor_id);
+  const [nextNote, setNextNote] = useState("");
+  const [error, setError] = useState("");
+
+  const busy = saveAppt.isPending;
+
+  async function scheduleFollowUp() {
+    setError("");
+    if (!nextDate) return setError("Укажите дату следующего приёма");
+    try {
+      const startLocal = `${nextDate}T${nextTime || "09:00"}`;
+      const startISO = localInputToISO(startLocal);
+      const endISO = new Date(
+        new Date(startLocal).getTime() + (durationMs > 0 ? durationMs : 30 * 60000)
+      ).toISOString();
+
+      // Create the follow-up appointment ("падает на тот день").
+      await saveAppt.mutateAsync({
+        patient_id: existing.patient_id,
+        doctor_id: nextDoctorId,
+        start_time: startISO,
+        end_time: endISO,
+        status: "scheduled",
+        diagnosis: "",
+        description: nextNote,
+        next_visit_date: "",
+      });
+
+      // Record the next-visit date on the completed appointment too.
+      await saveAppt.mutateAsync({
+        id: existing.id,
+        patient_id: existing.patient_id,
+        doctor_id: existing.doctor_id,
+        start_time: existing.start_time,
+        end_time: existing.end_time,
+        status: existing.status,
+        diagnosis: existing.diagnosis,
+        description: existing.description,
+        next_visit_date: nextDate,
+      });
+
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function onDelete() {
+    if (!confirm("Удалить запись?")) return;
+    try {
+      await deleteAppt.mutateAsync(existing.id);
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  return (
+    <Modal
+      title="Карточка приёма"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="danger" onClick={onDelete} className="mr-auto">
+            Удалить
+          </Button>
+          <Button variant="secondary" onClick={onClose}>
+            Закрыть
+          </Button>
+          <Button onClick={scheduleFollowUp} disabled={busy}>
+            {busy ? "Сохранение…" : "Записать на след. приём"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        {/* Read-only summary of the completed visit. */}
+        <div className="space-y-2 rounded-xl bg-slate-50 p-4 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold">{existing.patient_name}</span>
+            <StatusBadge status={existing.status} />
+          </div>
+          <Row label="Врач" value={existing.doctor_name} />
+          <Row label="Время" value={formatDateTime(existing.start_time)} />
+          <Row label="Диагноз" value={existing.diagnosis || "—"} />
+          {existing.description && (
+            <div>
+              <div className="text-slate-400">Описание</div>
+              <div className="whitespace-pre-wrap">{existing.description}</div>
+            </div>
+          )}
+          <p className="pt-1 text-xs text-slate-400">
+            Приём завершён — данные приёма изменить нельзя. Можно записать
+            пациента на следующий приём.
+          </p>
+        </div>
+
+        {/* Follow-up scheduler. */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold text-ink">Следующий приём</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Дата">
+              <Input
+                type="date"
+                value={nextDate}
+                onChange={(e) => setNextDate(e.target.value)}
+              />
+            </Field>
+            <Field label="Время">
+              <Input
+                type="time"
+                value={nextTime}
+                onChange={(e) => setNextTime(e.target.value)}
+              />
+            </Field>
+          </div>
+
+          <Field label="Врач (по умолчанию — тот же)">
+            <Select
+              value={String(nextDoctorId)}
+              onChange={(e) => setNextDoctorId(Number(e.target.value))}
+            >
+              {activeDoctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name}
+                  {d.specialization && ` · ${d.specialization}`}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="Заметка к следующему приёму">
+            <Textarea
+              value={nextNote}
+              onChange={(e) => setNextNote(e.target.value)}
+              placeholder="Напр.: в след. раз поменять обезболивающее"
+            />
+          </Field>
+
+          {error && (
+            <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-slate-400">{label}</span>
+      <span className="text-right font-medium">{value}</span>
+    </div>
   );
 }
