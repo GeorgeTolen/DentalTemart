@@ -26,7 +26,7 @@ import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../c
 
 // ---------- helpers ----------
 
-const TABS = ["Флоу", "Управление", "Статистика", "Архив"] as const;
+const TABS = ["Создать запись", "Управление", "Статистика", "Архив"] as const;
 type Tab = (typeof TABS)[number];
 
 const ROLES: Role[] = ["owner", "admin", "doctor"];
@@ -1119,7 +1119,7 @@ function AdminArchive() {
 // ========== MAIN PAGE ==========
 
 export default function Admin() {
-  const [tab, setTab] = useState<Tab>("Флоу");
+  const [tab, setTab] = useState<Tab>("Создать запись");
 
   return (
     <div className="space-y-6">
@@ -1141,7 +1141,7 @@ export default function Admin() {
         ))}
       </div>
 
-      {tab === "Флоу" && <AdminFlow />}
+      {tab === "Создать запись" && <AdminFlow />}
       {tab === "Управление" && <AdminManagement />}
       {tab === "Статистика" && <AdminStatistics />}
       {tab === "Архив" && <AdminArchive />}
