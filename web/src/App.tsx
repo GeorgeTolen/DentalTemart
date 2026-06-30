@@ -8,6 +8,7 @@ import Patients from "./pages/Patients";
 import PatientDetail from "./pages/PatientDetail";
 import Doctors from "./pages/Doctors";
 import Admin from "./pages/Admin";
+import AppointmentsPage from "./pages/Appointments";
 
 function FullScreen({ children }: { children: React.ReactNode }) {
   return (
@@ -40,7 +41,15 @@ export default function App() {
         <Route path="/patients" element={<Patients />} />
         <Route path="/patients/:id" element={<PatientDetail />} />
         <Route path="/doctors" element={<Doctors />} />
-        <Route path="/admin" element={<Admin />} />
+        <Route path="/appointments" element={<AppointmentsPage />} />
+        <Route
+          path="/admin"
+          element={
+            user?.role === "owner" || user?.role === "admin"
+              ? <Admin />
+              : <Navigate to="/" replace />
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

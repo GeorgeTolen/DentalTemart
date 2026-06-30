@@ -1,16 +1,21 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
-const links = [
+const baseLinks = [
   { to: "/", label: "Календарь", end: true },
   { to: "/dashboard", label: "Дашборд" },
+  { to: "/appointments", label: "Записи" },
   { to: "/patients", label: "Пациенты" },
   { to: "/doctors", label: "Врачи" },
-  { to: "/admin", label: "Администратор" },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuth();
+
+  const isAdmin = user?.role === "owner" || user?.role === "admin";
+  const links = isAdmin
+    ? [...baseLinks, { to: "/admin", label: "Администратор", end: undefined }]
+    : baseLinks;
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
