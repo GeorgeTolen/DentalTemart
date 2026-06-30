@@ -8,7 +8,13 @@ import {
 import { errorMessage } from "../api/client";
 import type { Appointment, AppointmentStatus, Doctor } from "../lib/types";
 import { STATUS_LABELS } from "../lib/types";
-import { formatDateTime, isoToLocalInput, localInputToISO } from "../lib/datetime";
+import {
+  formatDateTime,
+  isoToLocalInput,
+  localInputToISO,
+  maxAppointmentInput,
+  validateAppointmentDate,
+} from "../lib/datetime";
 import {
   Button,
   Field,
@@ -55,7 +61,6 @@ function EditCard({
 }: Props) {
   const { data: patients = [] } = usePatients("");
   const saveAppt = useSaveAppointment();
-  const deleteAppt = useDeleteAppointment();
   const savePatient = useSavePatient();
 
   const activeDoctors = useMemo(
@@ -91,6 +96,8 @@ function EditCard({
     setError("");
     if (!doctorId) return setError("Выберите врача");
     if (!start || !end) return setError("Укажите время начала и окончания");
+    const dateErr = validateAppointmentDate(start);
+    if (dateErr) return setError(dateErr);
 
     try {
       let resolvedPatientId = patientId;
@@ -123,11 +130,21 @@ function EditCard({
     }
   }
 
-  async function onDelete() {
+  async function onCancel() {
     if (!existing) return;
-    if (!confirm("Удалить запись?")) return;
+    if (!confirm("Отменить запись?")) return;
     try {
-      await deleteAppt.mutateAsync(existing.id);
+      await saveAppt.mutateAsync({
+        id: existing.id,
+        patient_id: existing.patient_id,
+        doctor_id: existing.doctor_id,
+        start_time: existing.start_time,
+        end_time: existing.end_time,
+        status: "cancelled",
+        diagnosis: existing.diagnosis,
+        description: existing.description,
+        next_visit_date: existing.next_visit_date ?? "",
+      });
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -140,9 +157,9 @@ function EditCard({
       onClose={onClose}
       footer={
         <>
-          {existing && (
-            <Button variant="danger" onClick={onDelete} className="mr-auto">
-              Удалить
+          {existing && existing.status !== "cancelled" && (
+            <Button variant="danger" onClick={onCancel} className="mr-auto">
+              Отменить
             </Button>
           )}
           <Button variant="secondary" onClick={onClose}>
@@ -212,6 +229,7 @@ function EditCard({
             <Input
               type="datetime-local"
               value={start}
+              max={maxAppointmentInput()}
               onChange={(e) => setStart(e.target.value)}
             />
           </Field>
@@ -219,6 +237,7 @@ function EditCard({
             <Input
               type="datetime-local"
               value={end}
+              max={maxAppointmentInput()}
               onChange={(e) => setEnd(e.target.value)}
             />
           </Field>

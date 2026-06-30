@@ -1,12 +1,17 @@
 package handlers
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"temart/internal/db/sqlc"
 )
+
+func itoa(n int64) string {
+	return strconv.FormatInt(n, 10)
+}
 
 const dateLayout = "2006-01-02"
 
@@ -36,9 +41,14 @@ type doctorDTO struct {
 	Phone          string `json:"phone"`
 	Color          string `json:"color"`
 	IsActive       bool   `json:"is_active"`
+	UserID         *int64 `json:"user_id"`
 }
 
 func toDoctorDTO(d sqlc.Doctor) doctorDTO {
+	var userID *int64
+	if d.UserID.Valid {
+		userID = &d.UserID.Int64
+	}
 	return doctorDTO{
 		ID:             d.ID,
 		FullName:       d.FullName,
@@ -46,6 +56,7 @@ func toDoctorDTO(d sqlc.Doctor) doctorDTO {
 		Phone:          textVal(d.Phone),
 		Color:          d.Color,
 		IsActive:       d.IsActive,
+		UserID:         userID,
 	}
 }
 
@@ -66,6 +77,39 @@ func toPatientDTO(p sqlc.Patient) patientDTO {
 		Phone:     textVal(p.Phone),
 		BirthDate: dateStr(p.BirthDate),
 		Notes:     textVal(p.Notes),
+	}
+}
+
+// --- Patient record (рентген / аллергия / 3D снимок) ---
+
+type patientRecordDTO struct {
+	ID            int64   `json:"id"`
+	PatientID     int64   `json:"patient_id"`
+	Type          string  `json:"type"`
+	Title         string  `json:"title"`
+	Note          string  `json:"note"`
+	FileURL       *string `json:"file_url"`
+	FileName      string  `json:"file_name"`
+	CreatedByName string  `json:"created_by_name"`
+	CreatedAt     string  `json:"created_at"`
+}
+
+func toPatientRecordDTO(r sqlc.ListPatientRecordsRow) patientRecordDTO {
+	var fileURL *string
+	if r.FilePath.Valid && r.FilePath.String != "" {
+		u := "/api/patients/" + itoa(r.PatientID) + "/records/" + itoa(r.ID) + "/file"
+		fileURL = &u
+	}
+	return patientRecordDTO{
+		ID:            r.ID,
+		PatientID:     r.PatientID,
+		Type:          r.Type,
+		Title:         textVal(r.Title),
+		Note:          textVal(r.Note),
+		FileURL:       fileURL,
+		FileName:      textVal(r.FileName),
+		CreatedByName: r.CreatedByName,
+		CreatedAt:     r.CreatedAt.Format(time.RFC3339),
 	}
 }
 
@@ -134,6 +178,16 @@ func fromRangeRow(r sqlc.ListAppointmentsInRangeRow) appointmentDTO {
 }
 
 func fromPatientRow(r sqlc.ListAppointmentsByPatientRow) appointmentDTO {
+	return appointmentJoin{
+		ID: r.ID, PatientID: r.PatientID, DoctorID: r.DoctorID,
+		StartTime: r.StartTime, EndTime: r.EndTime, Status: r.Status,
+		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
+		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
+		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
+	}.dto()
+}
+
+func fromStatusRow(r sqlc.ListAppointmentsByStatusRow) appointmentDTO {
 	return appointmentJoin{
 		ID: r.ID, PatientID: r.PatientID, DoctorID: r.DoctorID,
 		StartTime: r.StartTime, EndTime: r.EndTime, Status: r.Status,

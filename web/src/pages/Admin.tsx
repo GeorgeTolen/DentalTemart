@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import {
   useAdminStats,
   useArchivedCount,
+  useArchivedAppointments,
   useDeleteArchivedAppointments,
   useDeletePatient,
   useDeleteUser,
@@ -11,18 +12,30 @@ import {
   useSavePatient,
   useSaveUser,
   useUsers,
-  useDeleteAppointment,
   useSaveDoctor,
   useDeleteDoctor,
   useAppointments,
   useSchedule,
   useSaveSchedule,
+  useUnlinkedDoctorUsers,
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import type { Appointment, Doctor, Patient, Role, ScheduleEntry, User } from "../lib/types";
 import { STATUS_LABELS } from "../lib/types";
-import { localInputToISO, isoToLocalInput } from "../lib/datetime";
+import {
+  localInputToISO,
+  isoToLocalInput,
+  formatDate,
+  formatDateTime,
+  formatTime,
+  validateBirthDate,
+  validateAppointmentDate,
+  minBirthDateInput,
+  todayInput,
+  maxAppointmentInput,
+} from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
+import { useAuth } from "../auth/AuthContext";
 
 // ---------- helpers ----------
 
@@ -30,9 +43,11 @@ const TABS = ["Создать запись", "Управление", "Стати
 type Tab = (typeof TABS)[number];
 
 const ROLES: Role[] = ["owner", "admin", "doctor"];
+// "owner" and "admin" are internal role identifiers kept for backward
+// compatibility; their display labels were renamed per the clinic's request.
 const ROLE_LABELS: Record<Role, string> = {
-  owner: "Владелец",
-  admin: "Администратор",
+  owner: "Администратор",
+  admin: "Менеджер",
   doctor: "Врач",
 };
 
@@ -149,6 +164,9 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
   const [notes, setNotes] = useState("");
   const { data: patients = [], isFetching } = usePatients(search);
   const savePatient = useSavePatient();
+  // True while the debounce timer hasn't fired yet for the current input, so
+  // the stale results for the previous search term aren't shown.
+  const searchPending = search !== input;
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(input), 300);
@@ -157,6 +175,8 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
 
   async function createPatient() {
     if (!name.trim()) { setError("Введите ФИО пациента"); return; }
+    const birthErr = validateBirthDate(birthDate);
+    if (birthErr) { setError(birthErr); return; }
     try {
       const p = await savePatient.mutateAsync({ full_name: name.trim(), phone, birth_date: birthDate, notes });
       setError("");
@@ -186,10 +206,10 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
             {!input && (
               <p className="text-sm text-slate-400 px-2">Введите имя или телефон для поиска</p>
             )}
-            {input && isFetching && (
+            {input && (searchPending || isFetching) && (
               <p className="text-sm text-slate-400 px-2">Поиск...</p>
             )}
-            {input && !isFetching && patients.map((p) => (
+            {input && !searchPending && !isFetching && patients.map((p) => (
               <button
                 key={p.id}
                 onClick={() => onNext(p)}
@@ -199,7 +219,7 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
                 {p.phone && <span className="ml-2 text-slate-400">{p.phone}</span>}
               </button>
             ))}
-            {input && !isFetching && patients.length === 0 && (
+            {input && !searchPending && !isFetching && patients.length === 0 && (
               <p className="text-sm text-slate-400 px-2">Пациент не найден</p>
             )}
           </div>
@@ -209,7 +229,9 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="ФИО *"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Иванов Иван Иванович" /></Field>
             <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7..." /></Field>
-            <Field label="Дата рождения"><Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} /></Field>
+            <Field label="Дата рождения">
+              <Input type="date" value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={(e) => setBirthDate(e.target.value)} />
+            </Field>
             <Field label="Заметки"><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
           </div>
           <Button onClick={createPatient} disabled={savePatient.isPending}>
@@ -236,6 +258,8 @@ function FlowStep2({ patient, onNext, onBack, setError }: {
   async function schedule() {
     if (!doctorId) { setError("Выберите врача"); return; }
     if (!start || !end) { setError("Укажите время начала и окончания"); return; }
+    const dateErr = validateAppointmentDate(start);
+    if (dateErr) { setError(dateErr); return; }
     try {
       const a = await saveAppt.mutateAsync({
         patient_id: patient.id,
@@ -268,8 +292,8 @@ function FlowStep2({ patient, onNext, onBack, setError }: {
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Начало"><Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
-          <Field label="Окончание"><Input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
+          <Field label="Начало"><Input type="datetime-local" value={start} max={maxAppointmentInput()} onChange={(e) => setStart(e.target.value)} /></Field>
+          <Field label="Окончание"><Input type="datetime-local" value={end} max={maxAppointmentInput()} onChange={(e) => setEnd(e.target.value)} /></Field>
         </div>
       </div>
       <div className="flex gap-3">
@@ -312,7 +336,7 @@ function FlowStep3({ appointment, onNext, onBack, setError }: {
       <div className="rounded-xl bg-brand-bg px-4 py-2 text-sm space-y-1">
         <div>Пациент: <strong>{appointment.patient_name}</strong></div>
         <div>Врач: <strong>{appointment.doctor_name}</strong></div>
-        <div>Время: <strong>{new Date(appointment.start_time).toLocaleString("ru")}</strong></div>
+        <div>Время: <strong>{formatDateTime(appointment.start_time)}</strong></div>
       </div>
       <Field label="Диагноз">
         <Input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Введите диагноз" />
@@ -358,7 +382,7 @@ function FlowStep4({ appointment, onNext, onBack, setError }: {
       <div className="rounded-xl bg-slate-50 px-4 py-4 space-y-2 text-sm">
         <div>Пациент: <strong>{appointment.patient_name}</strong></div>
         <div>Врач: <strong>{appointment.doctor_name}</strong></div>
-        <div>Время: <strong>{new Date(appointment.start_time).toLocaleString("ru")}</strong></div>
+        <div>Время: <strong>{formatDateTime(appointment.start_time)}</strong></div>
         {appointment.diagnosis && <div>Диагноз: <strong>{appointment.diagnosis}</strong></div>}
         {appointment.description && <div>Описание: <span className="text-slate-600">{appointment.description}</span></div>}
       </div>
@@ -389,6 +413,8 @@ function FlowStep5({ appointment, onFinish, setError }: {
   async function createNext() {
     if (!doctorId) { setError("Выберите врача"); return; }
     if (!start || !end) { setError("Укажите время"); return; }
+    const dateErr = validateAppointmentDate(start);
+    if (dateErr) { setError(dateErr); return; }
     try {
       await saveAppt.mutateAsync({
         patient_id: appointment.patient_id,
@@ -426,8 +452,8 @@ function FlowStep5({ appointment, onFinish, setError }: {
             </Select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Начало"><Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
-            <Field label="Окончание"><Input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
+            <Field label="Начало"><Input type="datetime-local" value={start} max={maxAppointmentInput()} onChange={(e) => setStart(e.target.value)} /></Field>
+            <Field label="Окончание"><Input type="datetime-local" value={end} max={maxAppointmentInput()} onChange={(e) => setEnd(e.target.value)} /></Field>
           </div>
           <Button onClick={createNext} disabled={saveAppt.isPending}>
             {saveAppt.isPending ? "Сохранение…" : "Создать запись и завершить"}
@@ -443,14 +469,19 @@ function FlowStep5({ appointment, onFinish, setError }: {
 type ManageTab = "users" | "patients" | "doctors" | "appointments";
 
 function AdminManagement() {
-  const [tab, setTab] = useState<ManageTab>("users");
+  const { user } = useAuth();
+  const isOwner = user?.role === "owner";
+  const [tab, setTab] = useState<ManageTab>(isOwner ? "users" : "patients");
 
-  const manageLinks: { key: ManageTab; label: string }[] = [
+  const allLinks: { key: ManageTab; label: string }[] = [
     { key: "users", label: "Пользователи" },
     { key: "patients", label: "Пациенты" },
     { key: "doctors", label: "Врачи" },
     { key: "appointments", label: "Записи" },
   ];
+  // Only the owner ("Администратор") manages system user accounts; the
+  // manager role doesn't get this tab.
+  const manageLinks = isOwner ? allLinks : allLinks.filter((l) => l.key !== "users");
 
   return (
     <div className="space-y-4">
@@ -467,7 +498,7 @@ function AdminManagement() {
           </button>
         ))}
       </div>
-      {tab === "users" && <UsersPanel />}
+      {tab === "users" && isOwner && <UsersPanel />}
       {tab === "patients" && <PatientsPanel />}
       {tab === "doctors" && <DoctorsPanel />}
       {tab === "appointments" && <AppointmentsPanel />}
@@ -547,6 +578,7 @@ function UserModal({ user, onClose }: { user: User | null; onClose: () => void }
     if (!name.trim()) { setError("Введите ФИО"); return; }
     if (!email.trim()) { setError("Введите email"); return; }
     if (!user && !password) { setError("Введите пароль"); return; }
+    if (password && password.length < 6) { setError("Пароль должен быть не короче 6 символов"); return; }
     try {
       await saveUser.mutateAsync({ id: user?.id, full_name: name, email, role, password: password || undefined });
       onClose();
@@ -572,8 +604,8 @@ function UserModal({ user, onClose }: { user: User | null; onClose: () => void }
             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </Select>
         </Field>
-        <Field label={user ? "Новый пароль (оставьте пустым чтобы не менять)" : "Пароль *"}>
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <Field label={user ? "Новый пароль (оставьте пустым чтобы не менять, минимум 6 символов)" : "Пароль * (минимум 6 символов)"}>
+          <Input type="password" value={password} minLength={6} onChange={(e) => setPassword(e.target.value)} />
         </Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
       </div>
@@ -590,6 +622,7 @@ function PatientsPanel() {
   const deletePatient = useDeletePatient();
   const [editing, setEditing] = useState<Patient | null | "new">(null);
   const [error, setError] = useState("");
+  const searchPending = search !== input;
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(input), 300);
@@ -609,7 +642,7 @@ function PatientsPanel() {
         <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Поиск по имени или телефону..." className="flex-1" />
         <Button onClick={() => setEditing("new")}>+ Добавить</Button>
       </div>
-      {isLoading || isFetching ? <p className="text-sm text-slate-400">Поиск…</p> : (
+      {isLoading || isFetching || searchPending ? <p className="text-sm text-slate-400">Поиск…</p> : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
@@ -625,7 +658,7 @@ function PatientsPanel() {
                 <tr key={p.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium">{p.full_name}</td>
                   <td className="px-4 py-3 text-slate-500">{p.phone || "—"}</td>
-                  <td className="px-4 py-3 text-slate-500">{p.birth_date ? new Date(p.birth_date).toLocaleDateString("ru") : "—"}</td>
+                  <td className="px-4 py-3 text-slate-500">{formatDate(p.birth_date)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 justify-end">
                       <Button variant="secondary" className="py-1 px-2 text-xs" onClick={() => setEditing(p)}>Изменить</Button>
@@ -655,6 +688,8 @@ function PatientModal({ patient, onClose }: { patient: Patient | null; onClose: 
 
   async function submit() {
     if (!name.trim()) { setError("Введите ФИО"); return; }
+    const birthErr = validateBirthDate(birthDate);
+    if (birthErr) { setError(birthErr); return; }
     try {
       await save.mutateAsync({ id: patient?.id, full_name: name, phone, birth_date: birthDate, notes });
       onClose();
@@ -675,7 +710,9 @@ function PatientModal({ patient, onClose }: { patient: Patient | null; onClose: 
       <div className="space-y-4">
         <Field label="ФИО *"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7..." /></Field>
-        <Field label="Дата рождения"><Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} /></Field>
+        <Field label="Дата рождения">
+          <Input type="date" value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={(e) => setBirthDate(e.target.value)} />
+        </Field>
         <Field label="Заметки"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
       </div>
@@ -761,12 +798,14 @@ function DoctorModal({ doctor, onClose }: { doctor: Doctor | null; onClose: () =
   const save = useSaveDoctor();
   const saveSchedule = useSaveSchedule();
   const { data: scheduleData } = useSchedule(doctor?.id ?? null);
+  const { data: unlinkedUsers = [] } = useUnlinkedDoctorUsers(doctor?.id);
 
   const [name, setName] = useState(doctor?.full_name ?? "");
   const [spec, setSpec] = useState(doctor?.specialization ?? "");
   const [phone, setPhone] = useState(doctor?.phone ?? "");
   const [color, setColor] = useState(doctor?.color ?? PRESET_COLORS[0]);
   const [active, setActive] = useState(doctor?.is_active ?? true);
+  const [userId, setUserId] = useState<number | "">(doctor?.user_id ?? "");
   const [entries, setEntries] = useState<Record<number, ScheduleEntry>>({});
   const [scheduleLoaded, setScheduleLoaded] = useState(false);
   const [error, setError] = useState("");
@@ -794,7 +833,7 @@ function DoctorModal({ doctor, onClose }: { doctor: Doctor | null; onClose: () =
   async function submit() {
     if (!name.trim()) { setError("Введите ФИО"); return; }
     try {
-      const saved = await save.mutateAsync({ id: doctor?.id, full_name: name, specialization: spec, phone, color, is_active: active });
+      const saved = await save.mutateAsync({ id: doctor?.id, full_name: name, specialization: spec, phone, color, is_active: active, user_id: userId === "" ? null : userId });
       if (Object.keys(entries).length > 0) {
         await saveSchedule.mutateAsync({ doctorId: saved.id, entries: Object.values(entries) });
       }
@@ -842,6 +881,14 @@ function DoctorModal({ doctor, onClose }: { doctor: Doctor | null; onClose: () =
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4" />
           Активен (отображается при выборе врача)
         </label>
+        <Field label="Привязанный аккаунт (для личного кабинета врача)">
+          <Select value={String(userId)} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">— не привязан —</option>
+            {unlinkedUsers.map((u) => (
+              <option key={u.id} value={u.id}>{u.full_name} · {u.email}</option>
+            ))}
+          </Select>
+        </Field>
 
         <div className="border-t border-slate-100 pt-4">
           <p className="mb-3 text-sm font-medium text-slate-600">График работы</p>
@@ -857,7 +904,7 @@ function DoctorModal({ doctor, onClose }: { doctor: Doctor | null; onClose: () =
                   {entry ? (
                     <div className="flex items-center gap-2">
                       <input type="time" value={entry.start_time} onChange={(e) => setTimeField(d.value, "start_time", e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
-                      <span className="text-slate-400">—</span>
+                      <span className="text-slate-400">-</span>
                       <input type="time" value={entry.end_time} onChange={(e) => setTimeField(d.value, "end_time", e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
                     </div>
                   ) : (
@@ -880,15 +927,26 @@ function DoctorModal({ doctor, onClose }: { doctor: Doctor | null; onClose: () =
 function AppointmentsPanel() {
   const range = useMemo(() => todayRange(), []);
   const { data: appointments = [], isLoading } = useAppointments(range.from, range.to, null);
-  const deleteAppt = useDeleteAppointment();
+  const saveAppt = useSaveAppointment();
   const { data: doctors = [] } = useDoctors();
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [error, setError] = useState("");
 
-  async function del(a: Appointment) {
-    if (!confirm(`Удалить запись пациента ${a.patient_name}?`)) return;
-    try { await deleteAppt.mutateAsync(a.id); }
-    catch (e) { setError(errorMessage(e)); }
+  async function cancel(a: Appointment) {
+    if (!confirm(`Отменить запись пациента ${a.patient_name}?`)) return;
+    try {
+      await saveAppt.mutateAsync({
+        id: a.id,
+        patient_id: a.patient_id,
+        doctor_id: a.doctor_id,
+        start_time: a.start_time,
+        end_time: a.end_time,
+        status: "cancelled",
+        diagnosis: a.diagnosis,
+        description: a.description,
+        next_visit_date: a.next_visit_date ?? "",
+      });
+    } catch (e) { setError(errorMessage(e)); }
   }
 
   if (isLoading) return <p className="text-sm text-slate-400">Загрузка…</p>;
@@ -913,12 +971,14 @@ function AppointmentsPanel() {
               <tr key={a.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-medium">{a.patient_name}</td>
                 <td className="px-4 py-3 text-slate-500">{a.doctor_name}</td>
-                <td className="px-4 py-3 text-slate-500">{new Date(a.start_time).toLocaleString("ru", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                <td className="px-4 py-3 text-slate-500">{formatDate(a.start_time)} {formatTime(a.start_time)}</td>
                 <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2 justify-end">
                     <Button variant="secondary" className="py-1 px-2 text-xs" onClick={() => setEditing(a)}>Изменить</Button>
-                    <Button variant="danger" className="py-1 px-2 text-xs" onClick={() => del(a)}>Удалить</Button>
+                    {a.status !== "cancelled" && (
+                      <Button variant="danger" className="py-1 px-2 text-xs" onClick={() => cancel(a)}>Отменить</Button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -948,6 +1008,8 @@ function AppointmentEditModal({ appointment, doctors, onClose }: { appointment: 
   const [error, setError] = useState("");
 
   async function submit() {
+    const dateErr = validateAppointmentDate(start);
+    if (dateErr) { setError(dateErr); return; }
     try {
       await save.mutateAsync({
         id: appointment.id,
@@ -985,8 +1047,8 @@ function AppointmentEditModal({ appointment, doctors, onClose }: { appointment: 
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Начало"><Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
-          <Field label="Окончание"><Input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
+          <Field label="Начало"><Input type="datetime-local" value={start} max={maxAppointmentInput()} onChange={(e) => setStart(e.target.value)} /></Field>
+          <Field label="Окончание"><Input type="datetime-local" value={end} max={maxAppointmentInput()} onChange={(e) => setEnd(e.target.value)} /></Field>
         </div>
         <Field label="Статус">
           <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
@@ -1062,39 +1124,92 @@ function AdminStatistics() {
 
 // ========== ARCHIVE ==========
 
+type ArchiveTab = "completed" | "cancelled";
+
+const ARCHIVE_TABS: { key: ArchiveTab; label: string }[] = [
+  { key: "completed", label: "Завершённые" },
+  { key: "cancelled", label: "Отменённые" },
+];
+
 function AdminArchive() {
-  const { data, isLoading, refetch } = useArchivedCount();
+  const [tab, setTab] = useState<ArchiveTab>("completed");
+  const { data: appointments = [], isLoading } = useArchivedAppointments(tab);
+  const { data: countData } = useArchivedCount();
   const deleteArchived = useDeleteArchivedAppointments();
   const { refetch: refetchStats } = useAdminStats();
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
 
   async function handleDelete() {
-    if (!confirm(`Удалить все завершённые и отменённые записи (${data?.count ?? 0} шт.)? Это действие нельзя отменить.`)) return;
+    if (!confirm(`Удалить все завершённые и отменённые записи (${countData?.count ?? 0} шт.)? Это действие нельзя отменить.`)) return;
     try {
       await deleteArchived.mutateAsync();
       setDone(true);
-      refetch();
       refetchStats();
     } catch (e) { setError(errorMessage(e)); }
   }
 
   return (
     <div className="space-y-4">
+      <div className="flex gap-1 rounded-2xl bg-slate-100 p-1 w-fit">
+        {ARCHIVE_TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+              tab === t.key ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:text-ink"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-slate-400">Загрузка…</p>
+      ) : appointments.length === 0 ? (
+        <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
+          {tab === "completed" ? "Завершённых записей нет" : "Отменённых записей нет"}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium">Пациент</th>
+                <th className="px-4 py-3 text-left font-medium">Врач</th>
+                <th className="px-4 py-3 text-left font-medium">Дата и время</th>
+                <th className="px-4 py-3 text-left font-medium">Диагноз</th>
+                <th className="px-4 py-3 text-left font-medium">Описание</th>
+                <th className="px-4 py-3 text-left font-medium">Следующий приём</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {appointments.map((a) => (
+                <tr key={a.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-medium">{a.patient_name}</td>
+                  <td className="px-4 py-3 text-slate-500">{a.doctor_name}</td>
+                  <td className="px-4 py-3 text-slate-500">{formatDateTime(a.start_time)}</td>
+                  <td className="px-4 py-3 text-slate-500">{a.diagnosis || "—"}</td>
+                  <td className="px-4 py-3 text-slate-500 max-w-xs truncate" title={a.description}>{a.description || "—"}</td>
+                  <td className="px-4 py-3 text-slate-500">{a.next_visit_date ? formatDate(a.next_visit_date) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
         <h3 className="text-lg font-semibold">Очистка архива</h3>
         <p className="text-sm text-slate-600">
-          Удаляет все записи со статусом «Завершён» и «Отменён» без ограничений.
+          Удаляет все записи со статусом «Завершён» и «Отменён» без ограничений (обе вкладки выше).
           Это действие необратимо.
         </p>
 
-        {isLoading ? (
-          <p className="text-sm text-slate-400">Загрузка…</p>
-        ) : (
-          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
-            Записей для удаления: <strong className="text-lg">{data?.count ?? 0}</strong>
-          </div>
-        )}
+        <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
+          Записей для удаления: <strong className="text-lg">{countData?.count ?? 0}</strong>
+        </div>
 
         {done && (
           <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-700">
@@ -1107,9 +1222,9 @@ function AdminArchive() {
         <Button
           variant="danger"
           onClick={handleDelete}
-          disabled={deleteArchived.isPending || (data?.count ?? 0) === 0}
+          disabled={deleteArchived.isPending || (countData?.count ?? 0) === 0}
         >
-          {deleteArchived.isPending ? "Удаление…" : `Удалить ${data?.count ?? 0} записей`}
+          {deleteArchived.isPending ? "Удаление…" : `Удалить ${countData?.count ?? 0} записей`}
         </Button>
       </div>
     </div>
@@ -1119,12 +1234,14 @@ function AdminArchive() {
 // ========== MAIN PAGE ==========
 
 export default function Admin() {
+  const { user } = useAuth();
+  const pageTitle = user?.role === "owner" ? "Панель администратора" : "Панель менеджера";
   const [tab, setTab] = useState<Tab>("Создать запись");
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-ink">Панель администратора</h1>
+        <h1 className="text-2xl font-bold text-ink">{pageTitle}</h1>
       </div>
 
       <div className="flex gap-1 rounded-2xl bg-slate-100 p-1">

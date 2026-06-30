@@ -8,10 +8,25 @@ import {
   useDoctors,
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
-import { formatDate, formatDateTime, localInputToISO } from "../lib/datetime";
+import {
+  formatDate,
+  formatDateTime,
+  localInputToISO,
+  validateBirthDate,
+  validateAppointmentDate,
+  minBirthDateInput,
+  todayInput,
+  maxAppointmentInput,
+} from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
-import type { Appointment, AppointmentStatus } from "../lib/types";
-import { STATUS_LABELS } from "../lib/types";
+import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
+import type { Appointment, AppointmentStatus, PatientRecordType } from "../lib/types";
+import { STATUS_LABELS, RECORD_TYPE_LABELS } from "../lib/types";
+import {
+  usePatientRecords,
+  useSavePatientRecord,
+  useDeletePatientRecord,
+} from "../api/hooks";
 
 export default function PatientDetail() {
   const { id } = useParams();
@@ -54,10 +69,10 @@ export default function PatientDetail() {
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-bold text-ink">{patient.full_name}</h1>
             <div className="mt-1 flex flex-wrap gap-4 text-sm text-slate-500">
-              {patient.phone && <span>📞 {patient.phone}</span>}
+              {patient.phone && <span>Номер телефона: {patient.phone}</span>}
               {patient.birth_date && (
                 <span>
-                  🎂 {formatDate(patient.birth_date)}
+                  День рождения: {formatDate(patient.birth_date)}
                   {" "}
                   <span className="text-slate-400">
                     ({new Date().getFullYear() - new Date(patient.birth_date).getFullYear()} лет)
@@ -106,24 +121,10 @@ export default function PatientDetail() {
       )}
 
       {/* История приёмов */}
-      <div>
-        <h2 className="mb-3 text-lg font-semibold">История лечения</h2>
-        {history.length === 0 ? (
-          <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-            Приёмов пока нет
-          </div>
-        ) : (
-          <div className="relative space-y-0">
-            {/* Вертикальная линия хронологии */}
-            <div className="absolute left-5 top-2 bottom-2 w-px bg-slate-200" />
-            <div className="space-y-3 pl-12">
-              {history.map((a, i) => (
-                <HistoryCard key={a.id} appointment={a} index={i} />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <TreatmentHistorySection history={history} />
+
+      {/* Медицинские записи: рентген, аллергия, 3D снимок */}
+      {patientId && <PatientRecordsSection patientId={patientId} />}
 
       {editingPatient && (
         <PatientEditModal patient={patient} onClose={() => setEditingPatient(false)} />
@@ -135,8 +136,82 @@ export default function PatientDetail() {
   );
 }
 
+const HISTORY_FILTERS: { key: AppointmentStatus | "all"; label: string }[] = [
+  { key: "all", label: "Все" },
+  { key: "scheduled", label: "Запланированные" },
+  { key: "completed", label: "Завершённые" },
+  { key: "cancelled", label: "Отменённые" },
+];
+
+function TreatmentHistorySection({ history }: { history: Appointment[] }) {
+  const [statusFilter, setStatusFilter] = useState<AppointmentStatus | "all">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const filtered = history.filter((a) => {
+    if (statusFilter !== "all" && a.status !== statusFilter) return false;
+    const day = a.start_time.slice(0, 10);
+    if (dateFrom && day < dateFrom) return false;
+    if (dateTo && day > dateTo) return false;
+    return true;
+  });
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-lg font-semibold">История лечения</h2>
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label="С даты">
+            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </Field>
+          <Field label="По дату">
+            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </Field>
+          {(dateFrom || dateTo) && (
+            <Button variant="secondary" onClick={() => { setDateFrom(""); setDateTo(""); }}>
+              Сбросить
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-3 flex flex-wrap gap-1 rounded-2xl bg-slate-100 p-1 w-fit">
+        {HISTORY_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setStatusFilter(f.key)}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+              statusFilter === f.key ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:text-ink"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
+          {history.length === 0 ? "Приёмов пока нет" : "Ничего не найдено по заданным фильтрам"}
+        </div>
+      ) : (
+        <div className="relative space-y-0">
+          {/* Вертикальная линия хронологии */}
+          <div className="absolute left-5 top-2 bottom-2 w-px bg-slate-200" />
+          <div className="space-y-3 pl-12">
+            {filtered.map((a, i) => (
+              <HistoryCard key={a.id} appointment={a} index={i} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HistoryCard({ appointment: a }: { appointment: Appointment; index: number }) {
   const [open, setOpen] = useState(false);
+  const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
+  const saveAppt = useSaveAppointment();
   const date = new Date(a.start_time);
 
   const dotColor: Record<AppointmentStatus, string> = {
@@ -145,6 +220,24 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
     cancelled: "bg-slate-400",
     no_show: "bg-orange-400",
   };
+
+  async function markCompleted() {
+    try {
+      await saveAppt.mutateAsync({
+        id: a.id,
+        patient_id: a.patient_id,
+        doctor_id: a.doctor_id,
+        start_time: a.start_time,
+        end_time: a.end_time,
+        status: "completed",
+        diagnosis: a.diagnosis,
+        description: a.description,
+        next_visit_date: a.next_visit_date ?? "",
+      });
+    } catch (e) {
+      alert(errorMessage(e));
+    }
+  }
 
   return (
     <div className="relative">
@@ -159,7 +252,7 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-ink">
-                {date.toLocaleDateString("ru", { day: "2-digit", month: "long", year: "numeric" })}
+                {formatDate(a.start_time)}
               </span>
               <span className="text-sm text-slate-400">
                 {date.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}
@@ -199,10 +292,171 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
                 Следующий приём назначен на: <strong>{formatDate(a.next_visit_date)}</strong>
               </div>
             )}
+            <div className="flex flex-wrap gap-2">
+              {a.status !== "completed" && (
+                <Button onClick={markCompleted} disabled={saveAppt.isPending}>
+                  {saveAppt.isPending ? "Сохранение…" : "Отметить завершённым"}
+                </Button>
+              )}
+              <Button variant="secondary" onClick={() => setSchedulingFollowUp(true)}>
+                Следующий приём
+              </Button>
+            </div>
           </div>
         )}
       </div>
+      {schedulingFollowUp && (
+        <ScheduleFollowUpModal appointment={a} onClose={() => setSchedulingFollowUp(false)} />
+      )}
     </div>
+  );
+}
+
+const RECORD_TABS: PatientRecordType[] = ["xray", "allergy", "scan3d"];
+
+function PatientRecordsSection({ patientId }: { patientId: number }) {
+  const [tab, setTab] = useState<PatientRecordType>("xray");
+  const [adding, setAdding] = useState(false);
+  const { data: records = [], isLoading } = usePatientRecords(patientId, tab);
+  const deleteRecord = useDeletePatientRecord();
+
+  async function onDelete(recordId: number) {
+    if (!confirm("Удалить запись?")) return;
+    try {
+      await deleteRecord.mutateAsync({ patientId, recordId });
+    } catch (e) {
+      alert(errorMessage(e));
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-lg font-semibold">Медицинские записи</h2>
+        <Button onClick={() => setAdding(true)}>+ Добавить запись</Button>
+      </div>
+      <div className="mb-3 flex gap-1 rounded-2xl bg-slate-100 p-1 w-fit">
+        {RECORD_TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+              tab === t ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:text-ink"
+            }`}
+          >
+            {RECORD_TYPE_LABELS[t]}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">Загрузка…</div>
+      ) : records.length === 0 ? (
+        <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
+          Записей пока нет
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {records.map((r) => (
+            <div key={r.id} className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  {r.title && <div className="font-semibold text-ink">{r.title}</div>}
+                  {r.note && <div className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{r.note}</div>}
+                  <div className="mt-2 text-xs text-slate-400">
+                    {formatDateTime(r.created_at)}{r.created_by_name && ` · ${r.created_by_name}`}
+                  </div>
+                  {r.file_url && (
+                    <a
+                      href={r.file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-block text-sm text-brand hover:underline"
+                    >
+                      📎 {r.file_name || "Открыть файл"}
+                    </a>
+                  )}
+                </div>
+                <button
+                  onClick={() => onDelete(r.id)}
+                  className="shrink-0 text-sm text-red-500 hover:underline"
+                >
+                  Удалить
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {adding && (
+        <AddRecordModal patientId={patientId} defaultType={tab} onClose={() => setAdding(false)} />
+      )}
+    </div>
+  );
+}
+
+function AddRecordModal({
+  patientId,
+  defaultType,
+  onClose,
+}: {
+  patientId: number;
+  defaultType: PatientRecordType;
+  onClose: () => void;
+}) {
+  const save = useSavePatientRecord();
+  const [type, setType] = useState<PatientRecordType>(defaultType);
+  const [title, setTitle] = useState("");
+  const [note, setNote] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState("");
+
+  async function submit() {
+    if (!title.trim() && !note.trim() && !file) {
+      setError("Заполните заголовок, заметку или прикрепите файл");
+      return;
+    }
+    try {
+      await save.mutateAsync({ patientId, type, title, note, file });
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  return (
+    <Modal
+      title="Новая медицинская запись"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Отмена</Button>
+          <Button onClick={submit} disabled={save.isPending}>{save.isPending ? "Сохранение…" : "Сохранить"}</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Тип записи">
+          <Select value={type} onChange={(e) => setType(e.target.value as PatientRecordType)}>
+            {RECORD_TABS.map((t) => (
+              <option key={t} value={t}>{RECORD_TYPE_LABELS[t]}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Заголовок"><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Напр.: Снимок зуба 16" /></Field>
+        <Field label="Заметка"><Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Описание, заключение..." /></Field>
+        <Field label={type === "allergy" ? "Файл (необязательно)" : "Файл (изображение или 3D-модель)"}>
+          <input
+            type="file"
+            accept={type === "scan3d" ? "image/*,.stl,.obj,.glb,.gltf" : "image/*"}
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-brand-bg file:px-3.5 file:py-2 file:text-sm file:font-medium file:text-brand-dark"
+          />
+        </Field>
+        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+      </div>
+    </Modal>
   );
 }
 
@@ -234,6 +488,8 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
 
   async function submit() {
     if (!name.trim()) { setError("Введите ФИО"); return; }
+    const birthErr = validateBirthDate(birthDate);
+    if (birthErr) { setError(birthErr); return; }
     try {
       await save.mutateAsync({ id: patient.id, full_name: name, phone, birth_date: birthDate, notes });
       onClose();
@@ -254,7 +510,9 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
       <div className="space-y-4">
         <Field label="ФИО *"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" /></Field>
-        <Field label="Дата рождения"><Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} /></Field>
+        <Field label="Дата рождения">
+          <Input type="date" value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={(e) => setBirthDate(e.target.value)} />
+        </Field>
         <Field label="Заметки"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
       </div>
@@ -279,6 +537,8 @@ function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: n
   async function submit() {
     if (!doctorId) { setError("Выберите врача"); return; }
     if (!start || !end) { setError("Укажите время начала и окончания"); return; }
+    const dateErr = validateAppointmentDate(start);
+    if (dateErr) { setError(dateErr); return; }
     try {
       await save.mutateAsync({
         patient_id: patientId,
@@ -318,8 +578,8 @@ function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: n
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Начало"><Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
-          <Field label="Окончание"><Input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
+          <Field label="Начало"><Input type="datetime-local" value={start} max={maxAppointmentInput()} onChange={(e) => setStart(e.target.value)} /></Field>
+          <Field label="Окончание"><Input type="datetime-local" value={end} max={maxAppointmentInput()} onChange={(e) => setEnd(e.target.value)} /></Field>
         </div>
         <Field label="Статус">
           <Select value={status} onChange={(e) => setStatus(e.target.value as AppointmentStatus)}>

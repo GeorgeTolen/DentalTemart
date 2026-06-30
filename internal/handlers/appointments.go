@@ -41,6 +41,9 @@ func (req appointmentRequest) toInput() (service.AppointmentInput, error) {
 	if err != nil {
 		return service.AppointmentInput{}, httpx.NewError(http.StatusBadRequest, "некорректное время окончания (ожидается RFC3339)")
 	}
+	if err := validateAppointmentStart(start.UTC()); err != nil {
+		return service.AppointmentInput{}, err
+	}
 	status := req.Status
 	if status == "" {
 		status = "scheduled"
@@ -78,6 +81,9 @@ func (h *Handlers) ListAppointments(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	if scope, scoped := h.doctorScope(r.Context()); scoped {
+		doctorID = scope
+	}
 	rows, err := h.q.ListAppointmentsInRange(r.Context(), sqlc.ListAppointmentsInRangeParams{
 		From:     from,
 		To:       to,
@@ -110,6 +116,10 @@ func (h *Handlers) GetAppointment(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	if scope, scoped := h.doctorScope(r.Context()); scoped && row.DoctorID != scope.Int64 {
+		httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
+		return
+	}
 	httpx.JSON(w, http.StatusOK, fromGetRow(row))
 }
 
@@ -128,6 +138,13 @@ func (h *Handlers) CreateAppointment(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.Fail(w, err)
 		return
+	}
+	if scope, scoped := h.doctorScope(r.Context()); scoped {
+		if scope.Int64 == unlinkedDoctorSentinel {
+			httpx.Fail(w, httpx.NewError(http.StatusForbidden, "ваш аккаунт не привязан к профилю врача"))
+			return
+		}
+		in.DoctorID = scope.Int64
 	}
 	userID, _ := middleware.UserID(r.Context())
 	appt, err := h.appts.Create(r.Context(), in, userID)
@@ -159,6 +176,22 @@ func (h *Handlers) UpdateAppointment(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	if scope, scoped := h.doctorScope(r.Context()); scoped {
+		existing, err := h.q.GetAppointment(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
+				return
+			}
+			httpx.Fail(w, err)
+			return
+		}
+		if existing.DoctorID != scope.Int64 {
+			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
+			return
+		}
+		in.DoctorID = scope.Int64
+	}
 	appt, err := h.appts.Update(r.Context(), id, in)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -177,6 +210,21 @@ func (h *Handlers) DeleteAppointment(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.Fail(w, err)
 		return
+	}
+	if scope, scoped := h.doctorScope(r.Context()); scoped {
+		existing, err := h.q.GetAppointment(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
+				return
+			}
+			httpx.Fail(w, err)
+			return
+		}
+		if existing.DoctorID != scope.Int64 {
+			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
+			return
+		}
 	}
 	if err := h.q.DeleteAppointment(r.Context(), id); err != nil {
 		httpx.Fail(w, err)
@@ -202,6 +250,26 @@ func (h *Handlers) CountArchivedAppointments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]int64{"count": count})
+}
+
+// ListArchivedAppointments returns the full detail of completed or cancelled
+// appointments (status=completed|cancelled), most recent first.
+func (h *Handlers) ListArchivedAppointments(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status")
+	if status != "completed" && status != "cancelled" {
+		httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "status должен быть completed или cancelled"))
+		return
+	}
+	rows, err := h.q.ListAppointmentsByStatus(r.Context(), status)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	out := make([]appointmentDTO, 0, len(rows))
+	for _, a := range rows {
+		out = append(out, fromStatusRow(a))
+	}
+	httpx.JSON(w, http.StatusOK, out)
 }
 
 // respondAppointment re-fetches the joined row so the response includes

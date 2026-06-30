@@ -9,6 +9,7 @@ import (
 
 	"temart/internal/db/sqlc"
 	"temart/internal/httpx"
+	"temart/internal/middleware"
 )
 
 type doctorRequest struct {
@@ -17,6 +18,7 @@ type doctorRequest struct {
 	Phone          string `json:"phone"`
 	Color          string `json:"color"`
 	IsActive       *bool  `json:"is_active"`
+	UserID         *int64 `json:"user_id"`
 }
 
 func (req doctorRequest) color() string {
@@ -28,6 +30,13 @@ func (req doctorRequest) color() string {
 
 func (req doctorRequest) active() bool {
 	return req.IsActive == nil || *req.IsActive
+}
+
+func (req doctorRequest) userID() pgtype.Int8 {
+	if req.UserID == nil || *req.UserID <= 0 {
+		return pgtype.Int8{}
+	}
+	return pgtype.Int8{Int64: *req.UserID, Valid: true}
 }
 
 // ListDoctors returns all doctors.
@@ -61,6 +70,7 @@ func (h *Handlers) CreateDoctor(w http.ResponseWriter, r *http.Request) {
 		Phone:          pgtype.Text{String: req.Phone, Valid: true},
 		Color:          req.color(),
 		IsActive:       req.active(),
+		UserID:         req.userID(),
 	})
 	if err != nil {
 		httpx.Fail(w, err)
@@ -92,6 +102,7 @@ func (h *Handlers) UpdateDoctor(w http.ResponseWriter, r *http.Request) {
 		Phone:          pgtype.Text{String: req.Phone, Valid: true},
 		Color:          req.color(),
 		IsActive:       req.active(),
+		UserID:         req.userID(),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -102,6 +113,48 @@ func (h *Handlers) UpdateDoctor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toDoctorDTO(d))
+}
+
+// GetMyDoctorProfile returns the doctor profile linked to the logged-in user
+// (for the doctor's personal cabinet).
+func (h *Handlers) GetMyDoctorProfile(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserID(r.Context())
+	if !ok {
+		httpx.Fail(w, httpx.NewError(http.StatusUnauthorized, "требуется авторизация"))
+		return
+	}
+	d, err := h.q.GetDoctorByUserID(r.Context(), pgtype.Int8{Int64: userID, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "профиль врача не привязан к этому аккаунту"))
+			return
+		}
+		httpx.Fail(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toDoctorDTO(d))
+}
+
+// ListUnlinkedDoctorUsers returns system users with the doctor role that are
+// not yet linked to a doctor profile (used to populate the admin's "link
+// account" selector). The optional exclude_doctor_id query param keeps a
+// doctor's current link selectable while editing.
+func (h *Handlers) ListUnlinkedDoctorUsers(w http.ResponseWriter, r *http.Request) {
+	var excludeID int64
+	if raw := r.URL.Query().Get("exclude_doctor_id"); raw != "" {
+		id, err := idParamFromString(raw)
+		if err != nil {
+			httpx.Fail(w, err)
+			return
+		}
+		excludeID = id
+	}
+	rows, err := h.q.ListUnlinkedDoctorUsers(r.Context(), excludeID)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, rows)
 }
 
 // DeleteDoctor removes a doctor (blocked by FK if they have appointments).

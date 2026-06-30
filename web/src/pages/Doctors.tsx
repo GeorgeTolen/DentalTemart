@@ -5,10 +5,12 @@ import {
   useSaveDoctor,
   useSchedule,
   useSaveSchedule,
+  useUnlinkedDoctorUsers,
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import type { Doctor, ScheduleEntry } from "../lib/types";
-import { Button, Field, Input, Modal } from "../components/ui";
+import { Button, Field, Input, Modal, Select } from "../components/ui";
+import { useAuth } from "../auth/AuthContext";
 
 const PRESET_COLORS = [
   "#2563EB",
@@ -30,6 +32,8 @@ const WEEKDAYS = [
 ];
 
 export default function Doctors() {
+  const { user } = useAuth();
+  const canManage = user?.role !== "doctor";
   const { data: doctors = [] } = useDoctors();
   const del = useDeleteDoctor();
   const [editing, setEditing] = useState<Doctor | "new" | null>(null);
@@ -48,7 +52,7 @@ export default function Doctors() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Врачи</h1>
-        <Button onClick={() => setEditing("new")}>Новый врач</Button>
+        {canManage && <Button onClick={() => setEditing("new")}>Новый врач</Button>}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -72,26 +76,28 @@ export default function Doctors() {
                 )}
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2 text-sm">
-              <button
-                onClick={() => setEditing(d)}
-                className="text-brand hover:underline"
-              >
-                Изменить
-              </button>
-              <button
-                onClick={() => setScheduleFor(d)}
-                className="text-brand hover:underline"
-              >
-                График
-              </button>
-              <button
-                onClick={() => onDelete(d)}
-                className="text-red-500 hover:underline"
-              >
-                Удалить
-              </button>
-            </div>
+            {canManage && (
+              <div className="mt-4 flex flex-wrap gap-2 text-sm">
+                <button
+                  onClick={() => setEditing(d)}
+                  className="text-brand hover:underline"
+                >
+                  Изменить
+                </button>
+                <button
+                  onClick={() => setScheduleFor(d)}
+                  className="text-brand hover:underline"
+                >
+                  График
+                </button>
+                <button
+                  onClick={() => onDelete(d)}
+                  className="text-red-500 hover:underline"
+                >
+                  Удалить
+                </button>
+              </div>
+            )}
           </div>
         ))}
         {doctors.length === 0 && (
@@ -125,6 +131,7 @@ function DoctorForm({
   onClose: () => void;
 }) {
   const save = useSaveDoctor();
+  const { data: unlinkedUsers = [] } = useUnlinkedDoctorUsers(doctor?.id);
   const [fullName, setFullName] = useState(doctor?.full_name ?? "");
   const [specialization, setSpecialization] = useState(
     doctor?.specialization ?? ""
@@ -132,6 +139,7 @@ function DoctorForm({
   const [phone, setPhone] = useState(doctor?.phone ?? "");
   const [color, setColor] = useState(doctor?.color ?? PRESET_COLORS[0]);
   const [isActive, setIsActive] = useState(doctor?.is_active ?? true);
+  const [userId, setUserId] = useState<number | "">(doctor?.user_id ?? "");
   const [error, setError] = useState("");
 
   async function onSubmit() {
@@ -145,6 +153,7 @@ function DoctorForm({
         phone: phone.trim(),
         color,
         is_active: isActive,
+        user_id: userId === "" ? null : userId,
       });
       onClose();
     } catch (err) {
@@ -205,6 +214,17 @@ function DoctorForm({
           />
           Активен (отображается при выборе врача)
         </label>
+        <Field label="Привязанный аккаунт (для личного кабинета врача)">
+          <Select
+            value={String(userId)}
+            onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : "")}
+          >
+            <option value="">— не привязан —</option>
+            {unlinkedUsers.map((u) => (
+              <option key={u.id} value={u.id}>{u.full_name} · {u.email}</option>
+            ))}
+          </Select>
+        </Field>
         {error && (
           <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
             {error}
@@ -308,7 +328,7 @@ function ScheduleEditor({
                     }
                     className="rounded-lg border border-slate-200 px-2 py-1 text-sm"
                   />
-                  <span className="text-slate-400">—</span>
+                  <span className="text-slate-400">-</span>
                   <input
                     type="time"
                     value={entry.end_time}

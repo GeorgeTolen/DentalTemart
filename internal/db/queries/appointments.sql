@@ -72,10 +72,25 @@ DELETE FROM appointments WHERE id = $1;
 -- name: CountAppointmentsInRange :one
 SELECT count(*) FROM appointments
 WHERE start_time >= sqlc.arg('from') AND start_time < sqlc.arg('to')
-  AND status <> 'cancelled';
+  AND status <> 'cancelled'
+  AND (sqlc.narg('doctor_id')::bigint IS NULL OR doctor_id = sqlc.narg('doctor_id')::bigint);
 
 -- name: DeleteArchivedAppointments :exec
 DELETE FROM appointments WHERE status IN ('completed', 'cancelled');
 
 -- name: CountArchivedAppointments :one
 SELECT count(*) FROM appointments WHERE status IN ('completed', 'cancelled');
+
+-- name: ListAppointmentsByStatus :many
+SELECT
+    a.*,
+    p.full_name AS patient_name,
+    p.phone     AS patient_phone,
+    d.full_name AS doctor_name,
+    d.color     AS doctor_color
+FROM appointments a
+JOIN patients p ON p.id = a.patient_id
+JOIN doctors  d ON d.id = a.doctor_id
+WHERE a.status = sqlc.arg('status')
+ORDER BY a.start_time DESC
+LIMIT 500;

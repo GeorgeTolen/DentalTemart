@@ -12,9 +12,9 @@ import (
 )
 
 const createDoctor = `-- name: CreateDoctor :one
-INSERT INTO doctors (full_name, specialization, phone, color, is_active)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, full_name, specialization, phone, color, is_active, created_at
+INSERT INTO doctors (full_name, specialization, phone, color, is_active, user_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id
 `
 
 type CreateDoctorParams struct {
@@ -23,6 +23,7 @@ type CreateDoctorParams struct {
 	Phone          pgtype.Text `json:"phone"`
 	Color          string      `json:"color"`
 	IsActive       bool        `json:"is_active"`
+	UserID         pgtype.Int8 `json:"user_id"`
 }
 
 func (q *Queries) CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doctor, error) {
@@ -32,6 +33,7 @@ func (q *Queries) CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doc
 		arg.Phone,
 		arg.Color,
 		arg.IsActive,
+		arg.UserID,
 	)
 	var i Doctor
 	err := row.Scan(
@@ -42,6 +44,7 @@ func (q *Queries) CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doc
 		&i.Color,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -96,7 +99,7 @@ func (q *Queries) DeleteDoctorSchedules(ctx context.Context, doctorID int64) err
 }
 
 const getDoctor = `-- name: GetDoctor :one
-SELECT id, full_name, specialization, phone, color, is_active, created_at FROM doctors WHERE id = $1
+SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id FROM doctors WHERE id = $1
 `
 
 func (q *Queries) GetDoctor(ctx context.Context, id int64) (Doctor, error) {
@@ -110,12 +113,33 @@ func (q *Queries) GetDoctor(ctx context.Context, id int64) (Doctor, error) {
 		&i.Color,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.UserID,
+	)
+	return i, err
+}
+
+const getDoctorByUserID = `-- name: GetDoctorByUserID :one
+SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id FROM doctors WHERE user_id = $1
+`
+
+func (q *Queries) GetDoctorByUserID(ctx context.Context, userID pgtype.Int8) (Doctor, error) {
+	row := q.db.QueryRow(ctx, getDoctorByUserID, userID)
+	var i Doctor
+	err := row.Scan(
+		&i.ID,
+		&i.FullName,
+		&i.Specialization,
+		&i.Phone,
+		&i.Color,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listActiveDoctors = `-- name: ListActiveDoctors :many
-SELECT id, full_name, specialization, phone, color, is_active, created_at FROM doctors WHERE is_active = true ORDER BY full_name
+SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id FROM doctors WHERE is_active = true ORDER BY full_name
 `
 
 func (q *Queries) ListActiveDoctors(ctx context.Context) ([]Doctor, error) {
@@ -135,7 +159,44 @@ func (q *Queries) ListActiveDoctors(ctx context.Context) ([]Doctor, error) {
 			&i.Color,
 			&i.IsActive,
 			&i.CreatedAt,
+			&i.UserID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnlinkedDoctorUsers = `-- name: ListUnlinkedDoctorUsers :many
+SELECT u.id, u.full_name, u.email
+FROM users u
+WHERE u.role = 'doctor'
+  AND NOT EXISTS (
+    SELECT 1 FROM doctors d WHERE d.user_id = u.id AND d.id != $1::bigint
+  )
+ORDER BY u.full_name
+`
+
+type ListUnlinkedDoctorUsersRow struct {
+	ID       int64  `json:"id"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+}
+
+func (q *Queries) ListUnlinkedDoctorUsers(ctx context.Context, excludeDoctorID int64) ([]ListUnlinkedDoctorUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUnlinkedDoctorUsers, excludeDoctorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnlinkedDoctorUsersRow{}
+	for rows.Next() {
+		var i ListUnlinkedDoctorUsersRow
+		if err := rows.Scan(&i.ID, &i.FullName, &i.Email); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -177,7 +238,7 @@ func (q *Queries) ListDoctorSchedules(ctx context.Context, doctorID int64) ([]Do
 }
 
 const listDoctors = `-- name: ListDoctors :many
-SELECT id, full_name, specialization, phone, color, is_active, created_at FROM doctors ORDER BY full_name
+SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id FROM doctors ORDER BY full_name
 `
 
 func (q *Queries) ListDoctors(ctx context.Context) ([]Doctor, error) {
@@ -197,6 +258,7 @@ func (q *Queries) ListDoctors(ctx context.Context) ([]Doctor, error) {
 			&i.Color,
 			&i.IsActive,
 			&i.CreatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -210,9 +272,9 @@ func (q *Queries) ListDoctors(ctx context.Context) ([]Doctor, error) {
 
 const updateDoctor = `-- name: UpdateDoctor :one
 UPDATE doctors
-SET full_name = $2, specialization = $3, phone = $4, color = $5, is_active = $6
+SET full_name = $2, specialization = $3, phone = $4, color = $5, is_active = $6, user_id = $7
 WHERE id = $1
-RETURNING id, full_name, specialization, phone, color, is_active, created_at
+RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id
 `
 
 type UpdateDoctorParams struct {
@@ -222,6 +284,7 @@ type UpdateDoctorParams struct {
 	Phone          pgtype.Text `json:"phone"`
 	Color          string      `json:"color"`
 	IsActive       bool        `json:"is_active"`
+	UserID         pgtype.Int8 `json:"user_id"`
 }
 
 func (q *Queries) UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error) {
@@ -232,6 +295,7 @@ func (q *Queries) UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doc
 		arg.Phone,
 		arg.Color,
 		arg.IsActive,
+		arg.UserID,
 	)
 	var i Doctor
 	err := row.Scan(
@@ -242,6 +306,7 @@ func (q *Queries) UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doc
 		&i.Color,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.UserID,
 	)
 	return i, err
 }

@@ -10,6 +10,8 @@ import type {
   Dashboard,
   Doctor,
   Patient,
+  PatientRecord,
+  PatientRecordType,
   ScheduleEntry,
   User,
 } from "../lib/types";
@@ -40,6 +42,27 @@ export function useDeleteDoctor() {
   return useMutation({
     mutationFn: async (id: number) => api.delete(`/doctors/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["doctors"] }),
+  });
+}
+
+export function useMyDoctorProfile() {
+  return useQuery({
+    queryKey: ["doctor-me"],
+    retry: false,
+    queryFn: async () => (await api.get<Doctor>("/doctors/me")).data,
+  });
+}
+
+export function useUnlinkedDoctorUsers(excludeDoctorId?: number) {
+  return useQuery({
+    queryKey: ["unlinked-doctor-users", excludeDoctorId],
+    queryFn: async () =>
+      (
+        await api.get<{ id: number; full_name: string; email: string }[]>(
+          "/doctors/unlinked-users",
+          { params: { exclude_doctor_id: excludeDoctorId } }
+        )
+      ).data,
   });
 }
 
@@ -101,6 +124,57 @@ export function useSavePatient() {
   });
 }
 
+// --- Patient records (рентген / аллергия / 3D снимок) ---
+
+export function usePatientRecords(patientId: number | null, type?: PatientRecordType) {
+  return useQuery({
+    queryKey: ["patient-records", patientId, type],
+    enabled: patientId != null,
+    queryFn: async () =>
+      (
+        await api.get<PatientRecord[]>(`/patients/${patientId}/records`, {
+          params: { type },
+        })
+      ).data,
+  });
+}
+
+export interface PatientRecordPayload {
+  patientId: number;
+  type: PatientRecordType;
+  title: string;
+  note: string;
+  file?: File | null;
+}
+
+export function useSavePatientRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (r: PatientRecordPayload) => {
+      const form = new FormData();
+      form.append("type", r.type);
+      form.append("title", r.title);
+      form.append("note", r.note);
+      if (r.file) form.append("file", r.file);
+      return (
+        await api.post<PatientRecord>(`/patients/${r.patientId}/records`, form)
+      ).data;
+    },
+    onSuccess: (_d, args) =>
+      qc.invalidateQueries({ queryKey: ["patient-records", args.patientId] }),
+  });
+}
+
+export function useDeletePatientRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { patientId: number; recordId: number }) =>
+      api.delete(`/patients/${args.patientId}/records/${args.recordId}`),
+    onSuccess: (_d, args) =>
+      qc.invalidateQueries({ queryKey: ["patient-records", args.patientId] }),
+  });
+}
+
 // --- Appointments ---
 
 export function useAppointments(
@@ -144,7 +218,11 @@ export function useSaveAppointment() {
         return (await api.put<Appointment>(`/appointments/${id}`, body)).data;
       return (await api.post<Appointment>("/appointments", body)).data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["appointments"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["patient-appointments"] });
+    },
   });
 }
 
@@ -221,8 +299,17 @@ export function useDeleteArchivedAppointments() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["archive-count"] });
+      qc.invalidateQueries({ queryKey: ["archive-list"] });
       qc.invalidateQueries({ queryKey: ["admin-stats"] });
     },
+  });
+}
+
+export function useArchivedAppointments(status: "completed" | "cancelled") {
+  return useQuery({
+    queryKey: ["archive-list", status],
+    queryFn: async () =>
+      (await api.get<Appointment[]>("/appointments/archive/list", { params: { status } })).data,
   });
 }
 

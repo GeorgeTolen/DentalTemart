@@ -19,13 +19,24 @@ type patientRequest struct {
 }
 
 // ListPatients returns patients, optionally filtered by a name/phone search.
+// A "doctor" role user only sees patients who have an appointment with them.
 func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
 	search := r.URL.Query().Get("search")
 	var arg pgtype.Text
 	if search != "" {
 		arg = pgtype.Text{String: search, Valid: true}
 	}
-	patients, err := h.q.ListPatients(r.Context(), arg)
+
+	var patients []sqlc.Patient
+	var err error
+	if scope, scoped := h.doctorScope(r.Context()); scoped {
+		patients, err = h.q.ListPatientsForDoctor(r.Context(), sqlc.ListPatientsForDoctorParams{
+			DoctorID: scope.Int64,
+			Search:   arg,
+		})
+	} else {
+		patients, err = h.q.ListPatients(r.Context(), arg)
+	}
 	if err != nil {
 		httpx.Fail(w, err)
 		return
@@ -37,10 +48,15 @@ func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, out)
 }
 
-// GetPatient returns a single patient.
+// GetPatient returns a single patient. A "doctor" role user gets 404 for
+// patients they have no appointment with.
 func (h *Handlers) GetPatient(w http.ResponseWriter, r *http.Request) {
 	id, err := idParam(r)
 	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if err := h.checkPatientAccess(r.Context(), id); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -60,6 +76,10 @@ func (h *Handlers) GetPatient(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GetPatientAppointments(w http.ResponseWriter, r *http.Request) {
 	id, err := idParam(r)
 	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if err := h.checkPatientAccess(r.Context(), id); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -88,6 +108,10 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 	}
 	birth, err := parseDate(req.BirthDate)
 	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if err := validateBirthDate(birth); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -125,6 +149,10 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	if err := h.checkPatientAccess(r.Context(), id); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	var req patientRequest
 	if err := httpx.Decode(r, &req); err != nil {
 		httpx.Fail(w, err)
@@ -136,6 +164,10 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 	}
 	birth, err := parseDate(req.BirthDate)
 	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if err := validateBirthDate(birth); err != nil {
 		httpx.Fail(w, err)
 		return
 	}

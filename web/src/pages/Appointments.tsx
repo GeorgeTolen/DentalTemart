@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import {
   useAppointments,
-  useDeleteAppointment,
   useDoctors,
   useSaveAppointment,
   usePatients,
@@ -12,6 +11,7 @@ import type { Appointment, AppointmentStatus, Doctor } from "../lib/types";
 import { STATUS_LABELS } from "../lib/types";
 import { isoToLocalInput, localInputToISO, formatDate } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
+import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import { useAuth } from "../auth/AuthContext";
 
 function todayStr() {
@@ -38,16 +38,27 @@ export default function AppointmentsPage() {
   }, [dateTo]);
 
   const { data: appointments = [], isLoading } = useAppointments(from, to, doctorFilter);
-  const deleteAppt = useDeleteAppointment();
+  const saveApptTop = useSaveAppointment();
 
   const filtered = statusFilter
     ? appointments.filter((a) => a.status === statusFilter)
     : appointments;
 
-  async function del(a: Appointment) {
-    if (!confirm(`Удалить запись пациента ${a.patient_name}?`)) return;
-    try { await deleteAppt.mutateAsync(a.id); }
-    catch (e) { alert(errorMessage(e)); }
+  async function cancel(a: Appointment) {
+    if (!confirm(`Отменить запись пациента ${a.patient_name}?`)) return;
+    try {
+      await saveApptTop.mutateAsync({
+        id: a.id,
+        patient_id: a.patient_id,
+        doctor_id: a.doctor_id,
+        start_time: a.start_time,
+        end_time: a.end_time,
+        status: "cancelled",
+        diagnosis: a.diagnosis,
+        description: a.description,
+        next_visit_date: a.next_visit_date ?? "",
+      });
+    } catch (e) { alert(errorMessage(e)); }
   }
 
   return (
@@ -116,7 +127,7 @@ export default function AppointmentsPage() {
               appointment={a}
               isAdmin={isAdmin}
               onEdit={() => setEditing(a)}
-              onDelete={() => del(a)}
+              onCancel={() => cancel(a)}
             />
           ))}
         </div>
@@ -137,17 +148,37 @@ function AppointmentRow({
   appointment: a,
   isAdmin,
   onEdit,
-  onDelete,
+  onCancel,
 }: {
   appointment: Appointment;
   isAdmin: boolean;
   onEdit: () => void;
-  onDelete: () => void;
+  onCancel: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
+  const saveAppt = useSaveAppointment();
 
   const startDate = new Date(a.start_time);
   const endDate = new Date(a.end_time);
+
+  async function markCompleted() {
+    try {
+      await saveAppt.mutateAsync({
+        id: a.id,
+        patient_id: a.patient_id,
+        doctor_id: a.doctor_id,
+        start_time: a.start_time,
+        end_time: a.end_time,
+        status: "completed",
+        diagnosis: a.diagnosis,
+        description: a.description,
+        next_visit_date: a.next_visit_date ?? "",
+      });
+    } catch (e) {
+      alert(errorMessage(e));
+    }
+  }
 
   return (
     <div className="rounded-2xl bg-white shadow-sm overflow-hidden">
@@ -157,11 +188,11 @@ function AppointmentRow({
       >
         <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: a.doctor_color }} />
         <span className="text-sm text-slate-500 tabular-nums w-24 shrink-0">
-          {startDate.toLocaleDateString("ru", { day: "2-digit", month: "short" })}
+          {formatDate(a.start_time)}
         </span>
         <span className="font-semibold tabular-nums text-brand w-28 shrink-0">
           {startDate.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}
-          {" — "}
+          {" - "}
           {endDate.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}
         </span>
         <span className="font-medium">{a.patient_name}</span>
@@ -178,7 +209,7 @@ function AppointmentRow({
             <Info label="Пациент" value={a.patient_name} />
             <Info label="Телефон" value={a.patient_phone || "—"} />
             <Info label="Врач" value={a.doctor_name} />
-            <Info label="Дата" value={startDate.toLocaleDateString("ru", { day: "2-digit", month: "long", year: "numeric" })} />
+            <Info label="Дата" value={formatDate(a.start_time)} />
             <Info label="Начало" value={startDate.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} />
             <Info label="Окончание" value={endDate.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} />
             {a.diagnosis && <Info label="Диагноз" value={a.diagnosis} wide />}
@@ -189,13 +220,24 @@ function AppointmentRow({
             <Button variant="secondary" className="py-1 px-3 text-xs" onClick={onEdit}>
               Редактировать
             </Button>
-            {isAdmin && (
-              <Button variant="danger" className="py-1 px-3 text-xs" onClick={onDelete}>
-                Удалить
+            {a.status !== "completed" && (
+              <Button className="py-1 px-3 text-xs" onClick={markCompleted} disabled={saveAppt.isPending}>
+                {saveAppt.isPending ? "Сохранение…" : "Завершить"}
+              </Button>
+            )}
+            <Button variant="secondary" className="py-1 px-3 text-xs" onClick={() => setSchedulingFollowUp(true)}>
+              Следующий приём
+            </Button>
+            {isAdmin && a.status !== "cancelled" && (
+              <Button variant="danger" className="py-1 px-3 text-xs" onClick={onCancel}>
+                Отменить
               </Button>
             )}
           </div>
         </div>
+      )}
+      {schedulingFollowUp && (
+        <ScheduleFollowUpModal appointment={a} onClose={() => setSchedulingFollowUp(false)} />
       )}
     </div>
   );

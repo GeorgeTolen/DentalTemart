@@ -21,3 +21,6 @@ RETURNING id, full_name, email, password_hash, role, created_at;
 
 -- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1;
+
+-- name: UpdateUserPassword :exec
+UPDATE users SET password_hash = $2 WHERE id = $1;

@@ -13,9 +13,10 @@ export default function Layout() {
   const { user, logout } = useAuth();
 
   const isAdmin = user?.role === "owner" || user?.role === "admin";
+  const adminLabel = user?.role === "owner" ? "Администратор" : "Менеджер";
   const links = isAdmin
-    ? [...baseLinks, { to: "/admin", label: "Администратор", end: undefined }]
-    : baseLinks;
+    ? [...baseLinks, { to: "/admin", label: adminLabel, end: undefined }]
+    : [...baseLinks, { to: "/my-cabinet", label: "Мой кабинет", end: undefined }];
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">

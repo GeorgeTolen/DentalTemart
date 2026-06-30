@@ -66,8 +66,8 @@ const listPatients = `-- name: ListPatients :many
 SELECT id, full_name, phone, birth_date, notes, created_at FROM patients
 WHERE
     $1::text IS NULL
-    OR full_name ILIKE '%' || $1::text || '%'
-    OR phone ILIKE '%' || $1::text || '%'
+    OR (' ' || full_name) ILIKE '% ' || $1::text || '%'
+    OR phone ILIKE $1::text || '%'
 ORDER BY full_name
 LIMIT 200
 `
@@ -106,6 +106,64 @@ DELETE FROM patients WHERE id = $1
 func (q *Queries) DeletePatient(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deletePatient, id)
 	return err
+}
+
+const listPatientsForDoctor = `-- name: ListPatientsForDoctor :many
+SELECT DISTINCT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at FROM patients p
+JOIN appointments a ON a.patient_id = p.id
+WHERE a.doctor_id = $1
+  AND (
+    $2::text IS NULL
+    OR (' ' || p.full_name) ILIKE '% ' || $2::text || '%'
+    OR p.phone ILIKE $2::text || '%'
+  )
+ORDER BY p.full_name
+LIMIT 200
+`
+
+type ListPatientsForDoctorParams struct {
+	DoctorID int64       `json:"doctor_id"`
+	Search   pgtype.Text `json:"search"`
+}
+
+func (q *Queries) ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]Patient, error) {
+	rows, err := q.db.Query(ctx, listPatientsForDoctor, arg.DoctorID, arg.Search)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Patient{}
+	for rows.Next() {
+		var i Patient
+		if err := rows.Scan(
+			&i.ID,
+			&i.FullName,
+			&i.Phone,
+			&i.BirthDate,
+			&i.Notes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const patientBelongsToDoctor = `-- name: PatientBelongsToDoctor :one
+SELECT EXISTS(
+    SELECT 1 FROM appointments WHERE patient_id = $1 AND doctor_id = $2
+) AS belongs
+`
+
+func (q *Queries) PatientBelongsToDoctor(ctx context.Context, patientID int64, doctorID int64) (bool, error) {
+	row := q.db.QueryRow(ctx, patientBelongsToDoctor, patientID, doctorID)
+	var belongs bool
+	err := row.Scan(&belongs)
+	return belongs, err
 }
 
 const updatePatient = `-- name: UpdatePatient :one

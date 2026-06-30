@@ -161,3 +161,12 @@ func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deleteUser, id)
 	return err
 }
+
+const updateUserPassword = `-- name: UpdateUserPassword :exec
+UPDATE users SET password_hash = $2 WHERE id = $1
+`
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, id int64, passwordHash string) error {
+	_, err := q.db.Exec(ctx, updateUserPassword, id, passwordHash)
+	return err
+}

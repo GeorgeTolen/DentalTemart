@@ -13,7 +13,11 @@ import (
 
 // idParam parses the {id} URL path parameter as an int64.
 func idParam(r *http.Request) (int64, error) {
-	raw := chi.URLParam(r, "id")
+	return idParamFromString(chi.URLParam(r, "id"))
+}
+
+// idParamFromString parses an arbitrary string as a positive int64 identifier.
+func idParamFromString(raw string) (int64, error) {
 	id, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || id <= 0 {
 		return 0, httpx.NewError(http.StatusBadRequest, "некорректный идентификатор")
@@ -45,4 +49,31 @@ func optionalDoctorID(r *http.Request) (pgtype.Int8, error) {
 		return pgtype.Int8{}, httpx.NewError(http.StatusBadRequest, "некорректный doctor_id")
 	}
 	return pgtype.Int8{Int64: id, Valid: true}, nil
+}
+
+// maxAge is the oldest plausible age for a birth date.
+const maxAge = 125
+
+// validateBirthDate rejects birth dates in the future or implying an age over
+// maxAge years.
+func validateBirthDate(t *time.Time) error {
+	if t == nil {
+		return nil
+	}
+	now := time.Now().UTC()
+	if t.After(now) {
+		return httpx.NewError(http.StatusBadRequest, "дата рождения не может быть в будущем")
+	}
+	if t.Before(now.AddDate(-maxAge, 0, 0)) {
+		return httpx.NewError(http.StatusBadRequest, "возраст не может превышать 125 лет")
+	}
+	return nil
+}
+
+// validateAppointmentStart rejects appointments scheduled more than a year out.
+func validateAppointmentStart(t time.Time) error {
+	if t.After(time.Now().UTC().AddDate(1, 0, 0)) {
+		return httpx.NewError(http.StatusBadRequest, "запись нельзя создать более чем на 1 год вперёд")
+	}
+	return nil
 }

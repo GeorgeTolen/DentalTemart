@@ -33,6 +33,7 @@ type Doctor struct {
 	Color          string      `json:"color"`
 	IsActive       bool        `json:"is_active"`
 	CreatedAt      time.Time   `json:"created_at"`
+	UserID         pgtype.Int8 `json:"user_id"`
 }
 
 type DoctorSchedule struct {
@@ -49,6 +50,18 @@ type Patient struct {
 	Phone     pgtype.Text `json:"phone"`
 	BirthDate *time.Time  `json:"birth_date"`
 	Notes     pgtype.Text `json:"notes"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
+type PatientRecord struct {
+	ID        int64       `json:"id"`
+	PatientID int64       `json:"patient_id"`
+	Type      string      `json:"type"`
+	Title     pgtype.Text `json:"title"`
+	Note      pgtype.Text `json:"note"`
+	FilePath  pgtype.Text `json:"file_path"`
+	FileName  pgtype.Text `json:"file_name"`
+	CreatedBy pgtype.Int8 `json:"created_by"`
 	CreatedAt time.Time   `json:"created_at"`
 }
 

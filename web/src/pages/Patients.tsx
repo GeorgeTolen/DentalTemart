@@ -4,7 +4,7 @@ import { usePatients, useSavePatient } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import type { Patient } from "../lib/types";
 import { Button, Field, Input, Modal, Textarea } from "../components/ui";
-import { formatDate } from "../lib/datetime";
+import { formatDate, validateBirthDate, minBirthDateInput, todayInput } from "../lib/datetime";
 
 export default function Patients() {
   const [search, setSearch] = useState("");
@@ -96,6 +96,8 @@ function PatientForm({
   async function onSubmit() {
     setError("");
     if (!fullName.trim()) return setError("Введите ФИО");
+    const birthErr = validateBirthDate(birthDate ?? "");
+    if (birthErr) return setError(birthErr);
     try {
       await save.mutateAsync({
         id: patient?.id,
@@ -136,6 +138,8 @@ function PatientForm({
           <Input
             type="date"
             value={birthDate ?? ""}
+            min={minBirthDateInput()}
+            max={todayInput()}
             onChange={(e) => setBirthDate(e.target.value)}
           />
         </Field>

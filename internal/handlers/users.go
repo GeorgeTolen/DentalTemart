@@ -22,6 +22,8 @@ type updateUserRequest struct {
 	FullName string `json:"full_name" validate:"required"`
 	Email    string `json:"email" validate:"required,email"`
 	Role     string `json:"role" validate:"required"`
+	// Password is optional: when blank, the existing password is kept.
+	Password string `json:"password" validate:"omitempty,min=6"`
 }
 
 var validRoles = map[string]bool{
@@ -30,8 +32,13 @@ var validRoles = map[string]bool{
 	"doctor": true,
 }
 
-// ListUsers returns all system users (excluding password hashes).
+// ListUsers returns all system users (excluding password hashes). Only the
+// owner role manages user accounts.
 func (h *Handlers) ListUsers(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireOwner(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	users, err := h.q.ListUsers(r.Context())
 	if err != nil {
 		httpx.Fail(w, err)
@@ -42,6 +49,10 @@ func (h *Handlers) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 // CreateUser registers a new system user.
 func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireOwner(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	var req createUserRequest
 	if err := httpx.Decode(r, &req); err != nil {
 		httpx.Fail(w, err)
@@ -80,6 +91,10 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 // UpdateUser edits an existing user's name, email, and role.
 func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireOwner(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	id, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)
@@ -112,6 +127,17 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	if req.Password != "" {
+		hash, err := auth.HashPassword(req.Password)
+		if err != nil {
+			httpx.Fail(w, err)
+			return
+		}
+		if err := h.q.UpdateUserPassword(r.Context(), id, hash); err != nil {
+			httpx.Fail(w, err)
+			return
+		}
+	}
 	httpx.JSON(w, http.StatusOK, userDTO{
 		ID:       user.ID,
 		FullName: user.FullName,
@@ -122,6 +148,10 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 // DeleteUser removes a user.
 func (h *Handlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireOwner(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	id, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)

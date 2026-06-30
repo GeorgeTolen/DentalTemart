@@ -19,29 +19,39 @@ type Querier interface {
 	CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doctor, error)
 	CreateDoctorSchedule(ctx context.Context, arg CreateDoctorScheduleParams) (DoctorSchedule, error)
 	CreatePatient(ctx context.Context, arg CreatePatientParams) (Patient, error)
+	CreatePatientRecord(ctx context.Context, arg CreatePatientRecordParams) (PatientRecord, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteAppointment(ctx context.Context, id int64) error
 	DeleteArchivedAppointments(ctx context.Context) error
 	DeleteDoctor(ctx context.Context, id int64) error
 	DeleteDoctorSchedules(ctx context.Context, doctorID int64) error
 	DeletePatient(ctx context.Context, id int64) error
+	DeletePatientRecord(ctx context.Context, id int64) error
 	DeleteUser(ctx context.Context, id int64) error
 	GetAppointment(ctx context.Context, id int64) (GetAppointmentRow, error)
 	GetDoctor(ctx context.Context, id int64) (Doctor, error)
+	GetDoctorByUserID(ctx context.Context, userID pgtype.Int8) (Doctor, error)
 	GetPatient(ctx context.Context, id int64) (Patient, error)
+	GetPatientRecord(ctx context.Context, id int64) (PatientRecord, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	ListActiveDoctors(ctx context.Context) ([]Doctor, error)
 	ListAppointmentsByPatient(ctx context.Context, patientID int64) ([]ListAppointmentsByPatientRow, error)
+	ListAppointmentsByStatus(ctx context.Context, status string) ([]ListAppointmentsByStatusRow, error)
 	ListAppointmentsInRange(ctx context.Context, arg ListAppointmentsInRangeParams) ([]ListAppointmentsInRangeRow, error)
 	ListDoctorSchedules(ctx context.Context, doctorID int64) ([]DoctorSchedule, error)
 	ListDoctors(ctx context.Context) ([]Doctor, error)
+	ListPatientRecords(ctx context.Context, arg ListPatientRecordsParams) ([]ListPatientRecordsRow, error)
 	ListPatients(ctx context.Context, search pgtype.Text) ([]Patient, error)
+	ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]Patient, error)
+	ListUnlinkedDoctorUsers(ctx context.Context, excludeDoctorID int64) ([]ListUnlinkedDoctorUsersRow, error)
 	ListUsers(ctx context.Context) ([]ListUsersRow, error)
+	PatientBelongsToDoctor(ctx context.Context, patientID int64, doctorID int64) (bool, error)
 	UpdateAppointment(ctx context.Context, arg UpdateAppointmentParams) (Appointment, error)
 	UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error)
 	UpdatePatient(ctx context.Context, arg UpdatePatientParams) (Patient, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
+	UpdateUserPassword(ctx context.Context, id int64, passwordHash string) error
 }
 
 var _ Querier = (*Queries)(nil)

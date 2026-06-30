@@ -16,15 +16,17 @@ const countAppointmentsInRange = `-- name: CountAppointmentsInRange :one
 SELECT count(*) FROM appointments
 WHERE start_time >= $1 AND start_time < $2
   AND status <> 'cancelled'
+  AND ($3::bigint IS NULL OR doctor_id = $3::bigint)
 `
 
 type CountAppointmentsInRangeParams struct {
-	From time.Time `json:"from"`
-	To   time.Time `json:"to"`
+	From     time.Time   `json:"from"`
+	To       time.Time   `json:"to"`
+	DoctorID pgtype.Int8 `json:"doctor_id"`
 }
 
 func (q *Queries) CountAppointmentsInRange(ctx context.Context, arg CountAppointmentsInRangeParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countAppointmentsInRange, arg.From, arg.To)
+	row := q.db.QueryRow(ctx, countAppointmentsInRange, arg.From, arg.To, arg.DoctorID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -312,6 +314,77 @@ func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointme
 	items := []ListAppointmentsInRangeRow{}
 	for rows.Next() {
 		var i ListAppointmentsInRangeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PatientID,
+			&i.DoctorID,
+			&i.StartTime,
+			&i.EndTime,
+			&i.Status,
+			&i.Diagnosis,
+			&i.Description,
+			&i.NextVisitDate,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PatientName,
+			&i.PatientPhone,
+			&i.DoctorName,
+			&i.DoctorColor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAppointmentsByStatus = `-- name: ListAppointmentsByStatus :many
+SELECT
+    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at,
+    p.full_name AS patient_name,
+    p.phone     AS patient_phone,
+    d.full_name AS doctor_name,
+    d.color     AS doctor_color
+FROM appointments a
+JOIN patients p ON p.id = a.patient_id
+JOIN doctors  d ON d.id = a.doctor_id
+WHERE a.status = $1
+ORDER BY a.start_time DESC
+LIMIT 500
+`
+
+type ListAppointmentsByStatusRow struct {
+	ID            int64       `json:"id"`
+	PatientID     int64       `json:"patient_id"`
+	DoctorID      int64       `json:"doctor_id"`
+	StartTime     time.Time   `json:"start_time"`
+	EndTime       time.Time   `json:"end_time"`
+	Status        string      `json:"status"`
+	Diagnosis     pgtype.Text `json:"diagnosis"`
+	Description   pgtype.Text `json:"description"`
+	NextVisitDate *time.Time  `json:"next_visit_date"`
+	CreatedBy     pgtype.Int8 `json:"created_by"`
+	CreatedAt     time.Time   `json:"created_at"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+	PatientName   string      `json:"patient_name"`
+	PatientPhone  pgtype.Text `json:"patient_phone"`
+	DoctorName    string      `json:"doctor_name"`
+	DoctorColor   string      `json:"doctor_color"`
+}
+
+func (q *Queries) ListAppointmentsByStatus(ctx context.Context, status string) ([]ListAppointmentsByStatusRow, error) {
+	rows, err := q.db.Query(ctx, listAppointmentsByStatus, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAppointmentsByStatusRow{}
+	for rows.Next() {
+		var i ListAppointmentsByStatusRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.PatientID,

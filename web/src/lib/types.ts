@@ -14,7 +14,28 @@ export interface Doctor {
   phone: string;
   color: string;
   is_active: boolean;
+  user_id: number | null;
 }
+
+export type PatientRecordType = "xray" | "allergy" | "scan3d";
+
+export interface PatientRecord {
+  id: number;
+  patient_id: number;
+  type: PatientRecordType;
+  title: string;
+  note: string;
+  file_url: string | null;
+  file_name: string;
+  created_by_name: string;
+  created_at: string;
+}
+
+export const RECORD_TYPE_LABELS: Record<PatientRecordType, string> = {
+  xray: "Рентген",
+  allergy: "Аллергия",
+  scan3d: "3D снимок",
+};
 
 export interface Patient {
   id: number;

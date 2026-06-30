@@ -67,9 +67,12 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 	dayEnd := dayStart.Add(24 * time.Hour)
 	weekEnd := dayStart.Add(7 * 24 * time.Hour)
 
+	scope, _ := h.doctorScope(ctx)
+
 	todayRows, err := h.q.ListAppointmentsInRange(ctx, sqlc.ListAppointmentsInRangeParams{
-		From: dayStart,
-		To:   dayEnd,
+		From:     dayStart,
+		To:       dayEnd,
+		DoctorID: scope,
 	})
 	if err != nil {
 		httpx.Fail(w, err)
@@ -80,12 +83,12 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 		today = append(today, fromRangeRow(a))
 	}
 
-	todayCount, err := h.q.CountAppointmentsInRange(ctx, sqlc.CountAppointmentsInRangeParams{From: dayStart, To: dayEnd})
+	todayCount, err := h.q.CountAppointmentsInRange(ctx, sqlc.CountAppointmentsInRangeParams{From: dayStart, To: dayEnd, DoctorID: scope})
 	if err != nil {
 		httpx.Fail(w, err)
 		return
 	}
-	weekCount, err := h.q.CountAppointmentsInRange(ctx, sqlc.CountAppointmentsInRangeParams{From: dayStart, To: weekEnd})
+	weekCount, err := h.q.CountAppointmentsInRange(ctx, sqlc.CountAppointmentsInRangeParams{From: dayStart, To: weekEnd, DoctorID: scope})
 	if err != nil {
 		httpx.Fail(w, err)
 		return
