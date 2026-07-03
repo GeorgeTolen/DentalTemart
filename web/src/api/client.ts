@@ -1,5 +1,12 @@
 import axios from "axios";
 
+// Marker used by the silent-refresh interceptor to retry a request only once.
+declare module "axios" {
+  export interface InternalAxiosRequestConfig {
+    _retried?: boolean;
+  }
+}
+
 // Single axios instance. withCredentials makes the browser send/receive the
 // httpOnly auth cookies.
 export const api = axios.create({
@@ -13,17 +20,40 @@ export const api = axios.create({
 // authenticated home both live at "/", so a path-based redirect wouldn't fire.
 export const UNAUTHORIZED_EVENT = "temart:unauthorized";
 
-// Endpoints that are expected to 401 while logged out (bootstrap / auth), so a
-// 401 from them must NOT trigger a session reset.
-const authEndpoints = ["/me", "/auth/login", "/auth/platform/login", "/clinics"];
+// A request is an "auth call" (where a 401 is a normal answer and must NOT
+// trigger a refresh/reset) when it targets an /auth/ endpoint or the public
+// clinic picker. Note: matched precisely so /platform/clinics still refreshes.
+function isAuthCall(url: string): boolean {
+  const path = url.split("?")[0];
+  return path.startsWith("/auth/") || path === "/clinics";
+}
 
+// A single in-flight refresh shared by all 401'd requests, so a burst of
+// expired calls performs exactly one POST /auth/refresh.
+let refreshing: Promise<unknown> | null = null;
+
+// Silent session renewal: when the short-lived access token expires (401), we
+// refresh it via the long-lived refresh cookie and retry the request — the
+// user signs in once and the session stays active.
 api.interceptors.response.use(
   (res) => res,
-  (error) => {
+  async (error) => {
     const status = error?.response?.status;
-    const url: string = error?.config?.url ?? "";
-    const isAuthCall = authEndpoints.some((e) => url.includes(e));
-    if (status === 401 && !isAuthCall) {
+    const cfg = error?.config;
+    const url: string = cfg?.url ?? "";
+    const authCall = isAuthCall(url);
+    if (status === 401 && !authCall && cfg && !cfg._retried) {
+      try {
+        refreshing ??= api
+          .post("/auth/refresh")
+          .finally(() => (refreshing = null));
+        await refreshing;
+        cfg._retried = true;
+        return api(cfg);
+      } catch {
+        window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+      }
+    } else if (status === 401 && !authCall) {
       window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
     }
     return Promise.reject(error);

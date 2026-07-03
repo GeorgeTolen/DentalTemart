@@ -103,7 +103,7 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.setAuthCookies(w, user.ID, req.ClinicID, user.Role); err != nil {
+	if err := h.setAuthCookies(w, user.ID, req.ClinicID, user.TokenVersion, user.Role); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -137,7 +137,7 @@ func (h *Handlers) PlatformLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.setAuthCookies(w, user.ID, 0, user.Role); err != nil {
+	if err := h.setAuthCookies(w, user.ID, 0, user.TokenVersion, user.Role); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -176,6 +176,12 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, httpx.NewError(http.StatusUnauthorized, "сессия недействительна"))
 		return
 	}
+	// A password change bumps token_version, so an old refresh token (e.g. from
+	// a fired employee) can no longer renew the session.
+	if user.TokenVersion != claims.Ver {
+		httpx.Fail(w, httpx.NewError(http.StatusUnauthorized, "сессия недействительна"))
+		return
+	}
 	if user.ClinicID.Valid {
 		clinic, err := h.q.GetClinic(r.Context(), user.ClinicID.Int64)
 		if err != nil || !clinic.IsActive {
@@ -183,7 +189,7 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.setAuthCookies(w, userID, claims.ClinicID, user.Role); err != nil {
+	if err := h.setAuthCookies(w, userID, claims.ClinicID, user.TokenVersion, user.Role); err != nil {
 		httpx.Fail(w, err)
 		return
 	}

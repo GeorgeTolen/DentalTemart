@@ -64,6 +64,8 @@ type Patient struct {
 	Notes     pgtype.Text `json:"notes"`
 	CreatedAt time.Time   `json:"created_at"`
 	ClinicID  int64       `json:"clinic_id"`
+	Iin       pgtype.Text `json:"iin"`
+	Gender    pgtype.Text `json:"gender"`
 }
 
 type PatientRecord struct {
@@ -87,4 +89,5 @@ type User struct {
 	Role         string      `json:"role"`
 	CreatedAt    time.Time   `json:"created_at"`
 	ClinicID     pgtype.Int8 `json:"clinic_id"`
+	TokenVersion int32       `json:"token_version"`
 }

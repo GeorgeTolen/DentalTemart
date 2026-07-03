@@ -33,3 +33,12 @@ body {
 .fc .fc-event {
   @apply border-0 rounded-md px-1 text-xs cursor-pointer;
 }
+/* Суббота и воскресенье — лёгкий прозрачно-розовый фон. */
+.fc .fc-day-sat:not(.fc-col-header-cell),
+.fc .fc-day-sun:not(.fc-col-header-cell) {
+  background-color: rgb(255 228 230 / 0.45);
+}
+.fc .fc-col-header-cell.fc-day-sat,
+.fc .fc-col-header-cell.fc-day-sun {
+  background-color: rgb(255 228 230 / 0.6);
+}

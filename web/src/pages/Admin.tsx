@@ -12,16 +12,12 @@ import {
   useSavePatient,
   useSaveUser,
   useUsers,
-  useSaveDoctor,
   useDeleteDoctor,
   useAppointments,
-  useSchedule,
-  useSaveSchedule,
-  useUnlinkedDoctorUsers,
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
-import type { Appointment, ClinicUser, Doctor, Patient, Role, ScheduleEntry } from "../lib/types";
-import { STATUS_LABELS, ROLE_LABELS } from "../lib/types";
+import type { Appointment, ClinicUser, Doctor, Gender, Patient, Role } from "../lib/types";
+import { STATUS_LABELS, ROLE_LABELS, GENDER_LABELS } from "../lib/types";
 import {
   localInputToISO,
   isoToLocalInput,
@@ -33,9 +29,12 @@ import {
   minBirthDateInput,
   todayInput,
   maxAppointmentInput,
+  defaultAppointmentStart,
+  addMinutesToLocalInput,
 } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
 import { DateInput, DateTimeInput } from "../components/DateInputs";
+import DoctorModal from "../components/DoctorModal";
 import { useAuth } from "../auth/AuthContext";
 
 // ---------- helpers ----------
@@ -155,6 +154,8 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
   const [mode, setMode] = useState<"search" | "new">("search");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [iin, setIin] = useState("");
+  const [gender, setGender] = useState<Gender>("");
   const [birthDate, setBirthDate] = useState("");
   const [notes, setNotes] = useState("");
   const { data: patients = [], isFetching } = usePatients(search);
@@ -170,10 +171,12 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
 
   async function createPatient() {
     if (!name.trim()) { setError("Введите ФИО пациента"); return; }
+    if (iin && iin.length !== 12) { setError("ИИН должен состоять из 12 цифр"); return; }
     const birthErr = validateBirthDate(birthDate);
     if (birthErr) { setError(birthErr); return; }
     try {
-      const p = await savePatient.mutateAsync({ full_name: name.trim(), phone, birth_date: birthDate, notes });
+      // Если пациент с таким ИИН уже есть — сервер вернёт его, дубликата не будет.
+      const p = await savePatient.mutateAsync({ full_name: name.trim(), phone, iin, gender, birth_date: birthDate, notes });
       setError("");
       onNext(p);
     } catch (e) { setError(errorMessage(e)); }
@@ -223,7 +226,23 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
         <div className="space-y-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="ФИО *"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Иванов Иван Иванович" /></Field>
+            <Field label="ИИН (12 цифр)">
+              <Input
+                value={iin}
+                inputMode="numeric"
+                maxLength={12}
+                onChange={(e) => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                placeholder="Если ИИН уже есть в базе — подставится тот пациент"
+              />
+            </Field>
             <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7..." /></Field>
+            <Field label="Пол">
+              <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
+                <option value="">— не указан —</option>
+                <option value="male">{GENDER_LABELS.male}</option>
+                <option value="female">{GENDER_LABELS.female}</option>
+              </Select>
+            </Field>
             <Field label="Дата рождения">
               <DateInput value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={setBirthDate} />
             </Field>
@@ -247,8 +266,9 @@ function FlowStep2({ patient, onNext, onBack, setError }: {
   const saveAppt = useSaveAppointment();
 
   const [doctorId, setDoctorId] = useState<number | "">(activeDoctors[0]?.id ?? "");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  // По умолчанию — ближайшее время сегодня (рабочий день 8:00–20:00), приём 30 мин.
+  const [start, setStart] = useState(() => defaultAppointmentStart());
+  const [end, setEnd] = useState(() => addMinutesToLocalInput(defaultAppointmentStart(), 30));
 
   async function schedule() {
     if (!doctorId) { setError("Выберите врача"); return; }
@@ -402,8 +422,8 @@ function FlowStep5({ appointment, onFinish, setError }: {
 
   const [schedule, setSchedule] = useState(false);
   const [doctorId, setDoctorId] = useState<number | "">(appointment.doctor_id ?? "");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [start, setStart] = useState(() => defaultAppointmentStart());
+  const [end, setEnd] = useState(() => addMinutesToLocalInput(defaultAppointmentStart(), 30));
 
   async function createNext() {
     if (!doctorId) { setError("Выберите врача"); return; }
@@ -643,6 +663,7 @@ function PatientsPanel() {
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">ФИО</th>
+                <th className="px-4 py-3 text-left font-medium">ИИН</th>
                 <th className="px-4 py-3 text-left font-medium">Телефон</th>
                 <th className="px-4 py-3 text-left font-medium">Дата рождения</th>
                 <th className="px-4 py-3" />
@@ -652,6 +673,7 @@ function PatientsPanel() {
               {patients.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium">{p.full_name}</td>
+                  <td className="px-4 py-3 text-slate-500">{p.iin || "—"}</td>
                   <td className="px-4 py-3 text-slate-500">{p.phone || "—"}</td>
                   <td className="px-4 py-3 text-slate-500">{formatDate(p.birth_date)}</td>
                   <td className="px-4 py-3">
@@ -677,16 +699,19 @@ function PatientModal({ patient, onClose }: { patient: Patient | null; onClose: 
   const save = useSavePatient();
   const [name, setName] = useState(patient?.full_name ?? "");
   const [phone, setPhone] = useState(patient?.phone ?? "");
+  const [iin, setIin] = useState(patient?.iin ?? "");
+  const [gender, setGender] = useState<Gender>(patient?.gender ?? "");
   const [birthDate, setBirthDate] = useState(patient?.birth_date?.split("T")[0] ?? "");
   const [notes, setNotes] = useState(patient?.notes ?? "");
   const [error, setError] = useState("");
 
   async function submit() {
     if (!name.trim()) { setError("Введите ФИО"); return; }
+    if (iin && iin.length !== 12) { setError("ИИН должен состоять из 12 цифр"); return; }
     const birthErr = validateBirthDate(birthDate);
     if (birthErr) { setError(birthErr); return; }
     try {
-      await save.mutateAsync({ id: patient?.id, full_name: name, phone, birth_date: birthDate, notes });
+      await save.mutateAsync({ id: patient?.id, full_name: name, phone, iin, gender, birth_date: birthDate, notes });
       onClose();
     } catch (e) { setError(errorMessage(e)); }
   }
@@ -704,6 +729,23 @@ function PatientModal({ patient, onClose }: { patient: Patient | null; onClose: 
     >
       <div className="space-y-4">
         <Field label="ФИО *"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="ИИН (12 цифр)">
+            <Input
+              value={iin}
+              inputMode="numeric"
+              maxLength={12}
+              onChange={(e) => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+            />
+          </Field>
+          <Field label="Пол">
+            <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
+              <option value="">— не указан —</option>
+              <option value="male">{GENDER_LABELS.male}</option>
+              <option value="female">{GENDER_LABELS.female}</option>
+            </Select>
+          </Field>
+        </div>
         <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7..." /></Field>
         <Field label="Дата рождения">
           <DateInput value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={setBirthDate} />
@@ -742,8 +784,9 @@ function DoctorsPanel() {
           <thead className="bg-slate-50 text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left font-medium">ФИО</th>
-              <th className="px-4 py-3 text-left font-medium">Специализация</th>
+              <th className="px-4 py-3 text-left font-medium">Должность</th>
               <th className="px-4 py-3 text-left font-medium">Телефон</th>
+              <th className="px-4 py-3 text-left font-medium">Логин</th>
               <th className="px-4 py-3 text-left font-medium">Статус</th>
               <th className="px-4 py-3" />
             </tr>
@@ -754,6 +797,7 @@ function DoctorsPanel() {
                 <td className="px-4 py-3 font-medium">{d.full_name}</td>
                 <td className="px-4 py-3 text-slate-500">{d.specialization || "—"}</td>
                 <td className="px-4 py-3 text-slate-500">{d.phone || "—"}</td>
+                <td className="px-4 py-3 text-slate-500">{d.user_email || "—"}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${d.is_active ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
                     {d.is_active ? "Активен" : "Неактивен"}
@@ -774,146 +818,6 @@ function DoctorsPanel() {
         <DoctorModal doctor={editing === "new" ? null : editing} onClose={() => setEditing(null)} />
       )}
     </div>
-  );
-}
-
-const PRESET_COLORS = ["#2563EB", "#16A34A", "#DB2777", "#EA580C", "#7C3AED", "#0891B2"];
-
-const WEEKDAYS = [
-  { value: 1, label: "Понедельник" },
-  { value: 2, label: "Вторник" },
-  { value: 3, label: "Среда" },
-  { value: 4, label: "Четверг" },
-  { value: 5, label: "Пятница" },
-  { value: 6, label: "Суббота" },
-  { value: 7, label: "Воскресенье" },
-];
-
-function DoctorModal({ doctor, onClose }: { doctor: Doctor | null; onClose: () => void }) {
-  const save = useSaveDoctor();
-  const saveSchedule = useSaveSchedule();
-  const { data: scheduleData } = useSchedule(doctor?.id ?? null);
-  const { data: unlinkedUsers = [] } = useUnlinkedDoctorUsers(doctor?.id);
-
-  const [name, setName] = useState(doctor?.full_name ?? "");
-  const [spec, setSpec] = useState(doctor?.specialization ?? "");
-  const [phone, setPhone] = useState(doctor?.phone ?? "");
-  const [color, setColor] = useState(doctor?.color ?? PRESET_COLORS[0]);
-  const [active, setActive] = useState(doctor?.is_active ?? true);
-  const [userId, setUserId] = useState<number | "">(doctor?.user_id ?? "");
-  const [entries, setEntries] = useState<Record<number, ScheduleEntry>>({});
-  const [scheduleLoaded, setScheduleLoaded] = useState(false);
-  const [error, setError] = useState("");
-
-  if (scheduleData && !scheduleLoaded) {
-    const map: Record<number, ScheduleEntry> = {};
-    for (const e of scheduleData) map[e.weekday] = e;
-    setEntries(map);
-    setScheduleLoaded(true);
-  }
-
-  function toggleDay(weekday: number, on: boolean) {
-    setEntries((prev) => {
-      const next = { ...prev };
-      if (on) next[weekday] = { weekday, start_time: "09:00", end_time: "18:00" };
-      else delete next[weekday];
-      return next;
-    });
-  }
-
-  function setTimeField(weekday: number, field: "start_time" | "end_time", v: string) {
-    setEntries((prev) => ({ ...prev, [weekday]: { ...prev[weekday], [field]: v } }));
-  }
-
-  async function submit() {
-    if (!name.trim()) { setError("Введите ФИО"); return; }
-    try {
-      const saved = await save.mutateAsync({ id: doctor?.id, full_name: name, specialization: spec, phone, color, is_active: active, user_id: userId === "" ? null : userId });
-      if (Object.keys(entries).length > 0) {
-        await saveSchedule.mutateAsync({ doctorId: saved.id, entries: Object.values(entries) });
-      }
-      onClose();
-    } catch (e) { setError(errorMessage(e)); }
-  }
-
-  const busy = save.isPending || saveSchedule.isPending;
-
-  return (
-    <Modal
-      title={doctor ? "Редактировать врача" : "Новый врач"}
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
-          <Button onClick={submit} disabled={busy}>{busy ? "Сохранение…" : "Сохранить"}</Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <Field label="ФИО *">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Иванов Иван Иванович" />
-        </Field>
-        <Field label="Специализация">
-          <Input value={spec} onChange={(e) => setSpec(e.target.value)} placeholder="Терапевт, хирург…" />
-        </Field>
-        <Field label="Телефон">
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" />
-        </Field>
-        <Field label="Цвет в календаре">
-          <div className="flex flex-wrap gap-2">
-            {PRESET_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setColor(c)}
-                className={`h-8 w-8 rounded-full transition ${color === c ? "ring-2 ring-offset-2 ring-ink" : ""}`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-          </div>
-        </Field>
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4" />
-          Активен (отображается при выборе врача)
-        </label>
-        <Field label="Привязанный аккаунт (для личного кабинета врача)">
-          <Select value={String(userId)} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">— не привязан —</option>
-            {unlinkedUsers.map((u) => (
-              <option key={u.id} value={u.id}>{u.full_name} · {u.email}</option>
-            ))}
-          </Select>
-        </Field>
-
-        <div className="border-t border-slate-100 pt-4">
-          <p className="mb-3 text-sm font-medium text-slate-600">График работы</p>
-          <div className="space-y-2">
-            {WEEKDAYS.map((d) => {
-              const entry = entries[d.value];
-              return (
-                <div key={d.value} className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2">
-                  <label className="flex w-36 items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={!!entry} onChange={(e) => toggleDay(d.value, e.target.checked)} className="h-4 w-4" />
-                    {d.label}
-                  </label>
-                  {entry ? (
-                    <div className="flex items-center gap-2">
-                      <input type="time" value={entry.start_time} onChange={(e) => setTimeField(d.value, "start_time", e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
-                      <span className="text-slate-400">-</span>
-                      <input type="time" value={entry.end_time} onChange={(e) => setTimeField(d.value, "end_time", e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
-                    </div>
-                  ) : (
-                    <span className="text-sm text-slate-300">выходной</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
-      </div>
-    </Modal>
   );
 }
 

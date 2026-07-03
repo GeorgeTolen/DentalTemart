@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -104,6 +105,27 @@ DELETE FROM doctor_schedules WHERE doctor_id = $1
 func (q *Queries) DeleteDoctorSchedules(ctx context.Context, doctorID int64) error {
 	_, err := q.db.Exec(ctx, deleteDoctorSchedules, doctorID)
 	return err
+}
+
+const doctorColorTaken = `-- name: DoctorColorTaken :one
+SELECT EXISTS(
+    SELECT 1 FROM doctors WHERE clinic_id = $1 AND color = $2 AND id <> $3
+) AS taken
+`
+
+type DoctorColorTakenParams struct {
+	ClinicID int64  `json:"clinic_id"`
+	Color    string `json:"color"`
+	ID       int64  `json:"id"`
+}
+
+// Whether another doctor of the clinic already uses this calendar colour
+// (colours are unique per clinic so doctors are distinguishable at a glance).
+func (q *Queries) DoctorColorTaken(ctx context.Context, arg DoctorColorTakenParams) (bool, error) {
+	row := q.db.QueryRow(ctx, doctorColorTaken, arg.ClinicID, arg.Color, arg.ID)
+	var taken bool
+	err := row.Scan(&taken)
+	return taken, err
 }
 
 const doctorUserInClinic = `-- name: DoctorUserInClinic :one
@@ -219,18 +241,36 @@ func (q *Queries) ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedul
 }
 
 const listDoctors = `-- name: ListDoctors :many
-SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id FROM doctors WHERE clinic_id = $1 ORDER BY full_name
+SELECT d.id, d.full_name, d.specialization, d.phone, d.color, d.is_active, d.created_at, d.user_id, d.clinic_id, COALESCE(u.email, '') AS user_email
+FROM doctors d
+LEFT JOIN users u ON u.id = d.user_id
+WHERE d.clinic_id = $1
+ORDER BY d.full_name
 `
 
-func (q *Queries) ListDoctors(ctx context.Context, clinicID int64) ([]Doctor, error) {
+type ListDoctorsRow struct {
+	ID             int64       `json:"id"`
+	FullName       string      `json:"full_name"`
+	Specialization pgtype.Text `json:"specialization"`
+	Phone          pgtype.Text `json:"phone"`
+	Color          string      `json:"color"`
+	IsActive       bool        `json:"is_active"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UserID         pgtype.Int8 `json:"user_id"`
+	ClinicID       int64       `json:"clinic_id"`
+	UserEmail      string      `json:"user_email"`
+}
+
+// Includes the linked account's login (email) so the admin panel can show it.
+func (q *Queries) ListDoctors(ctx context.Context, clinicID int64) ([]ListDoctorsRow, error) {
 	rows, err := q.db.Query(ctx, listDoctors, clinicID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Doctor{}
+	items := []ListDoctorsRow{}
 	for rows.Next() {
-		var i Doctor
+		var i ListDoctorsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.FullName,
@@ -241,6 +281,7 @@ func (q *Queries) ListDoctors(ctx context.Context, clinicID int64) ([]Doctor, er
 			&i.CreatedAt,
 			&i.UserID,
 			&i.ClinicID,
+			&i.UserEmail,
 		); err != nil {
 			return nil, err
 		}

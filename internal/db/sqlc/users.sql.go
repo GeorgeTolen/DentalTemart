@@ -26,7 +26,7 @@ func (q *Queries) CountSuperadmins(ctx context.Context) (int64, error) {
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (clinic_id, full_name, email, password_hash, role)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, full_name, email, password_hash, role, created_at, clinic_id
+RETURNING id, full_name, email, password_hash, role, created_at, clinic_id, token_version
 `
 
 type CreateUserParams struct {
@@ -54,6 +54,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Role,
 		&i.CreatedAt,
 		&i.ClinicID,
+		&i.TokenVersion,
 	)
 	return i, err
 }
@@ -73,7 +74,7 @@ func (q *Queries) DeleteClinicUser(ctx context.Context, arg DeleteClinicUserPara
 }
 
 const getClinicUserByEmail = `-- name: GetClinicUserByEmail :one
-SELECT id, full_name, email, password_hash, role, created_at, clinic_id FROM users WHERE clinic_id = $1 AND lower(email) = lower($2)
+SELECT id, full_name, email, password_hash, role, created_at, clinic_id, token_version FROM users WHERE clinic_id = $1 AND lower(email) = lower($2)
 `
 
 type GetClinicUserByEmailParams struct {
@@ -93,12 +94,13 @@ func (q *Queries) GetClinicUserByEmail(ctx context.Context, arg GetClinicUserByE
 		&i.Role,
 		&i.CreatedAt,
 		&i.ClinicID,
+		&i.TokenVersion,
 	)
 	return i, err
 }
 
 const getSuperadminByEmail = `-- name: GetSuperadminByEmail :one
-SELECT id, full_name, email, password_hash, role, created_at, clinic_id FROM users WHERE clinic_id IS NULL AND role = 'superadmin' AND lower(email) = lower($1)
+SELECT id, full_name, email, password_hash, role, created_at, clinic_id, token_version FROM users WHERE clinic_id IS NULL AND role = 'superadmin' AND lower(email) = lower($1)
 `
 
 // Platform admin login: superadmins are not attached to any clinic.
@@ -113,12 +115,13 @@ func (q *Queries) GetSuperadminByEmail(ctx context.Context, lower string) (User,
 		&i.Role,
 		&i.CreatedAt,
 		&i.ClinicID,
+		&i.TokenVersion,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, full_name, email, password_hash, role, created_at, clinic_id FROM users WHERE id = $1
+SELECT id, full_name, email, password_hash, role, created_at, clinic_id, token_version FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
@@ -132,6 +135,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.Role,
 		&i.CreatedAt,
 		&i.ClinicID,
+		&i.TokenVersion,
 	)
 	return i, err
 }
@@ -223,7 +227,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateU
 }
 
 const updateUserPassword = `-- name: UpdateUserPassword :exec
-UPDATE users SET password_hash = $2 WHERE id = $1
+UPDATE users SET password_hash = $2, token_version = token_version + 1 WHERE id = $1
 `
 
 type UpdateUserPasswordParams struct {
@@ -231,6 +235,7 @@ type UpdateUserPasswordParams struct {
 	PasswordHash string `json:"password_hash"`
 }
 
+// Bumping token_version invalidates the user's existing access/refresh tokens.
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
 	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.PasswordHash)
 	return err

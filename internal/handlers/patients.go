@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"regexp"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,6 +17,28 @@ type patientRequest struct {
 	Phone     string `json:"phone"`
 	BirthDate string `json:"birth_date"`
 	Notes     string `json:"notes"`
+	IIN       string `json:"iin"`
+	Gender    string `json:"gender"` // male | female | ""
+}
+
+// iinRe matches a Kazakhstani ИИН: exactly 12 digits.
+var iinRe = regexp.MustCompile(`^\d{12}$`)
+
+var validGenders = map[string]bool{"": true, "male": true, "female": true}
+
+// validateProfile checks the IIN/gender fields shared by create and update.
+func (req patientRequest) validateProfile() error {
+	if req.IIN != "" && !iinRe.MatchString(req.IIN) {
+		return httpx.NewError(http.StatusBadRequest, "ИИН должен состоять из 12 цифр")
+	}
+	if !validGenders[req.Gender] {
+		return httpx.NewError(http.StatusBadRequest, "недопустимое значение пола")
+	}
+	return nil
+}
+
+func optText(s string) pgtype.Text {
+	return pgtype.Text{String: s, Valid: s != ""}
 }
 
 // ListPatients returns the clinic's patients, optionally filtered by a
@@ -127,6 +150,10 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	if err := req.validateProfile(); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	birth, err := parseDate(req.BirthDate)
 	if err != nil {
 		httpx.Fail(w, err)
@@ -136,15 +163,52 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+
+	// ИИН-дедупликация: если пациент с таким ИИН уже есть в клинике — не
+	// создаём дубликат, а возвращаем существующего (он «подставляется»).
+	if req.IIN != "" {
+		existing, err := h.q.GetPatientByIIN(r.Context(), sqlc.GetPatientByIINParams{
+			ClinicID: clinicID,
+			Iin:      optText(req.IIN),
+		})
+		if err == nil {
+			// A doctor-role user must only see patients they treat: don't leak
+			// another doctor's patient PII through the dedupe response. Return a
+			// bare 409 that discloses nothing about the record.
+			if scope, scoped := h.doctorScope(r.Context()); scoped {
+				belongs, berr := h.q.PatientBelongsToDoctor(r.Context(), sqlc.PatientBelongsToDoctorParams{
+					PatientID: existing.ID,
+					DoctorID:  scope.Int64,
+				})
+				if berr != nil {
+					httpx.Fail(w, berr)
+					return
+				}
+				if !belongs {
+					httpx.Fail(w, httpx.NewError(http.StatusConflict, "пациент с таким ИИН уже существует"))
+					return
+				}
+			}
+			httpx.JSON(w, http.StatusOK, toPatientDTO(existing))
+			return
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			httpx.Fail(w, err)
+			return
+		}
+	}
+
 	p, err := h.q.CreatePatient(r.Context(), sqlc.CreatePatientParams{
 		ClinicID:  clinicID,
 		FullName:  req.FullName,
 		Phone:     pgtype.Text{String: req.Phone, Valid: true},
 		BirthDate: birth,
 		Notes:     pgtype.Text{String: req.Notes, Valid: true},
+		Iin:       optText(req.IIN),
+		Gender:    optText(req.Gender),
 	})
 	if err != nil {
-		httpx.Fail(w, err)
+		httpx.Fail(w, conflict(err, "пациент с таким ИИН уже существует"))
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, toPatientDTO(p))
@@ -195,6 +259,10 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	if err := req.validateProfile(); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	birth, err := parseDate(req.BirthDate)
 	if err != nil {
 		httpx.Fail(w, err)
@@ -210,6 +278,8 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 		Phone:     pgtype.Text{String: req.Phone, Valid: true},
 		BirthDate: birth,
 		Notes:     pgtype.Text{String: req.Notes, Valid: true},
+		Iin:       optText(req.IIN),
+		Gender:    optText(req.Gender),
 		ClinicID:  clinicID,
 	})
 	if err != nil {
@@ -217,7 +287,7 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "пациент не найден"))
 			return
 		}
-		httpx.Fail(w, err)
+		httpx.Fail(w, conflict(err, "пациент с таким ИИН уже существует"))
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toPatientDTO(p))

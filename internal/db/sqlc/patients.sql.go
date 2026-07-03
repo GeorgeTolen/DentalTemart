@@ -13,9 +13,9 @@ import (
 )
 
 const createPatient = `-- name: CreatePatient :one
-INSERT INTO patients (clinic_id, full_name, phone, birth_date, notes)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id
+INSERT INTO patients (clinic_id, full_name, phone, birth_date, notes, iin, gender)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender
 `
 
 type CreatePatientParams struct {
@@ -24,6 +24,8 @@ type CreatePatientParams struct {
 	Phone     pgtype.Text `json:"phone"`
 	BirthDate *time.Time  `json:"birth_date"`
 	Notes     pgtype.Text `json:"notes"`
+	Iin       pgtype.Text `json:"iin"`
+	Gender    pgtype.Text `json:"gender"`
 }
 
 func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (Patient, error) {
@@ -33,6 +35,8 @@ func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (P
 		arg.Phone,
 		arg.BirthDate,
 		arg.Notes,
+		arg.Iin,
+		arg.Gender,
 	)
 	var i Patient
 	err := row.Scan(
@@ -43,6 +47,8 @@ func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (P
 		&i.Notes,
 		&i.CreatedAt,
 		&i.ClinicID,
+		&i.Iin,
+		&i.Gender,
 	)
 	return i, err
 }
@@ -62,7 +68,7 @@ func (q *Queries) DeletePatient(ctx context.Context, arg DeletePatientParams) er
 }
 
 const getPatient = `-- name: GetPatient :one
-SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id FROM patients WHERE id = $1 AND clinic_id = $2
+SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender FROM patients WHERE id = $1 AND clinic_id = $2
 `
 
 type GetPatientParams struct {
@@ -81,17 +87,48 @@ func (q *Queries) GetPatient(ctx context.Context, arg GetPatientParams) (Patient
 		&i.Notes,
 		&i.CreatedAt,
 		&i.ClinicID,
+		&i.Iin,
+		&i.Gender,
+	)
+	return i, err
+}
+
+const getPatientByIIN = `-- name: GetPatientByIIN :one
+SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender FROM patients WHERE clinic_id = $1 AND iin = $2
+`
+
+type GetPatientByIINParams struct {
+	ClinicID int64       `json:"clinic_id"`
+	Iin      pgtype.Text `json:"iin"`
+}
+
+// Used to de-duplicate patients by ИИН: creating a patient with an existing
+// ИИН returns the existing record instead of inserting a duplicate.
+func (q *Queries) GetPatientByIIN(ctx context.Context, arg GetPatientByIINParams) (Patient, error) {
+	row := q.db.QueryRow(ctx, getPatientByIIN, arg.ClinicID, arg.Iin)
+	var i Patient
+	err := row.Scan(
+		&i.ID,
+		&i.FullName,
+		&i.Phone,
+		&i.BirthDate,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.ClinicID,
+		&i.Iin,
+		&i.Gender,
 	)
 	return i, err
 }
 
 const listPatients = `-- name: ListPatients :many
-SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id FROM patients
+SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender FROM patients
 WHERE clinic_id = $1
   AND (
     $2::text IS NULL
     OR (' ' || full_name) ILIKE '% ' || $2::text || '%'
     OR phone ILIKE $2::text || '%'
+    OR iin LIKE $2::text || '%'
   )
 ORDER BY full_name
 LIMIT 200
@@ -102,8 +139,8 @@ type ListPatientsParams struct {
 	Search   pgtype.Text `json:"search"`
 }
 
-// Matches when the search term is a prefix of any word in the name or a prefix
-// of the phone number. Scoped to a single clinic.
+// Matches when the search term is a prefix of any word in the name, a prefix
+// of the phone number, or a prefix of the IIN. Scoped to a single clinic.
 func (q *Queries) ListPatients(ctx context.Context, arg ListPatientsParams) ([]Patient, error) {
 	rows, err := q.db.Query(ctx, listPatients, arg.ClinicID, arg.Search)
 	if err != nil {
@@ -121,6 +158,8 @@ func (q *Queries) ListPatients(ctx context.Context, arg ListPatientsParams) ([]P
 			&i.Notes,
 			&i.CreatedAt,
 			&i.ClinicID,
+			&i.Iin,
+			&i.Gender,
 		); err != nil {
 			return nil, err
 		}
@@ -133,7 +172,7 @@ func (q *Queries) ListPatients(ctx context.Context, arg ListPatientsParams) ([]P
 }
 
 const listPatientsForDoctor = `-- name: ListPatientsForDoctor :many
-SELECT DISTINCT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id FROM patients p
+SELECT DISTINCT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender FROM patients p
 JOIN appointments a ON a.patient_id = p.id
 WHERE a.doctor_id = $1
   AND p.clinic_id = $2
@@ -141,6 +180,7 @@ WHERE a.doctor_id = $1
     $3::text IS NULL
     OR (' ' || p.full_name) ILIKE '% ' || $3::text || '%'
     OR p.phone ILIKE $3::text || '%'
+    OR p.iin LIKE $3::text || '%'
   )
 ORDER BY p.full_name
 LIMIT 200
@@ -171,6 +211,8 @@ func (q *Queries) ListPatientsForDoctor(ctx context.Context, arg ListPatientsFor
 			&i.Notes,
 			&i.CreatedAt,
 			&i.ClinicID,
+			&i.Iin,
+			&i.Gender,
 		); err != nil {
 			return nil, err
 		}
@@ -202,9 +244,9 @@ func (q *Queries) PatientBelongsToDoctor(ctx context.Context, arg PatientBelongs
 
 const updatePatient = `-- name: UpdatePatient :one
 UPDATE patients
-SET full_name = $2, phone = $3, birth_date = $4, notes = $5
-WHERE id = $1 AND clinic_id = $6
-RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id
+SET full_name = $2, phone = $3, birth_date = $4, notes = $5, iin = $6, gender = $7
+WHERE id = $1 AND clinic_id = $8
+RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender
 `
 
 type UpdatePatientParams struct {
@@ -213,6 +255,8 @@ type UpdatePatientParams struct {
 	Phone     pgtype.Text `json:"phone"`
 	BirthDate *time.Time  `json:"birth_date"`
 	Notes     pgtype.Text `json:"notes"`
+	Iin       pgtype.Text `json:"iin"`
+	Gender    pgtype.Text `json:"gender"`
 	ClinicID  int64       `json:"clinic_id"`
 }
 
@@ -223,6 +267,8 @@ func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (P
 		arg.Phone,
 		arg.BirthDate,
 		arg.Notes,
+		arg.Iin,
+		arg.Gender,
 		arg.ClinicID,
 	)
 	var i Patient
@@ -234,6 +280,8 @@ func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (P
 		&i.Notes,
 		&i.CreatedAt,
 		&i.ClinicID,
+		&i.Iin,
+		&i.Gender,
 	)
 	return i, err
 }

@@ -28,15 +28,27 @@ export function useDoctors() {
   });
 }
 
+export interface DoctorPayload extends Partial<Doctor> {
+  id?: number;
+  // One-window flow: create the doctor's login together with the profile, or
+  // (when already linked) reset the linked account's password.
+  account_email?: string;
+  account_password?: string;
+}
+
 export function useSaveDoctor() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (d: Partial<Doctor> & { id?: number }) => {
+    mutationFn: async (d: DoctorPayload) => {
       const { id, ...body } = d;
       if (id) return (await api.put<Doctor>(`/doctors/${id}`, body)).data;
       return (await api.post<Doctor>("/doctors", body)).data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["doctors"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["doctors"] });
+      qc.invalidateQueries({ queryKey: ["unlinked-doctor-users"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
   });
 }
 

@@ -28,7 +28,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       ACCESS_TTL: ${ACCESS_TTL:-15m}
-      REFRESH_TTL: ${REFRESH_TTL:-168h}
+      REFRESH_TTL: ${REFRESH_TTL:-8760h}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       # Platform superadmin (администратор платформы), bootstrapped on first start.
       SUPERADMIN_NAME: ${SUPERADMIN_NAME:-Администратор платформы}

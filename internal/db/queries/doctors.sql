@@ -1,5 +1,17 @@
 -- name: ListDoctors :many
-SELECT * FROM doctors WHERE clinic_id = $1 ORDER BY full_name;
+-- Includes the linked account's login (email) so the admin panel can show it.
+SELECT d.*, COALESCE(u.email, '') AS user_email
+FROM doctors d
+LEFT JOIN users u ON u.id = d.user_id
+WHERE d.clinic_id = $1
+ORDER BY d.full_name;
+
+-- name: DoctorColorTaken :one
+-- Whether another doctor of the clinic already uses this calendar colour
+-- (colours are unique per clinic so doctors are distinguishable at a glance).
+SELECT EXISTS(
+    SELECT 1 FROM doctors WHERE clinic_id = $1 AND color = $2 AND id <> $3
+) AS taken;
 
 -- name: GetDoctor :one
 SELECT * FROM doctors WHERE id = $1 AND clinic_id = $2;

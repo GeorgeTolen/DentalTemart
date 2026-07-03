@@ -42,6 +42,8 @@ type doctorDTO struct {
 	Color          string `json:"color"`
 	IsActive       bool   `json:"is_active"`
 	UserID         *int64 `json:"user_id"`
+	// UserEmail is the login of the linked account (empty when not linked).
+	UserEmail string `json:"user_email"`
 }
 
 func toDoctorDTO(d sqlc.Doctor) doctorDTO {
@@ -60,6 +62,15 @@ func toDoctorDTO(d sqlc.Doctor) doctorDTO {
 	}
 }
 
+func fromDoctorListRow(d sqlc.ListDoctorsRow) doctorDTO {
+	dto := toDoctorDTO(sqlc.Doctor{
+		ID: d.ID, FullName: d.FullName, Specialization: d.Specialization,
+		Phone: d.Phone, Color: d.Color, IsActive: d.IsActive, UserID: d.UserID,
+	})
+	dto.UserEmail = d.UserEmail
+	return dto
+}
+
 // --- Patient ---
 
 type patientDTO struct {
@@ -68,6 +79,8 @@ type patientDTO struct {
 	Phone     string  `json:"phone"`
 	BirthDate *string `json:"birth_date"`
 	Notes     string  `json:"notes"`
+	IIN       string  `json:"iin"`
+	Gender    string  `json:"gender"` // male | female | ""
 }
 
 func toPatientDTO(p sqlc.Patient) patientDTO {
@@ -77,6 +90,8 @@ func toPatientDTO(p sqlc.Patient) patientDTO {
 		Phone:     textVal(p.Phone),
 		BirthDate: dateStr(p.BirthDate),
 		Notes:     textVal(p.Notes),
+		IIN:       textVal(p.Iin),
+		Gender:    textVal(p.Gender),
 	}
 }
 

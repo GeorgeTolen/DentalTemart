@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { usePatients, useSavePatient } from "../api/hooks";
 import { errorMessage } from "../api/client";
-import type { Patient } from "../lib/types";
-import { Button, Field, Input, Modal, Textarea } from "../components/ui";
+import type { Gender, Patient } from "../lib/types";
+import { GENDER_LABELS } from "../lib/types";
+import { Button, Field, Input, Modal, Select, Textarea } from "../components/ui";
 import { DateInput } from "../components/DateInputs";
-import { formatDate, validateBirthDate, minBirthDateInput, todayInput } from "../lib/datetime";
+import { formatDate, validateBirthDate, minBirthDateInput, todayInput, ageCategory } from "../lib/datetime";
 
 export default function Patients() {
   const [search, setSearch] = useState("");
@@ -32,8 +33,10 @@ export default function Patients() {
           <thead className="bg-slate-50 text-left text-slate-500">
             <tr>
               <th className="px-5 py-3 font-medium">ФИО</th>
+              <th className="px-5 py-3 font-medium">ИИН</th>
               <th className="px-5 py-3 font-medium">Телефон</th>
               <th className="px-5 py-3 font-medium">Дата рождения</th>
+              <th className="px-5 py-3 font-medium">Категория</th>
               <th className="px-5 py-3" />
             </tr>
           </thead>
@@ -45,9 +48,25 @@ export default function Patients() {
                     {p.full_name}
                   </Link>
                 </td>
+                <td className="px-5 py-3 text-slate-600">{p.iin || "—"}</td>
                 <td className="px-5 py-3 text-slate-600">{p.phone || "—"}</td>
                 <td className="px-5 py-3 text-slate-600">
                   {formatDate(p.birth_date)}
+                </td>
+                <td className="px-5 py-3">
+                  {ageCategory(p.birth_date) ? (
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        ageCategory(p.birth_date) === "Детский"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {ageCategory(p.birth_date)}
+                    </span>
+                  ) : (
+                    <span className="text-slate-300">—</span>
+                  )}
                 </td>
                 <td className="px-5 py-3 text-right">
                   <button
@@ -61,7 +80,7 @@ export default function Patients() {
             ))}
             {!isLoading && patients.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-5 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-5 py-8 text-center text-slate-400">
                   Пациенты не найдены
                 </td>
               </tr>
@@ -90,6 +109,8 @@ function PatientForm({
   const save = useSavePatient();
   const [fullName, setFullName] = useState(patient?.full_name ?? "");
   const [phone, setPhone] = useState(patient?.phone ?? "");
+  const [iin, setIin] = useState(patient?.iin ?? "");
+  const [gender, setGender] = useState<Gender>(patient?.gender ?? "");
   const [birthDate, setBirthDate] = useState(patient?.birth_date ?? "");
   const [notes, setNotes] = useState(patient?.notes ?? "");
   const [error, setError] = useState("");
@@ -97,6 +118,7 @@ function PatientForm({
   async function onSubmit() {
     setError("");
     if (!fullName.trim()) return setError("Введите ФИО");
+    if (iin && iin.length !== 12) return setError("ИИН должен состоять из 12 цифр");
     const birthErr = validateBirthDate(birthDate ?? "");
     if (birthErr) return setError(birthErr);
     try {
@@ -104,6 +126,8 @@ function PatientForm({
         id: patient?.id,
         full_name: fullName.trim(),
         phone: phone.trim(),
+        iin,
+        gender,
         birth_date: birthDate || null,
         notes,
       });
@@ -132,6 +156,23 @@ function PatientForm({
         <Field label="ФИО">
           <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
         </Field>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="ИИН (12 цифр)">
+            <Input
+              value={iin}
+              inputMode="numeric"
+              maxLength={12}
+              onChange={(e) => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+            />
+          </Field>
+          <Field label="Пол">
+            <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
+              <option value="">— не указан —</option>
+              <option value="male">{GENDER_LABELS.male}</option>
+              <option value="female">{GENDER_LABELS.female}</option>
+            </Select>
+          </Field>
+        </div>
         <Field label="Телефон">
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
         </Field>

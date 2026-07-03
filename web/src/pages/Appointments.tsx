@@ -25,11 +25,22 @@ export default function AppointmentsPage() {
 
   const { data: doctors = [] } = useDoctors();
 
+  // По умолчанию показываем один день — сегодня. Выбор одной границы сразу
+  // подтягивает вторую, чтобы диапазон оставался корректным (период в 1 день).
   const [dateFrom, setDateFrom] = useState(todayStr());
   const [dateTo, setDateTo] = useState(todayStr());
   const [doctorFilter, setDoctorFilter] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | "">("");
   const [editing, setEditing] = useState<Appointment | null>(null);
+
+  function changeFrom(v: string) {
+    setDateFrom(v);
+    if (v && (!dateTo || dateTo < v)) setDateTo(v);
+  }
+  function changeTo(v: string) {
+    setDateTo(v);
+    if (v && (!dateFrom || v < dateFrom)) setDateFrom(v);
+  }
 
   const from = useMemo(() => new Date(dateFrom).toISOString(), [dateFrom]);
   const to = useMemo(() => {
@@ -72,11 +83,11 @@ export default function AppointmentsPage() {
       <div className="flex flex-wrap gap-3 rounded-2xl bg-white p-4 shadow-sm">
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-500">С</span>
-          <DateInput className="w-40" value={dateFrom} onChange={setDateFrom} />
+          <DateInput className="w-40" value={dateFrom} onChange={changeFrom} />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-500">По</span>
-          <DateInput className="w-40" value={dateTo} onChange={setDateTo} />
+          <DateInput className="w-40" value={dateTo} onChange={changeTo} />
         </div>
         <select
           value={doctorFilter ?? ""}
@@ -269,6 +280,7 @@ function AppointmentEditModal({
   const [patientId, setPatientId] = useState<number | "new">(appointment.patient_id);
   const [newPatientName, setNewPatientName] = useState("");
   const [newPatientPhone, setNewPatientPhone] = useState("");
+  const [newPatientIin, setNewPatientIin] = useState("");
   const [error, setError] = useState("");
 
   async function submit() {
@@ -277,9 +289,11 @@ function AppointmentEditModal({
       let resolvedPatientId = patientId;
       if (patientId === "new") {
         if (!newPatientName.trim()) { setError("Введите ФИО нового пациента"); return; }
+        if (newPatientIin && newPatientIin.length !== 12) { setError("ИИН должен состоять из 12 цифр"); return; }
         const created = await savePatient.mutateAsync({
           full_name: newPatientName.trim(),
           phone: newPatientPhone.trim(),
+          iin: newPatientIin,
         });
         resolvedPatientId = created.id;
       }
@@ -331,6 +345,14 @@ function AppointmentEditModal({
         {patientId === "new" && (
           <div className="grid grid-cols-2 gap-3 rounded-xl bg-brand-bg p-3">
             <Field label="ФИО"><Input value={newPatientName} onChange={(e) => setNewPatientName(e.target.value)} /></Field>
+            <Field label="ИИН (12 цифр)">
+              <Input
+                value={newPatientIin}
+                inputMode="numeric"
+                maxLength={12}
+                onChange={(e) => setNewPatientIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+              />
+            </Field>
             <Field label="Телефон"><Input value={newPatientPhone} onChange={(e) => setNewPatientPhone(e.target.value)} placeholder="+7…" /></Field>
           </div>
         )}

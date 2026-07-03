@@ -13,18 +13,21 @@ import {
   formatDateTime,
   age,
   yearsLabel,
+  ageCategory,
   localInputToISO,
   validateBirthDate,
   validateAppointmentDate,
   minBirthDateInput,
   todayInput,
   maxAppointmentInput,
+  defaultAppointmentStart,
+  addMinutesToLocalInput,
 } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
 import { DateInput, DateTimeInput } from "../components/DateInputs";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
-import type { Appointment, AppointmentStatus, PatientRecordType } from "../lib/types";
-import { STATUS_LABELS, RECORD_TYPE_LABELS } from "../lib/types";
+import type { Appointment, AppointmentStatus, Gender, PatientRecordType } from "../lib/types";
+import { STATUS_LABELS, RECORD_TYPE_LABELS, GENDER_LABELS } from "../lib/types";
 import {
   usePatientRecords,
   useSavePatientRecord,
@@ -42,10 +45,9 @@ export default function PatientDetail() {
   if (isLoading) return <div className="text-slate-400">Загрузка…</div>;
   if (!patient) return <div className="text-slate-400">Пациент не найден</div>;
 
-  const completed = history.filter((a) => a.status === "completed").length;
-  const scheduled = history.filter((a) => a.status === "scheduled").length;
   const lastVisit = history.find((a) => a.status === "completed");
   const nextVisit = [...history].reverse().find((a) => a.status === "scheduled");
+  const category = ageCategory(patient.birth_date);
 
   return (
     <div className="space-y-6">
@@ -70,9 +72,24 @@ export default function PatientDetail() {
             {patient.full_name.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold text-ink">{patient.full_name}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold text-ink">{patient.full_name}</h1>
+              {category && (
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    category === "Детский"
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {category}
+                </span>
+              )}
+            </div>
             <div className="mt-1 flex flex-wrap gap-4 text-sm text-slate-500">
-              {patient.phone && <span>Номер телефона: {patient.phone}</span>}
+              {patient.iin && <span>ИИН: {patient.iin}</span>}
+              {patient.gender && <span>Пол: {GENDER_LABELS[patient.gender]}</span>}
+              {patient.phone && <span>Телефон: {patient.phone}</span>}
               {patient.birth_date && (
                 <span>
                   Дата рождения: {formatDate(patient.birth_date)}
@@ -94,14 +111,6 @@ export default function PatientDetail() {
             {patient.notes}
           </div>
         )}
-      </div>
-
-      {/* Статистика */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Всего приёмов" value={history.length} color="text-ink" />
-        <StatCard label="Завершено" value={completed} color="text-green-600" />
-        <StatCard label="Запланировано" value={scheduled} color="text-brand" />
-        <StatCard label="Не пришёл" value={history.filter((a) => a.status === "no_show").length} color="text-orange-500" />
       </div>
 
       {/* Ближайшая и последняя записи */}
@@ -153,6 +162,17 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  // Выбор одной даты сразу даёт период в один день: вторая граница
+  // подставляется той же датой (и поправляется, если диапазон перевёрнут).
+  function changeFrom(v: string) {
+    setDateFrom(v);
+    if (v && (!dateTo || dateTo < v)) setDateTo(v);
+  }
+  function changeTo(v: string) {
+    setDateTo(v);
+    if (v && (!dateFrom || v < dateFrom)) setDateFrom(v);
+  }
+
   const filtered = history.filter((a) => {
     if (statusFilter !== "all" && a.status !== statusFilter) return false;
     const day = a.start_time.slice(0, 10);
@@ -167,10 +187,10 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
         <h2 className="text-lg font-semibold">История лечения</h2>
         <div className="flex flex-wrap items-end gap-2">
           <Field label="С даты">
-            <DateInput value={dateFrom} onChange={setDateFrom} />
+            <DateInput value={dateFrom} onChange={changeFrom} />
           </Field>
           <Field label="По дату">
-            <DateInput value={dateTo} onChange={setDateTo} />
+            <DateInput value={dateTo} onChange={changeTo} />
           </Field>
           {(dateFrom || dateTo) && (
             <Button variant="secondary" onClick={() => { setDateFrom(""); setDateTo(""); }}>
@@ -465,15 +485,6 @@ function AddRecordModal({
   );
 }
 
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm text-center">
-      <div className={`text-3xl font-bold ${color}`}>{value}</div>
-      <div className="mt-1 text-xs text-slate-400">{label}</div>
-    </div>
-  );
-}
-
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -483,20 +494,23 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PatientEditModal({ patient, onClose }: { patient: { id: number; full_name: string; phone: string; birth_date: string | null; notes: string }; onClose: () => void }) {
+function PatientEditModal({ patient, onClose }: { patient: { id: number; full_name: string; phone: string; birth_date: string | null; notes: string; iin: string; gender: Gender }; onClose: () => void }) {
   const save = useSavePatient();
   const [name, setName] = useState(patient.full_name);
   const [phone, setPhone] = useState(patient.phone ?? "");
+  const [iin, setIin] = useState(patient.iin ?? "");
+  const [gender, setGender] = useState<Gender>(patient.gender ?? "");
   const [birthDate, setBirthDate] = useState(patient.birth_date?.split("T")[0] ?? "");
   const [notes, setNotes] = useState(patient.notes ?? "");
   const [error, setError] = useState("");
 
   async function submit() {
     if (!name.trim()) { setError("Введите ФИО"); return; }
+    if (iin && iin.length !== 12) { setError("ИИН должен состоять из 12 цифр"); return; }
     const birthErr = validateBirthDate(birthDate);
     if (birthErr) { setError(birthErr); return; }
     try {
-      await save.mutateAsync({ id: patient.id, full_name: name, phone, birth_date: birthDate, notes });
+      await save.mutateAsync({ id: patient.id, full_name: name, phone, iin, gender, birth_date: birthDate, notes });
       onClose();
     } catch (e) { setError(errorMessage(e)); }
   }
@@ -514,6 +528,23 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
     >
       <div className="space-y-4">
         <Field label="ФИО *"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="ИИН (12 цифр)">
+            <Input
+              value={iin}
+              inputMode="numeric"
+              maxLength={12}
+              onChange={(e) => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+            />
+          </Field>
+          <Field label="Пол">
+            <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
+              <option value="">— не указан —</option>
+              <option value="male">{GENDER_LABELS.male}</option>
+              <option value="female">{GENDER_LABELS.female}</option>
+            </Select>
+          </Field>
+        </div>
         <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" /></Field>
         <Field label="Дата рождения">
           <DateInput value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={setBirthDate} />
@@ -531,12 +562,12 @@ function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: n
   const save = useSaveAppointment();
 
   const [doctorId, setDoctorId] = useState<number | "">(activeDoctors[0]?.id ?? "");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  // По умолчанию — ближайшее время сегодня, приём 30 минут.
+  const [start, setStart] = useState(() => defaultAppointmentStart());
+  const [end, setEnd] = useState(() => addMinutesToLocalInput(defaultAppointmentStart(), 30));
   const [diagnosis, setDiagnosis] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<AppointmentStatus>("scheduled");
-  const [nextVisit, setNextVisit] = useState("");
   const [error, setError] = useState("");
 
   async function submit() {
@@ -553,7 +584,7 @@ function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: n
         status,
         diagnosis,
         description,
-        next_visit_date: nextVisit,
+        next_visit_date: "",
       });
       onClose();
     } catch (e) { setError(errorMessage(e)); }
@@ -595,7 +626,6 @@ function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: n
         </Field>
         <Field label="Диагноз"><Input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Необязательно" /></Field>
         <Field label="Описание"><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Необязательно" /></Field>
-        <Field label="Следующий приём"><DateInput value={nextVisit} onChange={setNextVisit} /></Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
       </div>
     </Modal>

@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS idx_patients_clinic_iin;
+ALTER TABLE patients DROP COLUMN IF EXISTS gender;
+ALTER TABLE patients DROP COLUMN IF EXISTS iin;

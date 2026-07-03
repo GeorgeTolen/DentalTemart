@@ -14,6 +14,8 @@ import {
   localInputToISO,
   maxAppointmentInput,
   validateAppointmentDate,
+  defaultAppointmentStart,
+  addMinutesToLocalInput,
 } from "../lib/datetime";
 import {
   Button,
@@ -74,14 +76,21 @@ function EditCard({
   );
   const [newPatientName, setNewPatientName] = useState("");
   const [newPatientPhone, setNewPatientPhone] = useState("");
+  const [newPatientIin, setNewPatientIin] = useState("");
   const [doctorId, setDoctorId] = useState<number | "">(
     existing?.doctor_id ?? activeDoctors[0]?.id ?? ""
   );
+  // Новая запись по умолчанию начинается сегодня, в ближайшее рабочее время
+  // (8:00–20:00), длится 30 минут.
   const [start, setStart] = useState(
-    existing ? isoToLocalInput(existing.start_time) : initialStart ?? ""
+    existing
+      ? isoToLocalInput(existing.start_time)
+      : initialStart ?? defaultAppointmentStart()
   );
   const [end, setEnd] = useState(
-    existing ? isoToLocalInput(existing.end_time) : initialEnd ?? ""
+    existing
+      ? isoToLocalInput(existing.end_time)
+      : initialEnd ?? addMinutesToLocalInput(defaultAppointmentStart(), 30)
   );
   const [status, setStatus] = useState<AppointmentStatus>(
     existing?.status ?? "scheduled"
@@ -105,9 +114,13 @@ function EditCard({
       if (patientId === "new") {
         if (!newPatientName.trim())
           return setError("Введите ФИО нового пациента");
+        if (newPatientIin && newPatientIin.length !== 12)
+          return setError("ИИН должен состоять из 12 цифр");
+        // Если ИИН уже есть в базе — сервер вернёт существующего пациента.
         const created = await savePatient.mutateAsync({
           full_name: newPatientName.trim(),
           phone: newPatientPhone.trim(),
+          iin: newPatientIin,
         });
         resolvedPatientId = created.id;
       }
@@ -200,6 +213,17 @@ function EditCard({
                 placeholder="Иванов Иван"
               />
             </Field>
+            <Field label="ИИН (12 цифр)">
+              <Input
+                value={newPatientIin}
+                inputMode="numeric"
+                maxLength={12}
+                onChange={(e) =>
+                  setNewPatientIin(e.target.value.replace(/\D/g, "").slice(0, 12))
+                }
+                placeholder="Если уже есть — подставится пациент"
+              />
+            </Field>
             <Field label="Телефон">
               <Input
                 value={newPatientPhone}
@@ -269,9 +293,12 @@ function EditCard({
           />
         </Field>
 
-        <Field label="Дата следующего приёма">
-          <DateInput value={nextVisit ?? ""} onChange={setNextVisit} />
-        </Field>
+        {/* Дата следующего приёма заполняется позже, при работе с записью. */}
+        {existing && (
+          <Field label="Дата следующего приёма">
+            <DateInput value={nextVisit ?? ""} onChange={setNextVisit} />
+          </Field>
+        )}
 
         {error && (
           <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">

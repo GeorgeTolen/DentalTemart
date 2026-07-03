@@ -30,4 +30,5 @@ RETURNING id, clinic_id, full_name, email, password_hash, role, created_at;
 DELETE FROM users WHERE id = $1 AND clinic_id = $2;
 
 -- name: UpdateUserPassword :exec
-UPDATE users SET password_hash = $2 WHERE id = $1;
+-- Bumping token_version invalidates the user's existing access/refresh tokens.
+UPDATE users SET password_hash = $2, token_version = token_version + 1 WHERE id = $1;

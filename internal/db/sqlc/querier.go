@@ -30,6 +30,9 @@ type Querier interface {
 	DeleteDoctorSchedules(ctx context.Context, doctorID int64) error
 	DeletePatient(ctx context.Context, arg DeletePatientParams) error
 	DeletePatientRecord(ctx context.Context, arg DeletePatientRecordParams) error
+	// Whether another doctor of the clinic already uses this calendar colour
+	// (colours are unique per clinic so doctors are distinguishable at a glance).
+	DoctorColorTaken(ctx context.Context, arg DoctorColorTakenParams) (bool, error)
 	// Whether the given user is a doctor-role account belonging to the clinic. Used
 	// to validate the user_id a doctor profile is linked to.
 	DoctorUserInClinic(ctx context.Context, arg DoctorUserInClinicParams) (bool, error)
@@ -43,6 +46,9 @@ type Querier interface {
 	// own clinic (prevents cross-clinic linkage from leaking a foreign profile).
 	GetDoctorByUserID(ctx context.Context, arg GetDoctorByUserIDParams) (Doctor, error)
 	GetPatient(ctx context.Context, arg GetPatientParams) (Patient, error)
+	// Used to de-duplicate patients by ИИН: creating a patient with an existing
+	// ИИН returns the existing record instead of inserting a duplicate.
+	GetPatientByIIN(ctx context.Context, arg GetPatientByIINParams) (Patient, error)
 	GetPatientRecord(ctx context.Context, arg GetPatientRecordParams) (PatientRecord, error)
 	// Platform admin login: superadmins are not attached to any clinic.
 	GetSuperadminByEmail(ctx context.Context, lower string) (User, error)
@@ -55,10 +61,11 @@ type Querier interface {
 	// All clinics with quick aggregate counts, for the platform admin panel.
 	ListClinics(ctx context.Context) ([]ListClinicsRow, error)
 	ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedulesParams) ([]DoctorSchedule, error)
-	ListDoctors(ctx context.Context, clinicID int64) ([]Doctor, error)
+	// Includes the linked account's login (email) so the admin panel can show it.
+	ListDoctors(ctx context.Context, clinicID int64) ([]ListDoctorsRow, error)
 	ListPatientRecords(ctx context.Context, arg ListPatientRecordsParams) ([]ListPatientRecordsRow, error)
-	// Matches when the search term is a prefix of any word in the name or a prefix
-	// of the phone number. Scoped to a single clinic.
+	// Matches when the search term is a prefix of any word in the name, a prefix
+	// of the phone number, or a prefix of the IIN. Scoped to a single clinic.
 	ListPatients(ctx context.Context, arg ListPatientsParams) ([]Patient, error)
 	// Same prefix-word search, restricted to patients that have at least one
 	// appointment with the given doctor (within the clinic).
@@ -73,6 +80,7 @@ type Querier interface {
 	UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error)
 	UpdatePatient(ctx context.Context, arg UpdatePatientParams) (Patient, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error)
+	// Bumping token_version invalidates the user's existing access/refresh tokens.
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 }
 

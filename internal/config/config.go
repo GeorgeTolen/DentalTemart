@@ -52,7 +52,9 @@ func Load() (*Config, error) {
 	if cfg.AccessTTL, err = time.ParseDuration(get("ACCESS_TTL", "15m")); err != nil {
 		return nil, fmt.Errorf("invalid ACCESS_TTL: %w", err)
 	}
-	if cfg.RefreshTTL, err = time.ParseDuration(get("REFRESH_TTL", "168h")); err != nil {
+	// Refresh lives a year by default: the frontend silently refreshes expired
+	// access tokens, so users sign in once and the session stays active.
+	if cfg.RefreshTTL, err = time.ParseDuration(get("REFRESH_TTL", "8760h")); err != nil {
 		return nil, fmt.Errorf("invalid REFRESH_TTL: %w", err)
 	}
 

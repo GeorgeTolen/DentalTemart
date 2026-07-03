@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"temart/internal/auth"
 	"temart/internal/db/sqlc"
 	"temart/internal/httpx"
 	"temart/internal/middleware"
@@ -19,6 +20,10 @@ type doctorRequest struct {
 	Color          string `json:"color"`
 	IsActive       *bool  `json:"is_active"`
 	UserID         *int64 `json:"user_id"`
+	// AccountEmail+AccountPassword create (or attach) a login for the doctor in
+	// the same request, so the admin sets everything up in one window.
+	AccountEmail    string `json:"account_email" validate:"omitempty,email"`
+	AccountPassword string `json:"account_password" validate:"omitempty,min=6"`
 }
 
 func (req doctorRequest) color() string {
@@ -58,6 +63,23 @@ func (h *Handlers) validateLinkedUser(r *http.Request, uid pgtype.Int8, clinicID
 	return nil
 }
 
+// checkDoctorColor rejects a calendar colour already used by another doctor of
+// the clinic — colours are unique so doctors are distinguishable at a glance.
+func (h *Handlers) checkDoctorColor(r *http.Request, clinicID int64, color string, excludeID int64) error {
+	taken, err := h.q.DoctorColorTaken(r.Context(), sqlc.DoctorColorTakenParams{
+		ClinicID: clinicID,
+		Color:    color,
+		ID:       excludeID,
+	})
+	if err != nil {
+		return err
+	}
+	if taken {
+		return httpx.NewError(http.StatusConflict, "этот цвет уже занят другим врачом — выберите другой")
+	}
+	return nil
+}
+
 // ListDoctors returns all doctors of the caller's clinic.
 func (h *Handlers) ListDoctors(w http.ResponseWriter, r *http.Request) {
 	clinicID, err := h.clinicID(r.Context())
@@ -72,13 +94,17 @@ func (h *Handlers) ListDoctors(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]doctorDTO, 0, len(doctors))
 	for _, d := range doctors {
-		out = append(out, toDoctorDTO(d))
+		out = append(out, fromDoctorListRow(d))
 	}
 	httpx.JSON(w, http.StatusOK, out)
 }
 
 // CreateDoctor adds a new doctor to the caller's clinic.
 func (h *Handlers) CreateDoctor(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireManager(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	clinicID, err := h.clinicID(r.Context())
 	if err != nil {
 		httpx.Fail(w, err)
@@ -93,7 +119,67 @@ func (h *Handlers) CreateDoctor(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	if err := h.validateLinkedUser(r, req.userID(), clinicID); err != nil {
+	if err := h.checkDoctorColor(r, clinicID, req.color(), 0); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+
+	// One-window flow: the admin can create the doctor's login together with
+	// the profile. Otherwise an existing unlinked account can be selected.
+	userID := req.userID()
+	if req.AccountEmail != "" {
+		if req.AccountPassword == "" {
+			httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "укажите пароль для аккаунта врача (минимум 6 символов)"))
+			return
+		}
+		hash, err := auth.HashPassword(req.AccountPassword)
+		if err != nil {
+			httpx.Fail(w, err)
+			return
+		}
+		tx, err := h.pool.Begin(r.Context())
+		if err != nil {
+			httpx.Fail(w, err)
+			return
+		}
+		defer tx.Rollback(r.Context())
+		qtx := h.q.WithTx(tx)
+
+		u, err := qtx.CreateUser(r.Context(), sqlc.CreateUserParams{
+			ClinicID:     pgtype.Int8{Int64: clinicID, Valid: true},
+			FullName:     req.FullName,
+			Email:        req.AccountEmail,
+			PasswordHash: hash,
+			Role:         "doctor",
+		})
+		if err != nil {
+			httpx.Fail(w, emailConflict(err))
+			return
+		}
+		d, err := qtx.CreateDoctor(r.Context(), sqlc.CreateDoctorParams{
+			ClinicID:       clinicID,
+			FullName:       req.FullName,
+			Specialization: pgtype.Text{String: req.Specialization, Valid: true},
+			Phone:          pgtype.Text{String: req.Phone, Valid: true},
+			Color:          req.color(),
+			IsActive:       req.active(),
+			UserID:         pgtype.Int8{Int64: u.ID, Valid: true},
+		})
+		if err != nil {
+			httpx.Fail(w, err)
+			return
+		}
+		if err := tx.Commit(r.Context()); err != nil {
+			httpx.Fail(w, err)
+			return
+		}
+		dto := toDoctorDTO(d)
+		dto.UserEmail = u.Email
+		httpx.JSON(w, http.StatusCreated, dto)
+		return
+	}
+
+	if err := h.validateLinkedUser(r, userID, clinicID); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -104,7 +190,7 @@ func (h *Handlers) CreateDoctor(w http.ResponseWriter, r *http.Request) {
 		Phone:          pgtype.Text{String: req.Phone, Valid: true},
 		Color:          req.color(),
 		IsActive:       req.active(),
-		UserID:         req.userID(),
+		UserID:         userID,
 	})
 	if err != nil {
 		httpx.Fail(w, err)
@@ -115,6 +201,10 @@ func (h *Handlers) CreateDoctor(w http.ResponseWriter, r *http.Request) {
 
 // UpdateDoctor edits an existing doctor within the caller's clinic.
 func (h *Handlers) UpdateDoctor(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireManager(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	clinicID, err := h.clinicID(r.Context())
 	if err != nil {
 		httpx.Fail(w, err)
@@ -134,18 +224,91 @@ func (h *Handlers) UpdateDoctor(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	if err := h.validateLinkedUser(r, req.userID(), clinicID); err != nil {
+	existing, err := h.q.GetDoctor(r.Context(), sqlc.GetDoctorParams{ID: id, ClinicID: clinicID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "врач не найден"))
+			return
+		}
 		httpx.Fail(w, err)
 		return
 	}
-	d, err := h.q.UpdateDoctor(r.Context(), sqlc.UpdateDoctorParams{
+	// Uniqueness is enforced when the colour CHANGES; a doctor keeping their
+	// current colour is never blocked (legacy data may contain duplicates).
+	if req.color() != existing.Color {
+		if err := h.checkDoctorColor(r, clinicID, req.color(), id); err != nil {
+			httpx.Fail(w, err)
+			return
+		}
+	}
+	userID := req.userID()
+	if err := h.validateLinkedUser(r, userID, clinicID); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	qtx := h.q.WithTx(tx)
+
+	newEmail := ""
+	if req.AccountEmail != "" && !existing.UserID.Valid && !userID.Valid {
+		// Attach a brand-new login to a doctor that had none.
+		if req.AccountPassword == "" {
+			httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "укажите пароль для аккаунта врача (минимум 6 символов)"))
+			return
+		}
+		hash, err := auth.HashPassword(req.AccountPassword)
+		if err != nil {
+			httpx.Fail(w, err)
+			return
+		}
+		u, err := qtx.CreateUser(r.Context(), sqlc.CreateUserParams{
+			ClinicID:     pgtype.Int8{Int64: clinicID, Valid: true},
+			FullName:     req.FullName,
+			Email:        req.AccountEmail,
+			PasswordHash: hash,
+			Role:         "doctor",
+		})
+		if err != nil {
+			httpx.Fail(w, emailConflict(err))
+			return
+		}
+		userID = pgtype.Int8{Int64: u.ID, Valid: true}
+		newEmail = u.Email
+	} else if req.AccountPassword != "" {
+		// Reset the password of the already-linked account. If no user_id was
+		// sent, keep the current link (don't unlink as a side effect of reset).
+		target := userID
+		if !target.Valid {
+			target = existing.UserID
+			userID = existing.UserID
+		}
+		if target.Valid {
+			hash, err := auth.HashPassword(req.AccountPassword)
+			if err != nil {
+				httpx.Fail(w, err)
+				return
+			}
+			if err := qtx.UpdateUserPassword(r.Context(), sqlc.UpdateUserPasswordParams{ID: target.Int64, PasswordHash: hash}); err != nil {
+				httpx.Fail(w, err)
+				return
+			}
+		}
+	}
+
+	d, err := qtx.UpdateDoctor(r.Context(), sqlc.UpdateDoctorParams{
 		ID:             id,
 		FullName:       req.FullName,
 		Specialization: pgtype.Text{String: req.Specialization, Valid: true},
 		Phone:          pgtype.Text{String: req.Phone, Valid: true},
 		Color:          req.color(),
 		IsActive:       req.active(),
-		UserID:         req.userID(),
+		UserID:         userID,
 		ClinicID:       clinicID,
 	})
 	if err != nil {
@@ -156,7 +319,13 @@ func (h *Handlers) UpdateDoctor(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toDoctorDTO(d))
+	if err := tx.Commit(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	dto := toDoctorDTO(d)
+	dto.UserEmail = newEmail
+	httpx.JSON(w, http.StatusOK, dto)
 }
 
 // GetMyDoctorProfile returns the doctor profile linked to the logged-in user
@@ -220,6 +389,10 @@ func (h *Handlers) ListUnlinkedDoctorUsers(w http.ResponseWriter, r *http.Reques
 // DeleteDoctor removes a doctor and everything cascading from them (their
 // appointments and schedule). This is why the "can't delete" error is gone.
 func (h *Handlers) DeleteDoctor(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireManager(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	clinicID, err := h.clinicID(r.Context())
 	if err != nil {
 		httpx.Fail(w, err)
@@ -289,6 +462,10 @@ func (h *Handlers) GetSchedule(w http.ResponseWriter, r *http.Request) {
 
 // PutSchedule replaces a doctor's whole weekly schedule transactionally.
 func (h *Handlers) PutSchedule(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireManager(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	clinicID, err := h.clinicID(r.Context())
 	if err != nil {
 		httpx.Fail(w, err)

@@ -23,6 +23,50 @@ export function formatDate(value: string | null): string {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 
+// ageCategory splits patients into детский (<18) / взрослый (18+) groups.
+export function ageCategory(birthDate: string | null): "Детский" | "Взрослый" | null {
+  const years = age(birthDate);
+  if (years === null) return null;
+  return years < 18 ? "Детский" : "Взрослый";
+}
+
+// Working hours of the clinic day used for default appointment times.
+const WORKDAY_START = 8;
+const WORKDAY_END = 20;
+
+// defaultAppointmentStart returns a "YYYY-MM-DDTHH:MM" value for a new
+// appointment: today, rounded up to the next half-hour, clamped to the
+// 08:00–20:00 working window (past 20:00 → next day 08:00).
+export function defaultAppointmentStart(): string {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  const m = d.getMinutes();
+  if (m === 0) {
+    // already on the hour
+  } else if (m <= 30) {
+    d.setMinutes(30);
+  } else {
+    d.setMinutes(0);
+    d.setHours(d.getHours() + 1);
+  }
+  if (d.getHours() < WORKDAY_START) {
+    d.setHours(WORKDAY_START, 0, 0, 0);
+  } else if (d.getHours() >= WORKDAY_END) {
+    d.setDate(d.getDate() + 1);
+    d.setHours(WORKDAY_START, 0, 0, 0);
+  }
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// addMinutesToLocalInput shifts a "YYYY-MM-DDTHH:MM" value by the given number
+// of minutes, returning the same format.
+export function addMinutesToLocalInput(value: string, minutes: number): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  d.setMinutes(d.getMinutes() + minutes);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 // yearsLabel returns the correct Russian plural of "год" for the given age.
 export function yearsLabel(n: number): string {
   const mod10 = n % 10;

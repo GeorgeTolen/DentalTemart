@@ -58,6 +58,8 @@ export interface Doctor {
   color: string;
   is_active: boolean;
   user_id: number | null;
+  // Login (email) of the linked account; empty when no account is linked.
+  user_email: string;
 }
 
 export type PatientRecordType = "xray" | "allergy" | "scan3d";
@@ -80,12 +82,21 @@ export const RECORD_TYPE_LABELS: Record<PatientRecordType, string> = {
   scan3d: "3D снимок",
 };
 
+export type Gender = "male" | "female" | "";
+
+export const GENDER_LABELS: Record<Exclude<Gender, "">, string> = {
+  male: "Мужской",
+  female: "Женский",
+};
+
 export interface Patient {
   id: number;
   full_name: string;
   phone: string;
   birth_date: string | null;
   notes: string;
+  iin: string;
+  gender: Gender;
 }
 
 export type AppointmentStatus =

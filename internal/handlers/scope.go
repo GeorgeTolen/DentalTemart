@@ -46,6 +46,16 @@ func (h *Handlers) requireOwner(ctx context.Context) error {
 	return nil
 }
 
+// requireManager returns a 403 unless the caller is a clinic owner or manager.
+// Doctors must not manage clinic-wide resources (doctors, other accounts).
+func (h *Handlers) requireManager(ctx context.Context) error {
+	role := middleware.Role(ctx)
+	if role != "owner" && role != "admin" {
+		return httpx.NewError(http.StatusForbidden, "недостаточно прав")
+	}
+	return nil
+}
+
 // doctorScope reports whether the current request must be scoped to a single
 // doctor's own patients/appointments, and if so, which doctor ID to scope to.
 // Only the "doctor" role is scoped; owner/admin see the whole clinic.
