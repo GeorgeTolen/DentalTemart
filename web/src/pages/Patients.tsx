@@ -4,6 +4,7 @@ import { usePatients, useSavePatient } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import type { Patient } from "../lib/types";
 import { Button, Field, Input, Modal, Textarea } from "../components/ui";
+import { DateInput } from "../components/DateInputs";
 import { formatDate, validateBirthDate, minBirthDateInput, todayInput } from "../lib/datetime";
 
 export default function Patients() {
@@ -135,12 +136,11 @@ function PatientForm({
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
         </Field>
         <Field label="Дата рождения">
-          <Input
-            type="date"
+          <DateInput
             value={birthDate ?? ""}
             min={minBirthDateInput()}
             max={todayInput()}
-            onChange={(e) => setBirthDate(e.target.value)}
+            onChange={setBirthDate}
           />
         </Field>
         <Field label="Заметки">

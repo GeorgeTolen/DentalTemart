@@ -24,6 +24,7 @@ import {
   StatusBadge,
   Textarea,
 } from "./ui";
+import { DateInput, DateTimeInput } from "./DateInputs";
 
 interface Props {
   doctors: Doctor[];
@@ -226,19 +227,17 @@ function EditCard({
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Начало">
-            <Input
-              type="datetime-local"
+            <DateTimeInput
               value={start}
-              max={maxAppointmentInput()}
-              onChange={(e) => setStart(e.target.value)}
+              maxDate={maxAppointmentInput().slice(0, 10)}
+              onChange={setStart}
             />
           </Field>
           <Field label="Окончание">
-            <Input
-              type="datetime-local"
+            <DateTimeInput
               value={end}
-              max={maxAppointmentInput()}
-              onChange={(e) => setEnd(e.target.value)}
+              maxDate={maxAppointmentInput().slice(0, 10)}
+              onChange={setEnd}
             />
           </Field>
         </div>
@@ -271,11 +270,7 @@ function EditCard({
         </Field>
 
         <Field label="Дата следующего приёма">
-          <Input
-            type="date"
-            value={nextVisit ?? ""}
-            onChange={(e) => setNextVisit(e.target.value)}
-          />
+          <DateInput value={nextVisit ?? ""} onChange={setNextVisit} />
         </Field>
 
         {error && (
@@ -413,11 +408,7 @@ function CompletedCard({
           <h3 className="text-sm font-semibold text-ink">Следующий приём</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Дата">
-              <Input
-                type="date"
-                value={nextDate}
-                onChange={(e) => setNextDate(e.target.value)}
-              />
+              <DateInput value={nextDate} onChange={setNextDate} />
             </Field>
             <Field label="Время">
               <Input

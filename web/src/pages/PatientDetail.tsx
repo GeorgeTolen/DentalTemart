@@ -21,6 +21,7 @@ import {
   maxAppointmentInput,
 } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
+import { DateInput, DateTimeInput } from "../components/DateInputs";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import type { Appointment, AppointmentStatus, PatientRecordType } from "../lib/types";
 import { STATUS_LABELS, RECORD_TYPE_LABELS } from "../lib/types";
@@ -166,10 +167,10 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
         <h2 className="text-lg font-semibold">История лечения</h2>
         <div className="flex flex-wrap items-end gap-2">
           <Field label="С даты">
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <DateInput value={dateFrom} onChange={setDateFrom} />
           </Field>
           <Field label="По дату">
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <DateInput value={dateTo} onChange={setDateTo} />
           </Field>
           {(dateFrom || dateTo) && (
             <Button variant="secondary" onClick={() => { setDateFrom(""); setDateTo(""); }}>
@@ -515,7 +516,7 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
         <Field label="ФИО *"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" /></Field>
         <Field label="Дата рождения">
-          <Input type="date" value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={(e) => setBirthDate(e.target.value)} />
+          <DateInput value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={setBirthDate} />
         </Field>
         <Field label="Заметки"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
@@ -582,8 +583,8 @@ function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: n
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Начало"><Input type="datetime-local" value={start} max={maxAppointmentInput()} onChange={(e) => setStart(e.target.value)} /></Field>
-          <Field label="Окончание"><Input type="datetime-local" value={end} max={maxAppointmentInput()} onChange={(e) => setEnd(e.target.value)} /></Field>
+          <Field label="Начало"><DateTimeInput value={start} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setStart} /></Field>
+          <Field label="Окончание"><DateTimeInput value={end} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setEnd} /></Field>
         </div>
         <Field label="Статус">
           <Select value={status} onChange={(e) => setStatus(e.target.value as AppointmentStatus)}>
@@ -594,7 +595,7 @@ function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: n
         </Field>
         <Field label="Диагноз"><Input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Необязательно" /></Field>
         <Field label="Описание"><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Необязательно" /></Field>
-        <Field label="Следующий приём"><Input type="date" value={nextVisit} onChange={(e) => setNextVisit(e.target.value)} /></Field>
+        <Field label="Следующий приём"><DateInput value={nextVisit} onChange={setNextVisit} /></Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
       </div>
     </Modal>

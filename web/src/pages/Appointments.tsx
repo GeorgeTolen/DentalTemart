@@ -11,6 +11,7 @@ import type { Appointment, AppointmentStatus, Doctor } from "../lib/types";
 import { STATUS_LABELS } from "../lib/types";
 import { isoToLocalInput, localInputToISO, formatDate } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
+import { DateInput, DateTimeInput } from "../components/DateInputs";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import { useAuth } from "../auth/AuthContext";
 
@@ -71,21 +72,11 @@ export default function AppointmentsPage() {
       <div className="flex flex-wrap gap-3 rounded-2xl bg-white p-4 shadow-sm">
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-500">С</span>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand"
-          />
+          <DateInput className="w-40" value={dateFrom} onChange={setDateFrom} />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-500">По</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand"
-          />
+          <DateInput className="w-40" value={dateTo} onChange={setDateTo} />
         </div>
         <select
           value={doctorFilter ?? ""}
@@ -352,8 +343,8 @@ function AppointmentEditModal({
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Начало"><Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
-          <Field label="Окончание"><Input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
+          <Field label="Начало"><DateTimeInput value={start} onChange={setStart} /></Field>
+          <Field label="Окончание"><DateTimeInput value={end} onChange={setEnd} /></Field>
         </div>
         <Field label="Статус">
           <Select value={status} onChange={(e) => setStatus(e.target.value as AppointmentStatus)}>
@@ -364,7 +355,7 @@ function AppointmentEditModal({
         </Field>
         <Field label="Диагноз"><Input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} /></Field>
         <Field label="Описание приёма"><Textarea value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
-        <Field label="Следующий приём"><Input type="date" value={nextVisit} onChange={(e) => setNextVisit(e.target.value)} /></Field>
+        <Field label="Следующий приём"><DateInput value={nextVisit} onChange={setNextVisit} /></Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
       </div>
     </Modal>

@@ -3,6 +3,7 @@ import { useDoctors, useSaveAppointment } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import { localInputToISO, maxAppointmentInput, validateAppointmentDate } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select } from "./ui";
+import { DateInput } from "./DateInputs";
 import type { Appointment } from "../lib/types";
 
 // Quick "schedule the next visit" modal, reused from the Dashboard, the
@@ -83,11 +84,10 @@ export default function ScheduleFollowUpModal({
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Дата">
-            <Input
-              type="date"
+            <DateInput
               value={date}
               max={maxAppointmentInput().slice(0, 10)}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
             />
           </Field>
           <Field label="Время">
