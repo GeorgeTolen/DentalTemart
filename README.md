@@ -1,74 +1,93 @@
-# Temart — CRM для стоматологической клиники
+# Temart — многоклиниковая CRM для стоматологий
 
-Минималистичная CRM: календарь записей, карточки приёмов, пациенты, врачи и их
-график. Backend — REST API на Go + PostgreSQL, фронтенд — React (Vite). Архитектура
-рассчитана на последующую упаковку веб-фронта в Android-приложение через Capacitor.
+CRM для сети стоматологических клиник: календарь записей, карточки приёмов,
+пациенты, врачи и их график, личные кабинеты. Каждая клиника — изолированное
+пространство. Backend — REST API на Go + PostgreSQL, фронтенд — React (Vite),
+который в продакшене раздаётся тем же сервером.
+
+## Роли и вход
+
+- **Администратор платформы (superadmin)** — владелец всей системы. Отдельный
+  вход (`Вход для администратора платформы`). Управляет клиниками, создаёт их
+  владельцев, видит сводную статистику по всем клиникам. Не привязан к клинике.
+- **Владелец клиники (owner)** — полный доступ в рамках своей клиники: сотрудники,
+  врачи, пациенты, записи, отчёты, архив.
+- **Менеджер (admin)** — то же, что владелец, кроме управления учётными записями.
+- **Врач (doctor)** — видит только своих пациентов и приёмы, свой личный кабинет.
+
+**Вход в клинику:** сначала выбираете свою клинику → затем email + пароль
+(учётная запись выдаётся владельцем/платформой). Данные клиник полностью
+изолированы, email уникален в пределах клиники.
 
 ## Стек
 
 - **Backend:** Go 1.26, chi, pgx, **sqlc**, golang-migrate, JWT (httpOnly cookie), bcrypt, slog.
 - **Frontend:** React + TypeScript + Vite, Tailwind CSS, FullCalendar, TanStack Query, axios.
-- **Инфра:** Docker Compose (PostgreSQL 16 + backend), миграции применяются при старте.
+- **Инфра:** Docker Compose (PostgreSQL 16 + backend, раздающий SPA), миграции при старте.
 
-## Быстрый старт
-
-### 1. Backend + база данных
+## Быстрый старт (Docker)
 
 ```bash
-cp .env.example .env        # при желании поменяйте OWNER_EMAIL / OWNER_PASSWORD / JWT_SECRET
+cp .env.example .env    # поменяйте SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD / JWT_SECRET
 docker-compose up --build
 ```
 
-При первом старте применяются миграции и создаётся владелец из переменных
-`OWNER_EMAIL` / `OWNER_PASSWORD` (по умолчанию `owner@temart.local` / `changeme123`).
-API доступен на `http://localhost:8080`, проверка живости — `GET /healthz`.
+При первом старте применяются миграции и создаётся администратор платформы из
+`SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD` (по умолчанию `admin@temart.local` /
+`changeme123`). Приложение целиком (SPA + API) доступно на `http://localhost:8080`.
 
-### 2. Frontend
+Дальше:
+1. Откройте `http://localhost:8080`, нажмите **«Вход для администратора платформы»**,
+   войдите кредами superadmin.
+2. Создайте клинику и её владельца.
+3. Выйдите, выберите клинику и войдите владельцем — управляйте врачами, пациентами и записями.
 
-```bash
-cd web
-npm install
-npm run dev        # http://localhost:5173 (запросы /api проксируются на :8080)
-```
+## Локальная разработка
 
-Откройте `http://localhost:5173`, войдите кредами владельца.
-
-## Локальная разработка backend (`make run`)
-
-Запускайте локально только сам Go-сервер, а БД держите в Docker. Поднимите
-**только** Postgres (он публикуется на хост-порт **5433**, чтобы не конфликтовать
-с нативным PostgreSQL на 5432), затем запустите сервер:
+БД в Docker, backend и frontend — локально:
 
 ```bash
-docker-compose up -d postgres   # БД на localhost:5433
-make run                        # go run ./cmd/server, читает DATABASE_URL из .env
+docker-compose up -d postgres         # БД на localhost:5433
+make run                              # go run ./cmd/server (DATABASE_URL из .env)
+
+cd web && npm install && npm run dev  # http://localhost:5173 (/api → :8080)
 ```
 
-> Не запускайте одновременно `make run` и контейнер `backend` — оба слушают
-> порт 8080. Для локальной разработки контейнер `backend` должен быть остановлен
-> (`docker-compose stop backend`).
+> Для локальной разработки контейнер `backend` держите остановленным
+> (`docker-compose stop backend`) — иначе конфликт по порту 8080.
 
 ## Структура
 
 ```
 cmd/server        — точка входа
 internal/config   — конфиг из env
-internal/db       — pgx pool, миграции (embed), bootstrap владельца, sqlc-код
-internal/auth     — JWT + bcrypt
-internal/middleware — авторизация (cookie), CORS, логирование
+internal/db       — pgx pool, миграции (embed), bootstrap superadmin, sqlc-код
+internal/auth     — JWT (+ clinic_id в claims) + bcrypt
+internal/middleware — авторизация (cookie), контекст клиники, CORS, логирование
 internal/service  — бизнес-логика (проверка пересечений записей)
-internal/handlers — HTTP-обработчики и роутер
+internal/handlers — HTTP-обработчики (клиника + платформа), роутер, раздача SPA
 web/              — фронтенд (React + Vite)
 ```
 
 ## API (основное)
 
 ```
-POST /api/auth/login | logout | refresh        GET /api/me
-GET/POST/PUT/DELETE   /api/appointments[/:id]   (?from&to | ?date, ?doctor_id)
-GET/POST/PUT          /api/patients[/:id]        GET /api/patients/:id/appointments
-GET/POST/PUT/DELETE   /api/doctors[/:id]         GET/PUT /api/doctors/:id/schedule
-GET /api/dashboard
+GET  /api/clinics                              список активных клиник (для выбора при входе)
+POST /api/auth/login                           вход в клинику {clinic_id, email, password}
+POST /api/auth/platform/login                  вход администратора платформы {email, password}
+POST /api/auth/logout | refresh    GET /api/me
+
+# Платформа (только superadmin)
+GET/POST/PUT/DELETE /api/platform/clinics[/:id]
+POST /api/platform/clinics/:id/owner           добавить владельца клинике
+GET  /api/platform/stats
+
+# Клиника (scoped по clinic_id из токена)
+GET/POST/PUT/DELETE /api/appointments[/:id]    (?from&to | ?date, ?doctor_id)
+GET/POST/PUT/DELETE /api/patients[/:id]         GET /api/patients/:id/appointments|records
+GET/POST/PUT/DELETE /api/doctors[/:id]          GET/PUT /api/doctors/:id/schedule
+GET/POST/PUT/DELETE /api/users[/:id]            (только владелец клиники)
+GET /api/dashboard   GET /api/admin/stats
 ```
 
 Ответы — JSON; ошибки в формате `{"error": "сообщение"}`.
@@ -85,7 +104,8 @@ make migrate-create name=add_something   # новая пара миграций
 
 ## Замечания
 
-- Все времена хранятся в UTC (`TIMESTAMPTZ`), фронтенд показывает в локальном поясе.
+- Данные каждой клиники изолированы: все запросы фильтруются по `clinic_id` из токена.
+- Все времена хранятся в UTC (`TIMESTAMPTZ`), фронтенд показывает в локальном поясе; даты — в формате ДД.ММ.ГГГГ.
 - Один врач не может иметь две пересекающиеся записи — проверка на сервере (HTTP 409).
-- Реализован MVP (§9 ТЗ). График врачей хранится, слоты по графику / напоминания / роли — следующий этап.
+- Удаление пациента/врача каскадно удаляет связанные приёмы (в UI есть предупреждение).
 - В проде задайте сильный `JWT_SECRET` и `COOKIE_SECURE=true` (HTTPS).

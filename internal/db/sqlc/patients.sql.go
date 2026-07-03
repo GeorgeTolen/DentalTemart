@@ -13,12 +13,13 @@ import (
 )
 
 const createPatient = `-- name: CreatePatient :one
-INSERT INTO patients (full_name, phone, birth_date, notes)
-VALUES ($1, $2, $3, $4)
-RETURNING id, full_name, phone, birth_date, notes, created_at
+INSERT INTO patients (clinic_id, full_name, phone, birth_date, notes)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id
 `
 
 type CreatePatientParams struct {
+	ClinicID  int64       `json:"clinic_id"`
 	FullName  string      `json:"full_name"`
 	Phone     pgtype.Text `json:"phone"`
 	BirthDate *time.Time  `json:"birth_date"`
@@ -27,6 +28,7 @@ type CreatePatientParams struct {
 
 func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (Patient, error) {
 	row := q.db.QueryRow(ctx, createPatient,
+		arg.ClinicID,
 		arg.FullName,
 		arg.Phone,
 		arg.BirthDate,
@@ -40,16 +42,36 @@ func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (P
 		&i.BirthDate,
 		&i.Notes,
 		&i.CreatedAt,
+		&i.ClinicID,
 	)
 	return i, err
 }
 
-const getPatient = `-- name: GetPatient :one
-SELECT id, full_name, phone, birth_date, notes, created_at FROM patients WHERE id = $1
+const deletePatient = `-- name: DeletePatient :exec
+DELETE FROM patients WHERE id = $1 AND clinic_id = $2
 `
 
-func (q *Queries) GetPatient(ctx context.Context, id int64) (Patient, error) {
-	row := q.db.QueryRow(ctx, getPatient, id)
+type DeletePatientParams struct {
+	ID       int64 `json:"id"`
+	ClinicID int64 `json:"clinic_id"`
+}
+
+func (q *Queries) DeletePatient(ctx context.Context, arg DeletePatientParams) error {
+	_, err := q.db.Exec(ctx, deletePatient, arg.ID, arg.ClinicID)
+	return err
+}
+
+const getPatient = `-- name: GetPatient :one
+SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id FROM patients WHERE id = $1 AND clinic_id = $2
+`
+
+type GetPatientParams struct {
+	ID       int64 `json:"id"`
+	ClinicID int64 `json:"clinic_id"`
+}
+
+func (q *Queries) GetPatient(ctx context.Context, arg GetPatientParams) (Patient, error) {
+	row := q.db.QueryRow(ctx, getPatient, arg.ID, arg.ClinicID)
 	var i Patient
 	err := row.Scan(
 		&i.ID,
@@ -58,22 +80,32 @@ func (q *Queries) GetPatient(ctx context.Context, id int64) (Patient, error) {
 		&i.BirthDate,
 		&i.Notes,
 		&i.CreatedAt,
+		&i.ClinicID,
 	)
 	return i, err
 }
 
 const listPatients = `-- name: ListPatients :many
-SELECT id, full_name, phone, birth_date, notes, created_at FROM patients
-WHERE
-    $1::text IS NULL
-    OR (' ' || full_name) ILIKE '% ' || $1::text || '%'
-    OR phone ILIKE $1::text || '%'
+SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id FROM patients
+WHERE clinic_id = $1
+  AND (
+    $2::text IS NULL
+    OR (' ' || full_name) ILIKE '% ' || $2::text || '%'
+    OR phone ILIKE $2::text || '%'
+  )
 ORDER BY full_name
 LIMIT 200
 `
 
-func (q *Queries) ListPatients(ctx context.Context, search pgtype.Text) ([]Patient, error) {
-	rows, err := q.db.Query(ctx, listPatients, search)
+type ListPatientsParams struct {
+	ClinicID int64       `json:"clinic_id"`
+	Search   pgtype.Text `json:"search"`
+}
+
+// Matches when the search term is a prefix of any word in the name or a prefix
+// of the phone number. Scoped to a single clinic.
+func (q *Queries) ListPatients(ctx context.Context, arg ListPatientsParams) ([]Patient, error) {
+	rows, err := q.db.Query(ctx, listPatients, arg.ClinicID, arg.Search)
 	if err != nil {
 		return nil, err
 	}
@@ -88,6 +120,7 @@ func (q *Queries) ListPatients(ctx context.Context, search pgtype.Text) ([]Patie
 			&i.BirthDate,
 			&i.Notes,
 			&i.CreatedAt,
+			&i.ClinicID,
 		); err != nil {
 			return nil, err
 		}
@@ -99,23 +132,15 @@ func (q *Queries) ListPatients(ctx context.Context, search pgtype.Text) ([]Patie
 	return items, nil
 }
 
-const deletePatient = `-- name: DeletePatient :exec
-DELETE FROM patients WHERE id = $1
-`
-
-func (q *Queries) DeletePatient(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deletePatient, id)
-	return err
-}
-
 const listPatientsForDoctor = `-- name: ListPatientsForDoctor :many
-SELECT DISTINCT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at FROM patients p
+SELECT DISTINCT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id FROM patients p
 JOIN appointments a ON a.patient_id = p.id
 WHERE a.doctor_id = $1
+  AND p.clinic_id = $2
   AND (
-    $2::text IS NULL
-    OR (' ' || p.full_name) ILIKE '% ' || $2::text || '%'
-    OR p.phone ILIKE $2::text || '%'
+    $3::text IS NULL
+    OR (' ' || p.full_name) ILIKE '% ' || $3::text || '%'
+    OR p.phone ILIKE $3::text || '%'
   )
 ORDER BY p.full_name
 LIMIT 200
@@ -123,11 +148,14 @@ LIMIT 200
 
 type ListPatientsForDoctorParams struct {
 	DoctorID int64       `json:"doctor_id"`
+	ClinicID int64       `json:"clinic_id"`
 	Search   pgtype.Text `json:"search"`
 }
 
+// Same prefix-word search, restricted to patients that have at least one
+// appointment with the given doctor (within the clinic).
 func (q *Queries) ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]Patient, error) {
-	rows, err := q.db.Query(ctx, listPatientsForDoctor, arg.DoctorID, arg.Search)
+	rows, err := q.db.Query(ctx, listPatientsForDoctor, arg.DoctorID, arg.ClinicID, arg.Search)
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +170,7 @@ func (q *Queries) ListPatientsForDoctor(ctx context.Context, arg ListPatientsFor
 			&i.BirthDate,
 			&i.Notes,
 			&i.CreatedAt,
+			&i.ClinicID,
 		); err != nil {
 			return nil, err
 		}
@@ -159,8 +188,13 @@ SELECT EXISTS(
 ) AS belongs
 `
 
-func (q *Queries) PatientBelongsToDoctor(ctx context.Context, patientID int64, doctorID int64) (bool, error) {
-	row := q.db.QueryRow(ctx, patientBelongsToDoctor, patientID, doctorID)
+type PatientBelongsToDoctorParams struct {
+	PatientID int64 `json:"patient_id"`
+	DoctorID  int64 `json:"doctor_id"`
+}
+
+func (q *Queries) PatientBelongsToDoctor(ctx context.Context, arg PatientBelongsToDoctorParams) (bool, error) {
+	row := q.db.QueryRow(ctx, patientBelongsToDoctor, arg.PatientID, arg.DoctorID)
 	var belongs bool
 	err := row.Scan(&belongs)
 	return belongs, err
@@ -169,8 +203,8 @@ func (q *Queries) PatientBelongsToDoctor(ctx context.Context, patientID int64, d
 const updatePatient = `-- name: UpdatePatient :one
 UPDATE patients
 SET full_name = $2, phone = $3, birth_date = $4, notes = $5
-WHERE id = $1
-RETURNING id, full_name, phone, birth_date, notes, created_at
+WHERE id = $1 AND clinic_id = $6
+RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id
 `
 
 type UpdatePatientParams struct {
@@ -179,6 +213,7 @@ type UpdatePatientParams struct {
 	Phone     pgtype.Text `json:"phone"`
 	BirthDate *time.Time  `json:"birth_date"`
 	Notes     pgtype.Text `json:"notes"`
+	ClinicID  int64       `json:"clinic_id"`
 }
 
 func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (Patient, error) {
@@ -188,6 +223,7 @@ func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (P
 		arg.Phone,
 		arg.BirthDate,
 		arg.Notes,
+		arg.ClinicID,
 	)
 	var i Patient
 	err := row.Scan(
@@ -197,6 +233,7 @@ func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (P
 		&i.BirthDate,
 		&i.Notes,
 		&i.CreatedAt,
+		&i.ClinicID,
 	)
 	return i, err
 }

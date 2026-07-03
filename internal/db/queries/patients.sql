@@ -1,38 +1,40 @@
 -- name: ListPatients :many
--- Matches when the search term is a prefix of any word in the name (so "к"
--- finds "Криштиано Роналдо" via the first word, "р" finds it via the second
--- word) or a prefix of the phone number — not an arbitrary substring anywhere.
+-- Matches when the search term is a prefix of any word in the name or a prefix
+-- of the phone number. Scoped to a single clinic.
 SELECT * FROM patients
-WHERE
+WHERE clinic_id = sqlc.arg('clinic_id')
+  AND (
     sqlc.narg('search')::text IS NULL
     OR (' ' || full_name) ILIKE '% ' || sqlc.narg('search')::text || '%'
     OR phone ILIKE sqlc.narg('search')::text || '%'
+  )
 ORDER BY full_name
 LIMIT 200;
 
 -- name: GetPatient :one
-SELECT * FROM patients WHERE id = $1;
+SELECT * FROM patients WHERE id = $1 AND clinic_id = $2;
 
 -- name: CreatePatient :one
-INSERT INTO patients (full_name, phone, birth_date, notes)
-VALUES ($1, $2, $3, $4)
+INSERT INTO patients (clinic_id, full_name, phone, birth_date, notes)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: UpdatePatient :one
 UPDATE patients
 SET full_name = $2, phone = $3, birth_date = $4, notes = $5
-WHERE id = $1
+WHERE id = $1 AND clinic_id = $6
 RETURNING *;
 
 -- name: DeletePatient :exec
-DELETE FROM patients WHERE id = $1;
+DELETE FROM patients WHERE id = $1 AND clinic_id = $2;
 
 -- name: ListPatientsForDoctor :many
--- Same prefix-word search as ListPatients, but restricted to patients that
--- have at least one appointment with the given doctor.
+-- Same prefix-word search, restricted to patients that have at least one
+-- appointment with the given doctor (within the clinic).
 SELECT DISTINCT p.* FROM patients p
 JOIN appointments a ON a.patient_id = p.id
 WHERE a.doctor_id = sqlc.arg('doctor_id')
+  AND p.clinic_id = sqlc.arg('clinic_id')
   AND (
     sqlc.narg('search')::text IS NULL
     OR (' ' || p.full_name) ILIKE '% ' || sqlc.narg('search')::text || '%'

@@ -12,12 +12,13 @@ import (
 )
 
 const createDoctor = `-- name: CreateDoctor :one
-INSERT INTO doctors (full_name, specialization, phone, color, is_active, user_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id
+INSERT INTO doctors (clinic_id, full_name, specialization, phone, color, is_active, user_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id
 `
 
 type CreateDoctorParams struct {
+	ClinicID       int64       `json:"clinic_id"`
 	FullName       string      `json:"full_name"`
 	Specialization pgtype.Text `json:"specialization"`
 	Phone          pgtype.Text `json:"phone"`
@@ -28,6 +29,7 @@ type CreateDoctorParams struct {
 
 func (q *Queries) CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doctor, error) {
 	row := q.db.QueryRow(ctx, createDoctor,
+		arg.ClinicID,
 		arg.FullName,
 		arg.Specialization,
 		arg.Phone,
@@ -45,6 +47,7 @@ func (q *Queries) CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doc
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UserID,
+		&i.ClinicID,
 	)
 	return i, err
 }
@@ -81,11 +84,16 @@ func (q *Queries) CreateDoctorSchedule(ctx context.Context, arg CreateDoctorSche
 }
 
 const deleteDoctor = `-- name: DeleteDoctor :exec
-DELETE FROM doctors WHERE id = $1
+DELETE FROM doctors WHERE id = $1 AND clinic_id = $2
 `
 
-func (q *Queries) DeleteDoctor(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteDoctor, id)
+type DeleteDoctorParams struct {
+	ID       int64 `json:"id"`
+	ClinicID int64 `json:"clinic_id"`
+}
+
+func (q *Queries) DeleteDoctor(ctx context.Context, arg DeleteDoctorParams) error {
+	_, err := q.db.Exec(ctx, deleteDoctor, arg.ID, arg.ClinicID)
 	return err
 }
 
@@ -98,12 +106,37 @@ func (q *Queries) DeleteDoctorSchedules(ctx context.Context, doctorID int64) err
 	return err
 }
 
-const getDoctor = `-- name: GetDoctor :one
-SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id FROM doctors WHERE id = $1
+const doctorUserInClinic = `-- name: DoctorUserInClinic :one
+SELECT EXISTS(
+    SELECT 1 FROM users WHERE id = $1 AND clinic_id = $2 AND role = 'doctor'
+) AS ok
 `
 
-func (q *Queries) GetDoctor(ctx context.Context, id int64) (Doctor, error) {
-	row := q.db.QueryRow(ctx, getDoctor, id)
+type DoctorUserInClinicParams struct {
+	ID       int64       `json:"id"`
+	ClinicID pgtype.Int8 `json:"clinic_id"`
+}
+
+// Whether the given user is a doctor-role account belonging to the clinic. Used
+// to validate the user_id a doctor profile is linked to.
+func (q *Queries) DoctorUserInClinic(ctx context.Context, arg DoctorUserInClinicParams) (bool, error) {
+	row := q.db.QueryRow(ctx, doctorUserInClinic, arg.ID, arg.ClinicID)
+	var ok bool
+	err := row.Scan(&ok)
+	return ok, err
+}
+
+const getDoctor = `-- name: GetDoctor :one
+SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id FROM doctors WHERE id = $1 AND clinic_id = $2
+`
+
+type GetDoctorParams struct {
+	ID       int64 `json:"id"`
+	ClinicID int64 `json:"clinic_id"`
+}
+
+func (q *Queries) GetDoctor(ctx context.Context, arg GetDoctorParams) (Doctor, error) {
+	row := q.db.QueryRow(ctx, getDoctor, arg.ID, arg.ClinicID)
 	var i Doctor
 	err := row.Scan(
 		&i.ID,
@@ -114,16 +147,24 @@ func (q *Queries) GetDoctor(ctx context.Context, id int64) (Doctor, error) {
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UserID,
+		&i.ClinicID,
 	)
 	return i, err
 }
 
 const getDoctorByUserID = `-- name: GetDoctorByUserID :one
-SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id FROM doctors WHERE user_id = $1
+SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id FROM doctors WHERE user_id = $1 AND clinic_id = $2
 `
 
-func (q *Queries) GetDoctorByUserID(ctx context.Context, userID pgtype.Int8) (Doctor, error) {
-	row := q.db.QueryRow(ctx, getDoctorByUserID, userID)
+type GetDoctorByUserIDParams struct {
+	UserID   pgtype.Int8 `json:"user_id"`
+	ClinicID int64       `json:"clinic_id"`
+}
+
+// Clinic-scoped so a user can only ever resolve to a doctor profile in their
+// own clinic (prevents cross-clinic linkage from leaking a foreign profile).
+func (q *Queries) GetDoctorByUserID(ctx context.Context, arg GetDoctorByUserIDParams) (Doctor, error) {
+	row := q.db.QueryRow(ctx, getDoctorByUserID, arg.UserID, arg.ClinicID)
 	var i Doctor
 	err := row.Scan(
 		&i.ID,
@@ -134,85 +175,25 @@ func (q *Queries) GetDoctorByUserID(ctx context.Context, userID pgtype.Int8) (Do
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UserID,
+		&i.ClinicID,
 	)
 	return i, err
 }
 
-const listActiveDoctors = `-- name: ListActiveDoctors :many
-SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id FROM doctors WHERE is_active = true ORDER BY full_name
-`
-
-func (q *Queries) ListActiveDoctors(ctx context.Context) ([]Doctor, error) {
-	rows, err := q.db.Query(ctx, listActiveDoctors)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Doctor{}
-	for rows.Next() {
-		var i Doctor
-		if err := rows.Scan(
-			&i.ID,
-			&i.FullName,
-			&i.Specialization,
-			&i.Phone,
-			&i.Color,
-			&i.IsActive,
-			&i.CreatedAt,
-			&i.UserID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUnlinkedDoctorUsers = `-- name: ListUnlinkedDoctorUsers :many
-SELECT u.id, u.full_name, u.email
-FROM users u
-WHERE u.role = 'doctor'
-  AND NOT EXISTS (
-    SELECT 1 FROM doctors d WHERE d.user_id = u.id AND d.id != $1::bigint
-  )
-ORDER BY u.full_name
-`
-
-type ListUnlinkedDoctorUsersRow struct {
-	ID       int64  `json:"id"`
-	FullName string `json:"full_name"`
-	Email    string `json:"email"`
-}
-
-func (q *Queries) ListUnlinkedDoctorUsers(ctx context.Context, excludeDoctorID int64) ([]ListUnlinkedDoctorUsersRow, error) {
-	rows, err := q.db.Query(ctx, listUnlinkedDoctorUsers, excludeDoctorID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListUnlinkedDoctorUsersRow{}
-	for rows.Next() {
-		var i ListUnlinkedDoctorUsersRow
-		if err := rows.Scan(&i.ID, &i.FullName, &i.Email); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listDoctorSchedules = `-- name: ListDoctorSchedules :many
-SELECT id, doctor_id, weekday, start_time, end_time FROM doctor_schedules WHERE doctor_id = $1 ORDER BY weekday, start_time
+SELECT s.id, s.doctor_id, s.weekday, s.start_time, s.end_time FROM doctor_schedules s
+JOIN doctors d ON d.id = s.doctor_id
+WHERE s.doctor_id = $1 AND d.clinic_id = $2
+ORDER BY s.weekday, s.start_time
 `
 
-func (q *Queries) ListDoctorSchedules(ctx context.Context, doctorID int64) ([]DoctorSchedule, error) {
-	rows, err := q.db.Query(ctx, listDoctorSchedules, doctorID)
+type ListDoctorSchedulesParams struct {
+	DoctorID int64 `json:"doctor_id"`
+	ClinicID int64 `json:"clinic_id"`
+}
+
+func (q *Queries) ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedulesParams) ([]DoctorSchedule, error) {
+	rows, err := q.db.Query(ctx, listDoctorSchedules, arg.DoctorID, arg.ClinicID)
 	if err != nil {
 		return nil, err
 	}
@@ -238,11 +219,11 @@ func (q *Queries) ListDoctorSchedules(ctx context.Context, doctorID int64) ([]Do
 }
 
 const listDoctors = `-- name: ListDoctors :many
-SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id FROM doctors ORDER BY full_name
+SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id FROM doctors WHERE clinic_id = $1 ORDER BY full_name
 `
 
-func (q *Queries) ListDoctors(ctx context.Context) ([]Doctor, error) {
-	rows, err := q.db.Query(ctx, listDoctors)
+func (q *Queries) ListDoctors(ctx context.Context, clinicID int64) ([]Doctor, error) {
+	rows, err := q.db.Query(ctx, listDoctors, clinicID)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +240,52 @@ func (q *Queries) ListDoctors(ctx context.Context) ([]Doctor, error) {
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UserID,
+			&i.ClinicID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnlinkedDoctorUsers = `-- name: ListUnlinkedDoctorUsers :many
+SELECT u.id, u.full_name, u.email
+FROM users u
+WHERE u.clinic_id = $1
+  AND u.role = 'doctor'
+  AND NOT EXISTS (
+    SELECT 1 FROM doctors d WHERE d.user_id = u.id AND d.id != $2::bigint
+  )
+ORDER BY u.full_name
+`
+
+type ListUnlinkedDoctorUsersParams struct {
+	ClinicID        pgtype.Int8 `json:"clinic_id"`
+	ExcludeDoctorID int64       `json:"exclude_doctor_id"`
+}
+
+type ListUnlinkedDoctorUsersRow struct {
+	ID       int64  `json:"id"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+}
+
+// Clinic users with the "doctor" role not yet linked to a doctor profile
+// (or linked to the given doctor, so editing keeps showing its own link).
+func (q *Queries) ListUnlinkedDoctorUsers(ctx context.Context, arg ListUnlinkedDoctorUsersParams) ([]ListUnlinkedDoctorUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUnlinkedDoctorUsers, arg.ClinicID, arg.ExcludeDoctorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnlinkedDoctorUsersRow{}
+	for rows.Next() {
+		var i ListUnlinkedDoctorUsersRow
+		if err := rows.Scan(&i.ID, &i.FullName, &i.Email); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -273,8 +299,8 @@ func (q *Queries) ListDoctors(ctx context.Context) ([]Doctor, error) {
 const updateDoctor = `-- name: UpdateDoctor :one
 UPDATE doctors
 SET full_name = $2, specialization = $3, phone = $4, color = $5, is_active = $6, user_id = $7
-WHERE id = $1
-RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id
+WHERE id = $1 AND clinic_id = $8
+RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id
 `
 
 type UpdateDoctorParams struct {
@@ -285,6 +311,7 @@ type UpdateDoctorParams struct {
 	Color          string      `json:"color"`
 	IsActive       bool        `json:"is_active"`
 	UserID         pgtype.Int8 `json:"user_id"`
+	ClinicID       int64       `json:"clinic_id"`
 }
 
 func (q *Queries) UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error) {
@@ -296,6 +323,7 @@ func (q *Queries) UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doc
 		arg.Color,
 		arg.IsActive,
 		arg.UserID,
+		arg.ClinicID,
 	)
 	var i Doctor
 	err := row.Scan(
@@ -307,6 +335,7 @@ func (q *Queries) UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doc
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UserID,
+		&i.ClinicID,
 	)
 	return i, err
 }

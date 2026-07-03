@@ -1,9 +1,9 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { ROLE_LABELS } from "../lib/types";
 
 const baseLinks = [
   { to: "/", label: "Календарь", end: true },
-  { to: "/dashboard", label: "Дашборд" },
   { to: "/appointments", label: "Записи" },
   { to: "/patients", label: "Пациенты" },
   { to: "/doctors", label: "Врачи" },
@@ -12,16 +12,24 @@ const baseLinks = [
 export default function Layout() {
   const { user, logout } = useAuth();
 
-  const isAdmin = user?.role === "owner" || user?.role === "admin";
-  const adminLabel = user?.role === "owner" ? "Администратор" : "Менеджер";
-  const links = isAdmin
-    ? [...baseLinks, { to: "/admin", label: adminLabel, end: undefined }]
+  const isManager = user?.role === "owner" || user?.role === "admin";
+  // The owner-panel tab is called "Управление" for the owner and "Менеджер"
+  // panel for the manager; doctors get their personal cabinet instead.
+  const links = isManager
+    ? [...baseLinks, { to: "/admin", label: "Управление", end: undefined }]
     : [...baseLinks, { to: "/my-cabinet", label: "Мой кабинет", end: undefined }];
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <aside className="flex shrink-0 flex-col gap-1 border-b border-slate-200 bg-white p-4 md:w-64 md:border-b-0 md:border-r">
-        <div className="mb-6 px-2 text-2xl font-bold text-brand">Temart</div>
+        <div className="mb-6 px-2">
+          <div className="text-2xl font-bold text-brand">Temart</div>
+          {user?.clinic_name && (
+            <div className="mt-0.5 truncate text-sm text-slate-400">
+              {user.clinic_name}
+            </div>
+          )}
+        </div>
         <nav className="flex flex-1 flex-row gap-1 md:flex-col">
           {links.map((l) => (
             <NavLink
@@ -44,7 +52,9 @@ export default function Layout() {
           <div className="px-3 text-sm font-medium text-ink">
             {user?.full_name}
           </div>
-          <div className="px-3 text-xs text-slate-400">{user?.email}</div>
+          <div className="px-3 text-xs text-slate-400">
+            {user ? ROLE_LABELS[user.role] : ""}
+          </div>
           <button
             onClick={() => logout()}
             className="mt-2 px-3 text-sm text-slate-500 hover:text-brand"

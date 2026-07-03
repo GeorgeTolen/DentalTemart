@@ -52,6 +52,11 @@ func allowedExt(recordType, ext string) bool {
 
 // ListPatientRecords returns a patient's records, optionally filtered by type.
 func (h *Handlers) ListPatientRecords(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	patientID, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)
@@ -67,6 +72,7 @@ func (h *Handlers) ListPatientRecords(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.q.ListPatientRecords(r.Context(), sqlc.ListPatientRecordsParams{
 		PatientID: patientID,
+		ClinicID:  clinicID,
 		Type:      typeArg,
 	})
 	if err != nil {
@@ -83,6 +89,11 @@ func (h *Handlers) ListPatientRecords(w http.ResponseWriter, r *http.Request) {
 // CreatePatientRecord accepts a multipart form with fields: type (required),
 // title, note, and an optional file.
 func (h *Handlers) CreatePatientRecord(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	patientID, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)
@@ -128,6 +139,7 @@ func (h *Handlers) CreatePatientRecord(w http.ResponseWriter, r *http.Request) {
 
 	userID, _ := middleware.UserID(r.Context())
 	rec, err := h.q.CreatePatientRecord(r.Context(), sqlc.CreatePatientRecordParams{
+		ClinicID:  clinicID,
 		PatientID: patientID,
 		Type:      recordType,
 		Title:     pgtype.Text{String: title, Valid: true},
@@ -142,7 +154,7 @@ func (h *Handlers) CreatePatientRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Re-fetch through the list query so the response includes created_by_name.
-	rows, err := h.q.ListPatientRecords(r.Context(), sqlc.ListPatientRecordsParams{PatientID: patientID})
+	rows, err := h.q.ListPatientRecords(r.Context(), sqlc.ListPatientRecordsParams{PatientID: patientID, ClinicID: clinicID})
 	if err != nil {
 		httpx.Fail(w, err)
 		return
@@ -158,12 +170,17 @@ func (h *Handlers) CreatePatientRecord(w http.ResponseWriter, r *http.Request) {
 
 // DeletePatientRecord removes a record and its file (if any).
 func (h *Handlers) DeletePatientRecord(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	recordID, err := idParamFromString(chi.URLParam(r, "recordId"))
 	if err != nil {
 		httpx.Fail(w, err)
 		return
 	}
-	rec, err := h.q.GetPatientRecord(r.Context(), recordID)
+	rec, err := h.q.GetPatientRecord(r.Context(), sqlc.GetPatientRecordParams{ID: recordID, ClinicID: clinicID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
@@ -176,7 +193,7 @@ func (h *Handlers) DeletePatientRecord(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	if err := h.q.DeletePatientRecord(r.Context(), recordID); err != nil {
+	if err := h.q.DeletePatientRecord(r.Context(), sqlc.DeletePatientRecordParams{ID: recordID, ClinicID: clinicID}); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -188,12 +205,17 @@ func (h *Handlers) DeletePatientRecord(w http.ResponseWriter, r *http.Request) {
 
 // GetPatientRecordFile streams the stored file for a record.
 func (h *Handlers) GetPatientRecordFile(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	recordID, err := idParamFromString(chi.URLParam(r, "recordId"))
 	if err != nil {
 		httpx.Fail(w, err)
 		return
 	}
-	rec, err := h.q.GetPatientRecord(r.Context(), recordID)
+	rec, err := h.q.GetPatientRecord(r.Context(), sqlc.GetPatientRecordParams{ID: recordID, ClinicID: clinicID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))

@@ -11,6 +11,8 @@ import { errorMessage } from "../api/client";
 import {
   formatDate,
   formatDateTime,
+  age,
+  yearsLabel,
   localInputToISO,
   validateBirthDate,
   validateAppointmentDate,
@@ -72,11 +74,13 @@ export default function PatientDetail() {
               {patient.phone && <span>Номер телефона: {patient.phone}</span>}
               {patient.birth_date && (
                 <span>
-                  День рождения: {formatDate(patient.birth_date)}
-                  {" "}
-                  <span className="text-slate-400">
-                    ({new Date().getFullYear() - new Date(patient.birth_date).getFullYear()} лет)
-                  </span>
+                  Дата рождения: {formatDate(patient.birth_date)}
+                  {age(patient.birth_date) !== null && (
+                    <span className="text-slate-400">
+                      {" "}
+                      ({age(patient.birth_date)} {yearsLabel(age(patient.birth_date)!)})
+                    </span>
+                  )}
                 </span>
               )}
             </div>

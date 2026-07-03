@@ -12,46 +12,68 @@ import (
 
 type Querier interface {
 	CountAppointmentsInRange(ctx context.Context, arg CountAppointmentsInRangeParams) (int64, error)
-	CountArchivedAppointments(ctx context.Context) (int64, error)
+	CountArchivedAppointments(ctx context.Context, clinicID int64) (int64, error)
 	CountOverlappingAppointments(ctx context.Context, arg CountOverlappingAppointmentsParams) (int64, error)
-	CountUsers(ctx context.Context) (int64, error)
+	CountSuperadmins(ctx context.Context) (int64, error)
 	CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error)
+	CreateClinic(ctx context.Context, arg CreateClinicParams) (Clinic, error)
 	CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doctor, error)
 	CreateDoctorSchedule(ctx context.Context, arg CreateDoctorScheduleParams) (DoctorSchedule, error)
 	CreatePatient(ctx context.Context, arg CreatePatientParams) (Patient, error)
 	CreatePatientRecord(ctx context.Context, arg CreatePatientRecordParams) (PatientRecord, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
-	DeleteAppointment(ctx context.Context, id int64) error
-	DeleteArchivedAppointments(ctx context.Context) error
-	DeleteDoctor(ctx context.Context, id int64) error
+	DeleteAppointment(ctx context.Context, arg DeleteAppointmentParams) error
+	DeleteArchivedAppointments(ctx context.Context, clinicID int64) error
+	DeleteClinic(ctx context.Context, id int64) error
+	DeleteClinicUser(ctx context.Context, arg DeleteClinicUserParams) error
+	DeleteDoctor(ctx context.Context, arg DeleteDoctorParams) error
 	DeleteDoctorSchedules(ctx context.Context, doctorID int64) error
-	DeletePatient(ctx context.Context, id int64) error
-	DeletePatientRecord(ctx context.Context, id int64) error
-	DeleteUser(ctx context.Context, id int64) error
-	GetAppointment(ctx context.Context, id int64) (GetAppointmentRow, error)
-	GetDoctor(ctx context.Context, id int64) (Doctor, error)
-	GetDoctorByUserID(ctx context.Context, userID pgtype.Int8) (Doctor, error)
-	GetPatient(ctx context.Context, id int64) (Patient, error)
-	GetPatientRecord(ctx context.Context, id int64) (PatientRecord, error)
-	GetUserByEmail(ctx context.Context, email string) (User, error)
+	DeletePatient(ctx context.Context, arg DeletePatientParams) error
+	DeletePatientRecord(ctx context.Context, arg DeletePatientRecordParams) error
+	// Whether the given user is a doctor-role account belonging to the clinic. Used
+	// to validate the user_id a doctor profile is linked to.
+	DoctorUserInClinic(ctx context.Context, arg DoctorUserInClinicParams) (bool, error)
+	GetAppointment(ctx context.Context, arg GetAppointmentParams) (GetAppointmentRow, error)
+	GetClinic(ctx context.Context, id int64) (Clinic, error)
+	GetClinicBySlug(ctx context.Context, lower string) (Clinic, error)
+	// Login within a specific clinic: email is unique per clinic.
+	GetClinicUserByEmail(ctx context.Context, arg GetClinicUserByEmailParams) (User, error)
+	GetDoctor(ctx context.Context, arg GetDoctorParams) (Doctor, error)
+	// Clinic-scoped so a user can only ever resolve to a doctor profile in their
+	// own clinic (prevents cross-clinic linkage from leaking a foreign profile).
+	GetDoctorByUserID(ctx context.Context, arg GetDoctorByUserIDParams) (Doctor, error)
+	GetPatient(ctx context.Context, arg GetPatientParams) (Patient, error)
+	GetPatientRecord(ctx context.Context, arg GetPatientRecordParams) (PatientRecord, error)
+	// Platform admin login: superadmins are not attached to any clinic.
+	GetSuperadminByEmail(ctx context.Context, lower string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
-	ListActiveDoctors(ctx context.Context) ([]Doctor, error)
-	ListAppointmentsByPatient(ctx context.Context, patientID int64) ([]ListAppointmentsByPatientRow, error)
-	ListAppointmentsByStatus(ctx context.Context, status string) ([]ListAppointmentsByStatusRow, error)
+	// Public list used by the login clinic picker (only non-sensitive fields).
+	ListActiveClinics(ctx context.Context) ([]ListActiveClinicsRow, error)
+	ListAppointmentsByPatient(ctx context.Context, arg ListAppointmentsByPatientParams) ([]ListAppointmentsByPatientRow, error)
+	ListAppointmentsByStatus(ctx context.Context, arg ListAppointmentsByStatusParams) ([]ListAppointmentsByStatusRow, error)
 	ListAppointmentsInRange(ctx context.Context, arg ListAppointmentsInRangeParams) ([]ListAppointmentsInRangeRow, error)
-	ListDoctorSchedules(ctx context.Context, doctorID int64) ([]DoctorSchedule, error)
-	ListDoctors(ctx context.Context) ([]Doctor, error)
+	// All clinics with quick aggregate counts, for the platform admin panel.
+	ListClinics(ctx context.Context) ([]ListClinicsRow, error)
+	ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedulesParams) ([]DoctorSchedule, error)
+	ListDoctors(ctx context.Context, clinicID int64) ([]Doctor, error)
 	ListPatientRecords(ctx context.Context, arg ListPatientRecordsParams) ([]ListPatientRecordsRow, error)
-	ListPatients(ctx context.Context, search pgtype.Text) ([]Patient, error)
+	// Matches when the search term is a prefix of any word in the name or a prefix
+	// of the phone number. Scoped to a single clinic.
+	ListPatients(ctx context.Context, arg ListPatientsParams) ([]Patient, error)
+	// Same prefix-word search, restricted to patients that have at least one
+	// appointment with the given doctor (within the clinic).
 	ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]Patient, error)
-	ListUnlinkedDoctorUsers(ctx context.Context, excludeDoctorID int64) ([]ListUnlinkedDoctorUsersRow, error)
-	ListUsers(ctx context.Context) ([]ListUsersRow, error)
-	PatientBelongsToDoctor(ctx context.Context, patientID int64, doctorID int64) (bool, error)
+	// Clinic users with the "doctor" role not yet linked to a doctor profile
+	// (or linked to the given doctor, so editing keeps showing its own link).
+	ListUnlinkedDoctorUsers(ctx context.Context, arg ListUnlinkedDoctorUsersParams) ([]ListUnlinkedDoctorUsersRow, error)
+	ListUsersByClinic(ctx context.Context, clinicID pgtype.Int8) ([]ListUsersByClinicRow, error)
+	PatientBelongsToDoctor(ctx context.Context, arg PatientBelongsToDoctorParams) (bool, error)
 	UpdateAppointment(ctx context.Context, arg UpdateAppointmentParams) (Appointment, error)
+	UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Clinic, error)
 	UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error)
 	UpdatePatient(ctx context.Context, arg UpdatePatientParams) (Patient, error)
-	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
-	UpdateUserPassword(ctx context.Context, id int64, passwordHash string) error
+	UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error)
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 }
 
 var _ Querier = (*Queries)(nil)

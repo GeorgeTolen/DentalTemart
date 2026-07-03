@@ -14,15 +14,20 @@ type Config struct {
 	DatabaseURL string
 	Port        string
 	CORSOrigins []string
+	// WebDir, when set, is a directory of built frontend assets (web/dist) that
+	// the server serves with SPA fallback. Empty in development (Vite serves it).
+	WebDir string
 
 	JWTSecret    string
 	AccessTTL    time.Duration
 	RefreshTTL   time.Duration
 	CookieSecure bool
 
-	OwnerName     string
-	OwnerEmail    string
-	OwnerPassword string
+	// Platform superadmin (администратор платформы). Bootstrapped on first start
+	// when no superadmin exists. This is the account that manages every clinic.
+	SuperadminName     string
+	SuperadminEmail    string
+	SuperadminPassword string
 }
 
 // Load reads configuration from the environment, optionally seeding it from a
@@ -32,14 +37,15 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		DatabaseURL:   get("DATABASE_URL", "postgres://temart:temart@localhost:5432/temart?sslmode=disable"),
-		Port:          get("PORT", "8080"),
-		CORSOrigins:   splitAndTrim(get("CORS_ORIGIN", "http://localhost:5173")),
-		JWTSecret:     get("JWT_SECRET", ""),
-		CookieSecure:  get("COOKIE_SECURE", "false") == "true",
-		OwnerName:     get("OWNER_NAME", ""),
-		OwnerEmail:    get("OWNER_EMAIL", ""),
-		OwnerPassword: get("OWNER_PASSWORD", ""),
+		DatabaseURL:        get("DATABASE_URL", "postgres://temart:temart@localhost:5432/temart?sslmode=disable"),
+		Port:               get("PORT", "8080"),
+		CORSOrigins:        splitAndTrim(get("CORS_ORIGIN", "http://localhost:5173")),
+		WebDir:             get("WEB_DIR", ""),
+		JWTSecret:          get("JWT_SECRET", ""),
+		CookieSecure:       get("COOKIE_SECURE", "false") == "true",
+		SuperadminName:     get("SUPERADMIN_NAME", get("OWNER_NAME", "")),
+		SuperadminEmail:    get("SUPERADMIN_EMAIL", get("OWNER_EMAIL", "")),
+		SuperadminPassword: get("SUPERADMIN_PASSWORD", get("OWNER_PASSWORD", "")),
 	}
 
 	var err error

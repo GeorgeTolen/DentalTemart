@@ -24,6 +24,7 @@ type ctxKey int
 const (
 	userIDKey ctxKey = iota
 	roleKey
+	clinicIDKey
 )
 
 // Authenticator returns middleware that requires a valid access token cookie.
@@ -47,6 +48,7 @@ func Authenticator(tm *auth.Manager) func(http.Handler) http.Handler {
 			}
 			ctx := context.WithValue(r.Context(), userIDKey, userID)
 			ctx = context.WithValue(ctx, roleKey, claims.Role)
+			ctx = context.WithValue(ctx, clinicIDKey, claims.ClinicID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -62,6 +64,13 @@ func UserID(ctx context.Context) (int64, bool) {
 func Role(ctx context.Context) string {
 	role, _ := ctx.Value(roleKey).(string)
 	return role
+}
+
+// ClinicID returns the authenticated user's clinic id and whether they belong to
+// a clinic. The platform superadmin has no clinic, so ok is false for them.
+func ClinicID(ctx context.Context) (int64, bool) {
+	id, _ := ctx.Value(clinicIDKey).(int64)
+	return id, id > 0
 }
 
 // Logger logs each request with method, path, status and duration.

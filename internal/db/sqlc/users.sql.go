@@ -8,34 +8,38 @@ package sqlc
 import (
 	"context"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countUsers = `-- name: CountUsers :one
-SELECT count(*) FROM users
+const countSuperadmins = `-- name: CountSuperadmins :one
+SELECT count(*) FROM users WHERE role = 'superadmin'
 `
 
-func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countUsers)
+func (q *Queries) CountSuperadmins(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countSuperadmins)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (full_name, email, password_hash, role)
-VALUES ($1, $2, $3, $4)
-RETURNING id, full_name, email, password_hash, role, created_at
+INSERT INTO users (clinic_id, full_name, email, password_hash, role)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, full_name, email, password_hash, role, created_at, clinic_id
 `
 
 type CreateUserParams struct {
-	FullName     string `json:"full_name"`
-	Email        string `json:"email"`
-	PasswordHash string `json:"password_hash"`
-	Role         string `json:"role"`
+	ClinicID     pgtype.Int8 `json:"clinic_id"`
+	FullName     string      `json:"full_name"`
+	Email        string      `json:"email"`
+	PasswordHash string      `json:"password_hash"`
+	Role         string      `json:"role"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createUser,
+		arg.ClinicID,
 		arg.FullName,
 		arg.Email,
 		arg.PasswordHash,
@@ -49,16 +53,37 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.PasswordHash,
 		&i.Role,
 		&i.CreatedAt,
+		&i.ClinicID,
 	)
 	return i, err
 }
 
-const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, full_name, email, password_hash, role, created_at FROM users WHERE email = $1
+const deleteClinicUser = `-- name: DeleteClinicUser :exec
+DELETE FROM users WHERE id = $1 AND clinic_id = $2
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByEmail, email)
+type DeleteClinicUserParams struct {
+	ID       int64       `json:"id"`
+	ClinicID pgtype.Int8 `json:"clinic_id"`
+}
+
+func (q *Queries) DeleteClinicUser(ctx context.Context, arg DeleteClinicUserParams) error {
+	_, err := q.db.Exec(ctx, deleteClinicUser, arg.ID, arg.ClinicID)
+	return err
+}
+
+const getClinicUserByEmail = `-- name: GetClinicUserByEmail :one
+SELECT id, full_name, email, password_hash, role, created_at, clinic_id FROM users WHERE clinic_id = $1 AND lower(email) = lower($2)
+`
+
+type GetClinicUserByEmailParams struct {
+	ClinicID pgtype.Int8 `json:"clinic_id"`
+	Lower    string      `json:"lower"`
+}
+
+// Login within a specific clinic: email is unique per clinic.
+func (q *Queries) GetClinicUserByEmail(ctx context.Context, arg GetClinicUserByEmailParams) (User, error) {
+	row := q.db.QueryRow(ctx, getClinicUserByEmail, arg.ClinicID, arg.Lower)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -67,12 +92,33 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.PasswordHash,
 		&i.Role,
 		&i.CreatedAt,
+		&i.ClinicID,
+	)
+	return i, err
+}
+
+const getSuperadminByEmail = `-- name: GetSuperadminByEmail :one
+SELECT id, full_name, email, password_hash, role, created_at, clinic_id FROM users WHERE clinic_id IS NULL AND role = 'superadmin' AND lower(email) = lower($1)
+`
+
+// Platform admin login: superadmins are not attached to any clinic.
+func (q *Queries) GetSuperadminByEmail(ctx context.Context, lower string) (User, error) {
+	row := q.db.QueryRow(ctx, getSuperadminByEmail, lower)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.FullName,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.CreatedAt,
+		&i.ClinicID,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, full_name, email, password_hash, role, created_at FROM users WHERE id = $1
+SELECT id, full_name, email, password_hash, role, created_at, clinic_id FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
@@ -85,33 +131,37 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.PasswordHash,
 		&i.Role,
 		&i.CreatedAt,
+		&i.ClinicID,
 	)
 	return i, err
 }
 
-const listUsers = `-- name: ListUsers :many
-SELECT id, full_name, email, role, created_at FROM users ORDER BY created_at DESC
+const listUsersByClinic = `-- name: ListUsersByClinic :many
+SELECT id, clinic_id, full_name, email, role, created_at
+FROM users WHERE clinic_id = $1 ORDER BY created_at DESC
 `
 
-type ListUsersRow struct {
-	ID        int64     `json:"id"`
-	FullName  string    `json:"full_name"`
-	Email     string    `json:"email"`
-	Role      string    `json:"role"`
-	CreatedAt time.Time `json:"created_at"`
+type ListUsersByClinicRow struct {
+	ID        int64       `json:"id"`
+	ClinicID  pgtype.Int8 `json:"clinic_id"`
+	FullName  string      `json:"full_name"`
+	Email     string      `json:"email"`
+	Role      string      `json:"role"`
+	CreatedAt time.Time   `json:"created_at"`
 }
 
-func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
-	rows, err := q.db.Query(ctx, listUsers)
+func (q *Queries) ListUsersByClinic(ctx context.Context, clinicID pgtype.Int8) ([]ListUsersByClinicRow, error) {
+	rows, err := q.db.Query(ctx, listUsersByClinic, clinicID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListUsersRow{}
+	items := []ListUsersByClinicRow{}
 	for rows.Next() {
-		var i ListUsersRow
+		var i ListUsersByClinicRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ClinicID,
 			&i.FullName,
 			&i.Email,
 			&i.Role,
@@ -128,22 +178,41 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 }
 
 const updateUser = `-- name: UpdateUser :one
-UPDATE users SET full_name = $2, email = $3, role = $4 WHERE id = $1
-RETURNING id, full_name, email, password_hash, role, created_at
+UPDATE users SET full_name = $2, email = $3, role = $4
+WHERE id = $1 AND clinic_id = $5
+RETURNING id, clinic_id, full_name, email, password_hash, role, created_at
 `
 
 type UpdateUserParams struct {
-	ID       int64  `json:"id"`
-	FullName string `json:"full_name"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
+	ID       int64       `json:"id"`
+	FullName string      `json:"full_name"`
+	Email    string      `json:"email"`
+	Role     string      `json:"role"`
+	ClinicID pgtype.Int8 `json:"clinic_id"`
 }
 
-func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUser, arg.ID, arg.FullName, arg.Email, arg.Role)
-	var i User
+type UpdateUserRow struct {
+	ID           int64       `json:"id"`
+	ClinicID     pgtype.Int8 `json:"clinic_id"`
+	FullName     string      `json:"full_name"`
+	Email        string      `json:"email"`
+	PasswordHash string      `json:"password_hash"`
+	Role         string      `json:"role"`
+	CreatedAt    time.Time   `json:"created_at"`
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error) {
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.ID,
+		arg.FullName,
+		arg.Email,
+		arg.Role,
+		arg.ClinicID,
+	)
+	var i UpdateUserRow
 	err := row.Scan(
 		&i.ID,
+		&i.ClinicID,
 		&i.FullName,
 		&i.Email,
 		&i.PasswordHash,
@@ -153,20 +222,16 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 	return i, err
 }
 
-const deleteUser = `-- name: DeleteUser :exec
-DELETE FROM users WHERE id = $1
-`
-
-func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteUser, id)
-	return err
-}
-
 const updateUserPassword = `-- name: UpdateUserPassword :exec
 UPDATE users SET password_hash = $2 WHERE id = $1
 `
 
-func (q *Queries) UpdateUserPassword(ctx context.Context, id int64, passwordHash string) error {
-	_, err := q.db.Exec(ctx, updateUserPassword, id, passwordHash)
+type UpdateUserPasswordParams struct {
+	ID           int64  `json:"id"`
+	PasswordHash string `json:"password_hash"`
+}
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
+	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.PasswordHash)
 	return err
 }

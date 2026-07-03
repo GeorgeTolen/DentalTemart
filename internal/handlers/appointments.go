@@ -71,6 +71,11 @@ func (req appointmentRequest) toInput() (service.AppointmentInput, error) {
 // doctor. Range is given either by from/to (RFC3339 or YYYY-MM-DD) or by a
 // single date= day; defaults to today.
 func (h *Handlers) ListAppointments(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	from, to, err := parseRange(r)
 	if err != nil {
 		httpx.Fail(w, err)
@@ -85,6 +90,7 @@ func (h *Handlers) ListAppointments(w http.ResponseWriter, r *http.Request) {
 		doctorID = scope
 	}
 	rows, err := h.q.ListAppointmentsInRange(r.Context(), sqlc.ListAppointmentsInRangeParams{
+		ClinicID: clinicID,
 		From:     from,
 		To:       to,
 		DoctorID: doctorID,
@@ -102,12 +108,17 @@ func (h *Handlers) ListAppointments(w http.ResponseWriter, r *http.Request) {
 
 // GetAppointment returns a single appointment with patient/doctor details.
 func (h *Handlers) GetAppointment(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	id, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)
 		return
 	}
-	row, err := h.q.GetAppointment(r.Context(), id)
+	row, err := h.q.GetAppointment(r.Context(), sqlc.GetAppointmentParams{ID: id, ClinicID: clinicID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
@@ -125,6 +136,11 @@ func (h *Handlers) GetAppointment(w http.ResponseWriter, r *http.Request) {
 
 // CreateAppointment creates a new appointment (with overlap protection).
 func (h *Handlers) CreateAppointment(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	var req appointmentRequest
 	if err := httpx.Decode(r, &req); err != nil {
 		httpx.Fail(w, err)
@@ -139,6 +155,7 @@ func (h *Handlers) CreateAppointment(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	in.ClinicID = clinicID
 	if scope, scoped := h.doctorScope(r.Context()); scoped {
 		if scope.Int64 == unlinkedDoctorSentinel {
 			httpx.Fail(w, httpx.NewError(http.StatusForbidden, "ваш аккаунт не привязан к профилю врача"))
@@ -152,11 +169,16 @@ func (h *Handlers) CreateAppointment(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	h.respondAppointment(w, r, http.StatusCreated, appt.ID)
+	h.respondAppointment(w, r, http.StatusCreated, appt.ID, clinicID)
 }
 
 // UpdateAppointment edits an appointment (with overlap protection).
 func (h *Handlers) UpdateAppointment(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	id, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)
@@ -176,8 +198,9 @@ func (h *Handlers) UpdateAppointment(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	in.ClinicID = clinicID
 	if scope, scoped := h.doctorScope(r.Context()); scoped {
-		existing, err := h.q.GetAppointment(r.Context(), id)
+		existing, err := h.q.GetAppointment(r.Context(), sqlc.GetAppointmentParams{ID: id, ClinicID: clinicID})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
@@ -201,18 +224,23 @@ func (h *Handlers) UpdateAppointment(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	h.respondAppointment(w, r, http.StatusOK, appt.ID)
+	h.respondAppointment(w, r, http.StatusOK, appt.ID, clinicID)
 }
 
 // DeleteAppointment removes an appointment.
 func (h *Handlers) DeleteAppointment(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	id, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)
 		return
 	}
 	if scope, scoped := h.doctorScope(r.Context()); scoped {
-		existing, err := h.q.GetAppointment(r.Context(), id)
+		existing, err := h.q.GetAppointment(r.Context(), sqlc.GetAppointmentParams{ID: id, ClinicID: clinicID})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
@@ -226,16 +254,22 @@ func (h *Handlers) DeleteAppointment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.q.DeleteAppointment(r.Context(), id); err != nil {
+	if err := h.q.DeleteAppointment(r.Context(), sqlc.DeleteAppointmentParams{ID: id, ClinicID: clinicID}); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// DeleteArchivedAppointments bulk-deletes all completed and cancelled appointments.
+// DeleteArchivedAppointments bulk-deletes all completed and cancelled
+// appointments of the caller's clinic.
 func (h *Handlers) DeleteArchivedAppointments(w http.ResponseWriter, r *http.Request) {
-	if err := h.q.DeleteArchivedAppointments(r.Context()); err != nil {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if err := h.q.DeleteArchivedAppointments(r.Context(), clinicID); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -244,7 +278,12 @@ func (h *Handlers) DeleteArchivedAppointments(w http.ResponseWriter, r *http.Req
 
 // CountArchivedAppointments returns the count of completed/cancelled appointments.
 func (h *Handlers) CountArchivedAppointments(w http.ResponseWriter, r *http.Request) {
-	count, err := h.q.CountArchivedAppointments(r.Context())
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	count, err := h.q.CountArchivedAppointments(r.Context(), clinicID)
 	if err != nil {
 		httpx.Fail(w, err)
 		return
@@ -255,12 +294,17 @@ func (h *Handlers) CountArchivedAppointments(w http.ResponseWriter, r *http.Requ
 // ListArchivedAppointments returns the full detail of completed or cancelled
 // appointments (status=completed|cancelled), most recent first.
 func (h *Handlers) ListArchivedAppointments(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	status := r.URL.Query().Get("status")
 	if status != "completed" && status != "cancelled" {
 		httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "status должен быть completed или cancelled"))
 		return
 	}
-	rows, err := h.q.ListAppointmentsByStatus(r.Context(), status)
+	rows, err := h.q.ListAppointmentsByStatus(r.Context(), sqlc.ListAppointmentsByStatusParams{ClinicID: clinicID, Status: status})
 	if err != nil {
 		httpx.Fail(w, err)
 		return
@@ -274,8 +318,8 @@ func (h *Handlers) ListArchivedAppointments(w http.ResponseWriter, r *http.Reque
 
 // respondAppointment re-fetches the joined row so the response includes
 // patient/doctor names and colour.
-func (h *Handlers) respondAppointment(w http.ResponseWriter, r *http.Request, status int, id int64) {
-	row, err := h.q.GetAppointment(r.Context(), id)
+func (h *Handlers) respondAppointment(w http.ResponseWriter, r *http.Request, status int, id, clinicID int64) {
+	row, err := h.q.GetAppointment(r.Context(), sqlc.GetAppointmentParams{ID: id, ClinicID: clinicID})
 	if err != nil {
 		httpx.Fail(w, err)
 		return

@@ -2,6 +2,10 @@ package handlers
 
 import (
 	"net/http"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -29,8 +33,10 @@ func (h *Handlers) Router() http.Handler {
 	})
 
 	r.Route("/api", func(r chi.Router) {
-		// Public auth endpoints.
-		r.Post("/auth/login", h.Login)
+		// Public endpoints.
+		r.Get("/clinics", h.ListPublicClinics)          // login clinic picker
+		r.Post("/auth/login", h.Login)                  // clinic user login
+		r.Post("/auth/platform/login", h.PlatformLogin) // platform superadmin login
 		r.Post("/auth/logout", h.Logout)
 		r.Post("/auth/refresh", h.Refresh)
 
@@ -39,6 +45,16 @@ func (h *Handlers) Router() http.Handler {
 			r.Use(mw.Authenticator(h.tokens))
 
 			r.Get("/me", h.Me)
+
+			// Platform administration (superadmin only; handlers self-guard).
+			r.Route("/platform", func(r chi.Router) {
+				r.Get("/stats", h.PlatformStats)
+				r.Get("/clinics", h.ListClinics)
+				r.Post("/clinics", h.CreateClinic)
+				r.Put("/clinics/{id}", h.UpdateClinic)
+				r.Delete("/clinics/{id}", h.DeleteClinic)
+				r.Post("/clinics/{id}/owner", h.AddClinicOwner)
+			})
 
 			r.Route("/appointments", func(r chi.Router) {
 				r.Get("/", h.ListAppointments)
@@ -87,5 +103,33 @@ func (h *Handlers) Router() http.Handler {
 		})
 	})
 
+	// In production the same server also serves the built SPA (single origin,
+	// same-origin cookies). In development this is empty and Vite serves it.
+	if h.cfg.WebDir != "" {
+		r.Handle("/*", spaHandler(h.cfg.WebDir))
+	}
+
 	return r
+}
+
+// spaHandler serves static assets from dir and falls back to index.html for
+// unknown paths so client-side routing (React Router) works on refresh/deep
+// links. Requests under /api and /healthz are handled before this.
+func spaHandler(dir string) http.HandlerFunc {
+	fileServer := http.FileServer(http.Dir(dir))
+	return func(w http.ResponseWriter, r *http.Request) {
+		clean := path.Clean(r.URL.Path)
+		if clean != "/" {
+			if info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(clean))); err == nil && !info.IsDir() {
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+		}
+		// Client-side route (or "/"): serve the SPA shell.
+		if strings.HasPrefix(clean, "/assets/") {
+			http.NotFound(w, r) // missing hashed asset shouldn't return HTML
+			return
+		}
+		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+	}
 }

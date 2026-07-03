@@ -20,8 +20,8 @@ import {
   useUnlinkedDoctorUsers,
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
-import type { Appointment, Doctor, Patient, Role, ScheduleEntry, User } from "../lib/types";
-import { STATUS_LABELS } from "../lib/types";
+import type { Appointment, ClinicUser, Doctor, Patient, Role, ScheduleEntry } from "../lib/types";
+import { STATUS_LABELS, ROLE_LABELS } from "../lib/types";
 import {
   localInputToISO,
   isoToLocalInput,
@@ -42,14 +42,8 @@ import { useAuth } from "../auth/AuthContext";
 const TABS = ["Создать запись", "Управление", "Статистика", "Архив"] as const;
 type Tab = (typeof TABS)[number];
 
+// Roles a clinic owner can assign (superadmin is platform-only).
 const ROLES: Role[] = ["owner", "admin", "doctor"];
-// "owner" and "admin" are internal role identifiers kept for backward
-// compatibility; their display labels were renamed per the clinic's request.
-const ROLE_LABELS: Record<Role, string> = {
-  owner: "Администратор",
-  admin: "Менеджер",
-  doctor: "Врач",
-};
 
 function todayRange() {
   const now = new Date();
@@ -511,10 +505,10 @@ function AdminManagement() {
 function UsersPanel() {
   const { data: users = [], isLoading } = useUsers();
   const deleteUser = useDeleteUser();
-  const [editing, setEditing] = useState<User | null | "new">(null);
+  const [editing, setEditing] = useState<ClinicUser | null | "new">(null);
   const [error, setError] = useState("");
 
-  async function del(u: User) {
+  async function del(u: ClinicUser) {
     if (!confirm(`Удалить пользователя ${u.full_name}?`)) return;
     try { await deleteUser.mutateAsync(u.id); }
     catch (e) { setError(errorMessage(e)); }
@@ -566,7 +560,7 @@ function UsersPanel() {
   );
 }
 
-function UserModal({ user, onClose }: { user: User | null; onClose: () => void }) {
+function UserModal({ user, onClose }: { user: ClinicUser | null; onClose: () => void }) {
   const saveUser = useSaveUser();
   const [name, setName] = useState(user?.full_name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -630,7 +624,7 @@ function PatientsPanel() {
   }, [input]);
 
   async function del(p: Patient) {
-    if (!confirm(`Удалить пациента ${p.full_name}?`)) return;
+    if (!confirm(`Удалить пациента «${p.full_name}»?\n\nВместе с ним будут удалены все его приёмы и медицинские записи. Это действие необратимо.`)) return;
     try { await deletePatient.mutateAsync(p.id); }
     catch (e) { setError(errorMessage(e)); }
   }
@@ -729,7 +723,7 @@ function DoctorsPanel() {
   const [error, setError] = useState("");
 
   async function del(d: Doctor) {
-    if (!confirm(`Удалить врача ${d.full_name}?`)) return;
+    if (!confirm(`Удалить врача «${d.full_name}»?\n\nВместе с ним будут удалены его приёмы и график. Чтобы просто скрыть врача, сделайте его неактивным.`)) return;
     try { await deleteDoctor.mutateAsync(d.id); }
     catch (e) { setError(errorMessage(e)); }
   }
@@ -1235,7 +1229,7 @@ function AdminArchive() {
 
 export default function Admin() {
   const { user } = useAuth();
-  const pageTitle = user?.role === "owner" ? "Панель администратора" : "Панель менеджера";
+  const pageTitle = user?.role === "owner" ? "Панель управления" : "Панель менеджера";
   const [tab, setTab] = useState<Tab>("Создать запись");
 
   return (

@@ -47,13 +47,14 @@ func (h *Handlers) validateStruct(v any) error {
 	return nil
 }
 
-// setAuthCookies issues fresh access/refresh cookies for the user.
-func (h *Handlers) setAuthCookies(w http.ResponseWriter, userID int64, role string) error {
-	access, err := h.tokens.IssueAccess(userID, role)
+// setAuthCookies issues fresh access/refresh cookies for the user. clinicID is
+// 0 for the platform superadmin.
+func (h *Handlers) setAuthCookies(w http.ResponseWriter, userID, clinicID int64, role string) error {
+	access, err := h.tokens.IssueAccess(userID, clinicID, role)
 	if err != nil {
 		return err
 	}
-	refresh, err := h.tokens.IssueRefresh(userID, role)
+	refresh, err := h.tokens.IssueRefresh(userID, clinicID, role)
 	if err != nil {
 		return err
 	}

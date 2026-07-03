@@ -23,6 +23,17 @@ type Appointment struct {
 	CreatedBy     pgtype.Int8 `json:"created_by"`
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
+	ClinicID      int64       `json:"clinic_id"`
+}
+
+type Clinic struct {
+	ID        int64       `json:"id"`
+	Name      string      `json:"name"`
+	Slug      string      `json:"slug"`
+	Address   pgtype.Text `json:"address"`
+	Phone     pgtype.Text `json:"phone"`
+	IsActive  bool        `json:"is_active"`
+	CreatedAt time.Time   `json:"created_at"`
 }
 
 type Doctor struct {
@@ -34,6 +45,7 @@ type Doctor struct {
 	IsActive       bool        `json:"is_active"`
 	CreatedAt      time.Time   `json:"created_at"`
 	UserID         pgtype.Int8 `json:"user_id"`
+	ClinicID       int64       `json:"clinic_id"`
 }
 
 type DoctorSchedule struct {
@@ -51,6 +63,7 @@ type Patient struct {
 	BirthDate *time.Time  `json:"birth_date"`
 	Notes     pgtype.Text `json:"notes"`
 	CreatedAt time.Time   `json:"created_at"`
+	ClinicID  int64       `json:"clinic_id"`
 }
 
 type PatientRecord struct {
@@ -63,13 +76,15 @@ type PatientRecord struct {
 	FileName  pgtype.Text `json:"file_name"`
 	CreatedBy pgtype.Int8 `json:"created_by"`
 	CreatedAt time.Time   `json:"created_at"`
+	ClinicID  int64       `json:"clinic_id"`
 }
 
 type User struct {
-	ID           int64     `json:"id"`
-	FullName     string    `json:"full_name"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	Role         string    `json:"role"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           int64       `json:"id"`
+	FullName     string      `json:"full_name"`
+	Email        string      `json:"email"`
+	PasswordHash string      `json:"password_hash"`
+	Role         string      `json:"role"`
+	CreatedAt    time.Time   `json:"created_at"`
+	ClinicID     pgtype.Int8 `json:"clinic_id"`
 }

@@ -11,8 +11,41 @@ export function formatTime(iso: string): string {
 
 export function formatDate(value: string | null): string {
   if (!value) return "—";
+  // Date-only values (YYYY-MM-DD, e.g. birth_date / next_visit_date) must be
+  // rendered from their literal parts, not via new Date(), which would shift
+  // them by the local timezone offset (an off-by-one-day bug west of UTC).
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) {
+    return `${dateOnly[3]}.${dateOnly[2]}.${dateOnly[1]}`;
+  }
   const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+}
+
+// yearsLabel returns the correct Russian plural of "год" for the given age.
+export function yearsLabel(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "год";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "года";
+  return "лет";
+}
+
+// age returns the full-year age for a YYYY-MM-DD birth date, accounting for
+// whether this year's birthday has already passed. Returns null when invalid.
+export function age(birthDate: string | null): number | null {
+  if (!birthDate) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(birthDate);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const now = new Date();
+  let years = now.getFullYear() - y;
+  const beforeBirthday =
+    now.getMonth() + 1 < mo ||
+    (now.getMonth() + 1 === mo && now.getDate() < d);
+  if (beforeBirthday) years -= 1;
+  return years >= 0 ? years : null;
 }
 
 export function formatDateTime(iso: string): string {

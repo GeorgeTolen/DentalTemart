@@ -40,7 +40,13 @@ export default function Doctors() {
   const [scheduleFor, setScheduleFor] = useState<Doctor | null>(null);
 
   async function onDelete(d: Doctor) {
-    if (!confirm(`Удалить врача «${d.full_name}»?`)) return;
+    if (
+      !confirm(
+        `Удалить врача «${d.full_name}»?\n\nВместе с ним будут удалены его приёмы и график работы. ` +
+          `Чтобы просто скрыть врача из списков, снимите отметку «Активен».`
+      )
+    )
+      return;
     try {
       await del.mutateAsync(d.id);
     } catch (err) {

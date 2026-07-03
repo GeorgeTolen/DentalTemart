@@ -6,9 +6,10 @@ SELECT
     d.full_name AS doctor_name,
     d.color     AS doctor_color
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id
-JOIN doctors  d ON d.id = a.doctor_id
-WHERE a.start_time >= sqlc.arg('from')
+JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
+JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+WHERE a.clinic_id = sqlc.arg('clinic_id')
+  AND a.start_time >= sqlc.arg('from')
   AND a.start_time <  sqlc.arg('to')
   AND (sqlc.narg('doctor_id')::bigint IS NULL OR a.doctor_id = sqlc.narg('doctor_id')::bigint)
 ORDER BY a.start_time;
@@ -21,9 +22,9 @@ SELECT
     d.full_name AS doctor_name,
     d.color     AS doctor_color
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id
-JOIN doctors  d ON d.id = a.doctor_id
-WHERE a.patient_id = $1
+JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
+JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+WHERE a.patient_id = $1 AND a.clinic_id = $2
 ORDER BY a.start_time DESC;
 
 -- name: GetAppointment :one
@@ -34,22 +35,23 @@ SELECT
     d.full_name AS doctor_name,
     d.color     AS doctor_color
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id
-JOIN doctors  d ON d.id = a.doctor_id
-WHERE a.id = $1;
+JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
+JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+WHERE a.id = $1 AND a.clinic_id = $2;
 
 -- name: CountOverlappingAppointments :one
 SELECT count(*) FROM appointments
-WHERE doctor_id = sqlc.arg('doctor_id')
+WHERE clinic_id = sqlc.arg('clinic_id')
+  AND doctor_id = sqlc.arg('doctor_id')
   AND status <> 'cancelled'
   AND id <> sqlc.arg('exclude_id')
   AND tstzrange(start_time, end_time) && tstzrange(sqlc.arg('start_time'), sqlc.arg('end_time'));
 
 -- name: CreateAppointment :one
 INSERT INTO appointments (
-    patient_id, doctor_id, start_time, end_time, status,
+    clinic_id, patient_id, doctor_id, start_time, end_time, status,
     diagnosis, description, next_visit_date, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateAppointment :one
@@ -63,23 +65,24 @@ SET patient_id = $2,
     description = $8,
     next_visit_date = $9,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND clinic_id = $10
 RETURNING *;
 
 -- name: DeleteAppointment :exec
-DELETE FROM appointments WHERE id = $1;
+DELETE FROM appointments WHERE id = $1 AND clinic_id = $2;
 
 -- name: CountAppointmentsInRange :one
 SELECT count(*) FROM appointments
-WHERE start_time >= sqlc.arg('from') AND start_time < sqlc.arg('to')
+WHERE clinic_id = sqlc.arg('clinic_id')
+  AND start_time >= sqlc.arg('from') AND start_time < sqlc.arg('to')
   AND status <> 'cancelled'
   AND (sqlc.narg('doctor_id')::bigint IS NULL OR doctor_id = sqlc.narg('doctor_id')::bigint);
 
 -- name: DeleteArchivedAppointments :exec
-DELETE FROM appointments WHERE status IN ('completed', 'cancelled');
+DELETE FROM appointments WHERE clinic_id = $1 AND status IN ('completed', 'cancelled');
 
 -- name: CountArchivedAppointments :one
-SELECT count(*) FROM appointments WHERE status IN ('completed', 'cancelled');
+SELECT count(*) FROM appointments WHERE clinic_id = $1 AND status IN ('completed', 'cancelled');
 
 -- name: ListAppointmentsByStatus :many
 SELECT
@@ -89,8 +92,8 @@ SELECT
     d.full_name AS doctor_name,
     d.color     AS doctor_color
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id
-JOIN doctors  d ON d.id = a.doctor_id
-WHERE a.status = sqlc.arg('status')
+JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
+JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+WHERE a.clinic_id = sqlc.arg('clinic_id') AND a.status = sqlc.arg('status')
 ORDER BY a.start_time DESC
 LIMIT 500;

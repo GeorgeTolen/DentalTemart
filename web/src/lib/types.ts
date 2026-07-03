@@ -1,10 +1,53 @@
-export type Role = "owner" | "admin" | "doctor";
+// Roles: "superadmin" is the platform administrator (manages all clinics);
+// "owner" is a clinic owner; "admin" is a clinic manager; "doctor" is a doctor.
+export type Role = "superadmin" | "owner" | "admin" | "doctor";
 
 export interface User {
   id: number;
   full_name: string;
   email: string;
   role: Role;
+  clinic_id: number | null;
+  clinic_name?: string;
+  clinic_slug?: string;
+}
+
+// Compact user shape returned by the clinic user-management endpoints.
+export interface ClinicUser {
+  id: number;
+  full_name: string;
+  email: string;
+  role: Role;
+  clinic_id: number | null;
+}
+
+// Minimal, public clinic shape for the login picker.
+export interface PublicClinic {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+// Full clinic shape for the platform admin panel.
+export interface Clinic {
+  id: number;
+  name: string;
+  slug: string;
+  address: string;
+  phone: string;
+  is_active: boolean;
+  owner_count: number;
+  patient_count: number;
+  doctor_count: number;
+}
+
+export interface PlatformStats {
+  total_clinics: number;
+  active_clinics: number;
+  total_users: number;
+  total_patients: number;
+  total_doctors: number;
+  total_appointments: number;
 }
 
 export interface Doctor {
@@ -84,6 +127,14 @@ export const STATUS_LABELS: Record<AppointmentStatus, string> = {
   completed: "Завершён",
   cancelled: "Отменён",
   no_show: "Не пришёл",
+};
+
+// Display labels for roles. Internal identifiers are kept stable for the API.
+export const ROLE_LABELS: Record<Role, string> = {
+  superadmin: "Администратор платформы",
+  owner: "Владелец",
+  admin: "Менеджер",
+  doctor: "Врач",
 };
 
 export interface AdminStats {

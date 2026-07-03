@@ -7,13 +7,16 @@ import { api } from "./client";
 import type {
   AdminStats,
   Appointment,
+  Clinic,
+  ClinicUser,
   Dashboard,
   Doctor,
   Patient,
   PatientRecord,
   PatientRecordType,
+  PlatformStats,
+  PublicClinic,
   ScheduleEntry,
-  User,
 } from "../lib/types";
 
 // --- Doctors ---
@@ -243,22 +246,24 @@ export function useDashboard() {
   });
 }
 
-// --- Users ---
+// --- Users (clinic staff) ---
 
 export function useUsers() {
   return useQuery({
     queryKey: ["users"],
-    queryFn: async () => (await api.get<User[]>("/users")).data,
+    queryFn: async () => (await api.get<ClinicUser[]>("/users")).data,
   });
 }
 
 export function useSaveUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (u: Partial<User> & { id?: number; password?: string }) => {
+    mutationFn: async (
+      u: Partial<ClinicUser> & { id?: number; password?: string }
+    ) => {
       const { id, ...body } = u;
-      if (id) return (await api.put<User>(`/users/${id}`, body)).data;
-      return (await api.post<User>("/users", body)).data;
+      if (id) return (await api.put<ClinicUser>(`/users/${id}`, body)).data;
+      return (await api.post<ClinicUser>("/users", body)).data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
@@ -319,5 +324,85 @@ export function useAdminStats() {
   return useQuery({
     queryKey: ["admin-stats"],
     queryFn: async () => (await api.get<AdminStats>("/admin/stats")).data,
+  });
+}
+
+// --- Platform (superadmin): clinics & global stats ---
+
+// Public list for the login clinic picker.
+export function usePublicClinics() {
+  return useQuery({
+    queryKey: ["public-clinics"],
+    retry: false,
+    queryFn: async () => (await api.get<PublicClinic[]>("/clinics")).data,
+  });
+}
+
+export function usePlatformStats() {
+  return useQuery({
+    queryKey: ["platform-stats"],
+    queryFn: async () => (await api.get<PlatformStats>("/platform/stats")).data,
+  });
+}
+
+export function useClinics() {
+  return useQuery({
+    queryKey: ["clinics"],
+    queryFn: async () => (await api.get<Clinic[]>("/platform/clinics")).data,
+  });
+}
+
+export interface ClinicPayload {
+  id?: number;
+  name: string;
+  slug: string;
+  address: string;
+  phone: string;
+  is_active: boolean;
+  // Only used on create: the clinic's first owner account.
+  owner_name?: string;
+  owner_email?: string;
+  owner_password?: string;
+}
+
+export function useSaveClinic() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (c: ClinicPayload) => {
+      const { id, ...body } = c;
+      if (id) return (await api.put<Clinic>(`/platform/clinics/${id}`, body)).data;
+      return (await api.post<Clinic>("/platform/clinics", body)).data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clinics"] });
+      qc.invalidateQueries({ queryKey: ["platform-stats"] });
+    },
+  });
+}
+
+export function useDeleteClinic() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => api.delete(`/platform/clinics/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clinics"] });
+      qc.invalidateQueries({ queryKey: ["platform-stats"] });
+    },
+  });
+}
+
+export function useAddClinicOwner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      clinicId: number;
+      full_name: string;
+      email: string;
+      password: string;
+    }) => {
+      const { clinicId, ...body } = args;
+      return (await api.post(`/platform/clinics/${clinicId}/owner`, body)).data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["clinics"] }),
   });
 }

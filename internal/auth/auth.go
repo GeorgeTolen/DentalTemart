@@ -19,10 +19,12 @@ const (
 // ErrInvalidToken is returned when a token fails verification.
 var ErrInvalidToken = errors.New("invalid token")
 
-// Claims is the JWT payload used by Temart.
+// Claims is the JWT payload used by Temart. ClinicID is 0 for the platform
+// superadmin (who is not attached to any clinic) and the clinic's id otherwise.
 type Claims struct {
-	Role string `json:"role"`
-	Typ  string `json:"typ"`
+	Role     string `json:"role"`
+	ClinicID int64  `json:"clinic_id"`
+	Typ      string `json:"typ"`
 	jwt.RegisteredClaims
 }
 
@@ -43,11 +45,12 @@ func (m *Manager) AccessTTL() time.Duration  { return m.accessTTL }
 func (m *Manager) RefreshTTL() time.Duration { return m.refreshTTL }
 
 // Issue creates a signed token for the given user.
-func (m *Manager) Issue(userID int64, role, typ string, ttl time.Duration) (string, error) {
+func (m *Manager) Issue(userID, clinicID int64, role, typ string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := Claims{
-		Role: role,
-		Typ:  typ,
+		Role:     role,
+		ClinicID: clinicID,
+		Typ:      typ,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   fmt.Sprintf("%d", userID),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -58,11 +61,11 @@ func (m *Manager) Issue(userID int64, role, typ string, ttl time.Duration) (stri
 }
 
 // IssueAccess and IssueRefresh are convenience wrappers.
-func (m *Manager) IssueAccess(userID int64, role string) (string, error) {
-	return m.Issue(userID, role, TokenAccess, m.accessTTL)
+func (m *Manager) IssueAccess(userID, clinicID int64, role string) (string, error) {
+	return m.Issue(userID, clinicID, role, TokenAccess, m.accessTTL)
 }
-func (m *Manager) IssueRefresh(userID int64, role string) (string, error) {
-	return m.Issue(userID, role, TokenRefresh, m.refreshTTL)
+func (m *Manager) IssueRefresh(userID, clinicID int64, role string) (string, error) {
+	return m.Issue(userID, clinicID, role, TokenRefresh, m.refreshTTL)
 }
 
 // Verify parses and validates a token, returning its claims.

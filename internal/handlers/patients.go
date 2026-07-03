@@ -18,9 +18,15 @@ type patientRequest struct {
 	Notes     string `json:"notes"`
 }
 
-// ListPatients returns patients, optionally filtered by a name/phone search.
-// A "doctor" role user only sees patients who have an appointment with them.
+// ListPatients returns the clinic's patients, optionally filtered by a
+// name/phone search. A "doctor" role user only sees patients who have an
+// appointment with them.
 func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	search := r.URL.Query().Get("search")
 	var arg pgtype.Text
 	if search != "" {
@@ -28,14 +34,14 @@ func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var patients []sqlc.Patient
-	var err error
 	if scope, scoped := h.doctorScope(r.Context()); scoped {
 		patients, err = h.q.ListPatientsForDoctor(r.Context(), sqlc.ListPatientsForDoctorParams{
 			DoctorID: scope.Int64,
+			ClinicID: clinicID,
 			Search:   arg,
 		})
 	} else {
-		patients, err = h.q.ListPatients(r.Context(), arg)
+		patients, err = h.q.ListPatients(r.Context(), sqlc.ListPatientsParams{ClinicID: clinicID, Search: arg})
 	}
 	if err != nil {
 		httpx.Fail(w, err)
@@ -51,6 +57,11 @@ func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
 // GetPatient returns a single patient. A "doctor" role user gets 404 for
 // patients they have no appointment with.
 func (h *Handlers) GetPatient(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	id, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)
@@ -60,7 +71,7 @@ func (h *Handlers) GetPatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	p, err := h.q.GetPatient(r.Context(), id)
+	p, err := h.q.GetPatient(r.Context(), sqlc.GetPatientParams{ID: id, ClinicID: clinicID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "пациент не найден"))
@@ -74,6 +85,11 @@ func (h *Handlers) GetPatient(w http.ResponseWriter, r *http.Request) {
 
 // GetPatientAppointments returns the full appointment history of a patient.
 func (h *Handlers) GetPatientAppointments(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	id, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)
@@ -83,7 +99,7 @@ func (h *Handlers) GetPatientAppointments(w http.ResponseWriter, r *http.Request
 		httpx.Fail(w, err)
 		return
 	}
-	rows, err := h.q.ListAppointmentsByPatient(r.Context(), id)
+	rows, err := h.q.ListAppointmentsByPatient(r.Context(), sqlc.ListAppointmentsByPatientParams{PatientID: id, ClinicID: clinicID})
 	if err != nil {
 		httpx.Fail(w, err)
 		return
@@ -95,8 +111,13 @@ func (h *Handlers) GetPatientAppointments(w http.ResponseWriter, r *http.Request
 	httpx.JSON(w, http.StatusOK, out)
 }
 
-// CreatePatient adds a new patient.
+// CreatePatient adds a new patient to the caller's clinic.
 func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	var req patientRequest
 	if err := httpx.Decode(r, &req); err != nil {
 		httpx.Fail(w, err)
@@ -116,6 +137,7 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := h.q.CreatePatient(r.Context(), sqlc.CreatePatientParams{
+		ClinicID:  clinicID,
 		FullName:  req.FullName,
 		Phone:     pgtype.Text{String: req.Phone, Valid: true},
 		BirthDate: birth,
@@ -128,14 +150,20 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusCreated, toPatientDTO(p))
 }
 
-// DeletePatient removes a patient record.
+// DeletePatient removes a patient together with their appointments and records
+// (cascade). The confirmation warning lives in the UI.
 func (h *Handlers) DeletePatient(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	id, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)
 		return
 	}
-	if err := h.q.DeletePatient(r.Context(), id); err != nil {
+	if err := h.q.DeletePatient(r.Context(), sqlc.DeletePatientParams{ID: id, ClinicID: clinicID}); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -144,6 +172,11 @@ func (h *Handlers) DeletePatient(w http.ResponseWriter, r *http.Request) {
 
 // UpdatePatient edits an existing patient.
 func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	id, err := idParam(r)
 	if err != nil {
 		httpx.Fail(w, err)
@@ -177,6 +210,7 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 		Phone:     pgtype.Text{String: req.Phone, Valid: true},
 		BirthDate: birth,
 		Notes:     pgtype.Text{String: req.Notes, Valid: true},
+		ClinicID:  clinicID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

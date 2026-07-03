@@ -30,9 +30,10 @@ services:
       ACCESS_TTL: ${ACCESS_TTL:-15m}
       REFRESH_TTL: ${REFRESH_TTL:-168h}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      OWNER_NAME: ${OWNER_NAME:-Владелец}
-      OWNER_EMAIL: ${OWNER_EMAIL:-owner@temart.local}
-      OWNER_PASSWORD: ${OWNER_PASSWORD:-changeme123}
+      # Platform superadmin (администратор платформы), bootstrapped on first start.
+      SUPERADMIN_NAME: ${SUPERADMIN_NAME:-Администратор платформы}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@temart.local}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-changeme123}
     ports:
       - "8080:8080"
     volumes:

@@ -14,19 +14,37 @@ import (
 
 const countAppointmentsInRange = `-- name: CountAppointmentsInRange :one
 SELECT count(*) FROM appointments
-WHERE start_time >= $1 AND start_time < $2
+WHERE clinic_id = $1
+  AND start_time >= $2 AND start_time < $3
   AND status <> 'cancelled'
-  AND ($3::bigint IS NULL OR doctor_id = $3::bigint)
+  AND ($4::bigint IS NULL OR doctor_id = $4::bigint)
 `
 
 type CountAppointmentsInRangeParams struct {
+	ClinicID int64       `json:"clinic_id"`
 	From     time.Time   `json:"from"`
 	To       time.Time   `json:"to"`
 	DoctorID pgtype.Int8 `json:"doctor_id"`
 }
 
 func (q *Queries) CountAppointmentsInRange(ctx context.Context, arg CountAppointmentsInRangeParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countAppointmentsInRange, arg.From, arg.To, arg.DoctorID)
+	row := q.db.QueryRow(ctx, countAppointmentsInRange,
+		arg.ClinicID,
+		arg.From,
+		arg.To,
+		arg.DoctorID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countArchivedAppointments = `-- name: CountArchivedAppointments :one
+SELECT count(*) FROM appointments WHERE clinic_id = $1 AND status IN ('completed', 'cancelled')
+`
+
+func (q *Queries) CountArchivedAppointments(ctx context.Context, clinicID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countArchivedAppointments, clinicID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -34,13 +52,15 @@ func (q *Queries) CountAppointmentsInRange(ctx context.Context, arg CountAppoint
 
 const countOverlappingAppointments = `-- name: CountOverlappingAppointments :one
 SELECT count(*) FROM appointments
-WHERE doctor_id = $1
+WHERE clinic_id = $1
+  AND doctor_id = $2
   AND status <> 'cancelled'
-  AND id <> $2
-  AND tstzrange(start_time, end_time) && tstzrange($3, $4)
+  AND id <> $3
+  AND tstzrange(start_time, end_time) && tstzrange($4, $5)
 `
 
 type CountOverlappingAppointmentsParams struct {
+	ClinicID  int64       `json:"clinic_id"`
 	DoctorID  int64       `json:"doctor_id"`
 	ExcludeID int64       `json:"exclude_id"`
 	StartTime interface{} `json:"start_time"`
@@ -49,6 +69,7 @@ type CountOverlappingAppointmentsParams struct {
 
 func (q *Queries) CountOverlappingAppointments(ctx context.Context, arg CountOverlappingAppointmentsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countOverlappingAppointments,
+		arg.ClinicID,
 		arg.DoctorID,
 		arg.ExcludeID,
 		arg.StartTime,
@@ -61,13 +82,14 @@ func (q *Queries) CountOverlappingAppointments(ctx context.Context, arg CountOve
 
 const createAppointment = `-- name: CreateAppointment :one
 INSERT INTO appointments (
-    patient_id, doctor_id, start_time, end_time, status,
+    clinic_id, patient_id, doctor_id, start_time, end_time, status,
     diagnosis, description, next_visit_date, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, patient_id, doctor_id, start_time, end_time, status, diagnosis, description, next_visit_date, created_by, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, patient_id, doctor_id, start_time, end_time, status, diagnosis, description, next_visit_date, created_by, created_at, updated_at, clinic_id
 `
 
 type CreateAppointmentParams struct {
+	ClinicID      int64       `json:"clinic_id"`
 	PatientID     int64       `json:"patient_id"`
 	DoctorID      int64       `json:"doctor_id"`
 	StartTime     time.Time   `json:"start_time"`
@@ -81,6 +103,7 @@ type CreateAppointmentParams struct {
 
 func (q *Queries) CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error) {
 	row := q.db.QueryRow(ctx, createAppointment,
+		arg.ClinicID,
 		arg.PatientID,
 		arg.DoctorID,
 		arg.StartTime,
@@ -105,51 +128,51 @@ func (q *Queries) CreateAppointment(ctx context.Context, arg CreateAppointmentPa
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClinicID,
 	)
 	return i, err
 }
 
 const deleteAppointment = `-- name: DeleteAppointment :exec
-DELETE FROM appointments WHERE id = $1
+DELETE FROM appointments WHERE id = $1 AND clinic_id = $2
 `
 
-func (q *Queries) DeleteAppointment(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteAppointment, id)
+type DeleteAppointmentParams struct {
+	ID       int64 `json:"id"`
+	ClinicID int64 `json:"clinic_id"`
+}
+
+func (q *Queries) DeleteAppointment(ctx context.Context, arg DeleteAppointmentParams) error {
+	_, err := q.db.Exec(ctx, deleteAppointment, arg.ID, arg.ClinicID)
 	return err
 }
 
 const deleteArchivedAppointments = `-- name: DeleteArchivedAppointments :exec
-DELETE FROM appointments WHERE status IN ('completed', 'cancelled')
+DELETE FROM appointments WHERE clinic_id = $1 AND status IN ('completed', 'cancelled')
 `
 
-func (q *Queries) DeleteArchivedAppointments(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, deleteArchivedAppointments)
+func (q *Queries) DeleteArchivedAppointments(ctx context.Context, clinicID int64) error {
+	_, err := q.db.Exec(ctx, deleteArchivedAppointments, clinicID)
 	return err
-}
-
-const countArchivedAppointments = `-- name: CountArchivedAppointments :one
-SELECT count(*) FROM appointments WHERE status IN ('completed', 'cancelled')
-`
-
-func (q *Queries) CountArchivedAppointments(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countArchivedAppointments)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }
 
 const getAppointment = `-- name: GetAppointment :one
 SELECT
-    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at,
+    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id,
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id
-JOIN doctors  d ON d.id = a.doctor_id
-WHERE a.id = $1
+JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
+JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+WHERE a.id = $1 AND a.clinic_id = $2
 `
+
+type GetAppointmentParams struct {
+	ID       int64 `json:"id"`
+	ClinicID int64 `json:"clinic_id"`
+}
 
 type GetAppointmentRow struct {
 	ID            int64       `json:"id"`
@@ -164,14 +187,15 @@ type GetAppointmentRow struct {
 	CreatedBy     pgtype.Int8 `json:"created_by"`
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
+	ClinicID      int64       `json:"clinic_id"`
 	PatientName   string      `json:"patient_name"`
 	PatientPhone  pgtype.Text `json:"patient_phone"`
 	DoctorName    string      `json:"doctor_name"`
 	DoctorColor   string      `json:"doctor_color"`
 }
 
-func (q *Queries) GetAppointment(ctx context.Context, id int64) (GetAppointmentRow, error) {
-	row := q.db.QueryRow(ctx, getAppointment, id)
+func (q *Queries) GetAppointment(ctx context.Context, arg GetAppointmentParams) (GetAppointmentRow, error) {
+	row := q.db.QueryRow(ctx, getAppointment, arg.ID, arg.ClinicID)
 	var i GetAppointmentRow
 	err := row.Scan(
 		&i.ID,
@@ -186,6 +210,7 @@ func (q *Queries) GetAppointment(ctx context.Context, id int64) (GetAppointmentR
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClinicID,
 		&i.PatientName,
 		&i.PatientPhone,
 		&i.DoctorName,
@@ -196,17 +221,22 @@ func (q *Queries) GetAppointment(ctx context.Context, id int64) (GetAppointmentR
 
 const listAppointmentsByPatient = `-- name: ListAppointmentsByPatient :many
 SELECT
-    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at,
+    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id,
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id
-JOIN doctors  d ON d.id = a.doctor_id
-WHERE a.patient_id = $1
+JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
+JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+WHERE a.patient_id = $1 AND a.clinic_id = $2
 ORDER BY a.start_time DESC
 `
+
+type ListAppointmentsByPatientParams struct {
+	PatientID int64 `json:"patient_id"`
+	ClinicID  int64 `json:"clinic_id"`
+}
 
 type ListAppointmentsByPatientRow struct {
 	ID            int64       `json:"id"`
@@ -221,14 +251,15 @@ type ListAppointmentsByPatientRow struct {
 	CreatedBy     pgtype.Int8 `json:"created_by"`
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
+	ClinicID      int64       `json:"clinic_id"`
 	PatientName   string      `json:"patient_name"`
 	PatientPhone  pgtype.Text `json:"patient_phone"`
 	DoctorName    string      `json:"doctor_name"`
 	DoctorColor   string      `json:"doctor_color"`
 }
 
-func (q *Queries) ListAppointmentsByPatient(ctx context.Context, patientID int64) ([]ListAppointmentsByPatientRow, error) {
-	rows, err := q.db.Query(ctx, listAppointmentsByPatient, patientID)
+func (q *Queries) ListAppointmentsByPatient(ctx context.Context, arg ListAppointmentsByPatientParams) ([]ListAppointmentsByPatientRow, error) {
+	rows, err := q.db.Query(ctx, listAppointmentsByPatient, arg.PatientID, arg.ClinicID)
 	if err != nil {
 		return nil, err
 	}
@@ -249,84 +280,7 @@ func (q *Queries) ListAppointmentsByPatient(ctx context.Context, patientID int64
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.PatientName,
-			&i.PatientPhone,
-			&i.DoctorName,
-			&i.DoctorColor,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAppointmentsInRange = `-- name: ListAppointmentsInRange :many
-SELECT
-    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at,
-    p.full_name AS patient_name,
-    p.phone     AS patient_phone,
-    d.full_name AS doctor_name,
-    d.color     AS doctor_color
-FROM appointments a
-JOIN patients p ON p.id = a.patient_id
-JOIN doctors  d ON d.id = a.doctor_id
-WHERE a.start_time >= $1
-  AND a.start_time <  $2
-  AND ($3::bigint IS NULL OR a.doctor_id = $3::bigint)
-ORDER BY a.start_time
-`
-
-type ListAppointmentsInRangeParams struct {
-	From     time.Time   `json:"from"`
-	To       time.Time   `json:"to"`
-	DoctorID pgtype.Int8 `json:"doctor_id"`
-}
-
-type ListAppointmentsInRangeRow struct {
-	ID            int64       `json:"id"`
-	PatientID     int64       `json:"patient_id"`
-	DoctorID      int64       `json:"doctor_id"`
-	StartTime     time.Time   `json:"start_time"`
-	EndTime       time.Time   `json:"end_time"`
-	Status        string      `json:"status"`
-	Diagnosis     pgtype.Text `json:"diagnosis"`
-	Description   pgtype.Text `json:"description"`
-	NextVisitDate *time.Time  `json:"next_visit_date"`
-	CreatedBy     pgtype.Int8 `json:"created_by"`
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
-	PatientName   string      `json:"patient_name"`
-	PatientPhone  pgtype.Text `json:"patient_phone"`
-	DoctorName    string      `json:"doctor_name"`
-	DoctorColor   string      `json:"doctor_color"`
-}
-
-func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointmentsInRangeParams) ([]ListAppointmentsInRangeRow, error) {
-	rows, err := q.db.Query(ctx, listAppointmentsInRange, arg.From, arg.To, arg.DoctorID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListAppointmentsInRangeRow{}
-	for rows.Next() {
-		var i ListAppointmentsInRangeRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.PatientID,
-			&i.DoctorID,
-			&i.StartTime,
-			&i.EndTime,
-			&i.Status,
-			&i.Diagnosis,
-			&i.Description,
-			&i.NextVisitDate,
-			&i.CreatedBy,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.ClinicID,
 			&i.PatientName,
 			&i.PatientPhone,
 			&i.DoctorName,
@@ -344,18 +298,23 @@ func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointme
 
 const listAppointmentsByStatus = `-- name: ListAppointmentsByStatus :many
 SELECT
-    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at,
+    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id,
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id
-JOIN doctors  d ON d.id = a.doctor_id
-WHERE a.status = $1
+JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
+JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+WHERE a.clinic_id = $1 AND a.status = $2
 ORDER BY a.start_time DESC
 LIMIT 500
 `
+
+type ListAppointmentsByStatusParams struct {
+	ClinicID int64  `json:"clinic_id"`
+	Status   string `json:"status"`
+}
 
 type ListAppointmentsByStatusRow struct {
 	ID            int64       `json:"id"`
@@ -370,14 +329,15 @@ type ListAppointmentsByStatusRow struct {
 	CreatedBy     pgtype.Int8 `json:"created_by"`
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
+	ClinicID      int64       `json:"clinic_id"`
 	PatientName   string      `json:"patient_name"`
 	PatientPhone  pgtype.Text `json:"patient_phone"`
 	DoctorName    string      `json:"doctor_name"`
 	DoctorColor   string      `json:"doctor_color"`
 }
 
-func (q *Queries) ListAppointmentsByStatus(ctx context.Context, status string) ([]ListAppointmentsByStatusRow, error) {
-	rows, err := q.db.Query(ctx, listAppointmentsByStatus, status)
+func (q *Queries) ListAppointmentsByStatus(ctx context.Context, arg ListAppointmentsByStatusParams) ([]ListAppointmentsByStatusRow, error) {
+	rows, err := q.db.Query(ctx, listAppointmentsByStatus, arg.ClinicID, arg.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -398,6 +358,94 @@ func (q *Queries) ListAppointmentsByStatus(ctx context.Context, status string) (
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ClinicID,
+			&i.PatientName,
+			&i.PatientPhone,
+			&i.DoctorName,
+			&i.DoctorColor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAppointmentsInRange = `-- name: ListAppointmentsInRange :many
+SELECT
+    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id,
+    p.full_name AS patient_name,
+    p.phone     AS patient_phone,
+    d.full_name AS doctor_name,
+    d.color     AS doctor_color
+FROM appointments a
+JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
+JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+WHERE a.clinic_id = $1
+  AND a.start_time >= $2
+  AND a.start_time <  $3
+  AND ($4::bigint IS NULL OR a.doctor_id = $4::bigint)
+ORDER BY a.start_time
+`
+
+type ListAppointmentsInRangeParams struct {
+	ClinicID int64       `json:"clinic_id"`
+	From     time.Time   `json:"from"`
+	To       time.Time   `json:"to"`
+	DoctorID pgtype.Int8 `json:"doctor_id"`
+}
+
+type ListAppointmentsInRangeRow struct {
+	ID            int64       `json:"id"`
+	PatientID     int64       `json:"patient_id"`
+	DoctorID      int64       `json:"doctor_id"`
+	StartTime     time.Time   `json:"start_time"`
+	EndTime       time.Time   `json:"end_time"`
+	Status        string      `json:"status"`
+	Diagnosis     pgtype.Text `json:"diagnosis"`
+	Description   pgtype.Text `json:"description"`
+	NextVisitDate *time.Time  `json:"next_visit_date"`
+	CreatedBy     pgtype.Int8 `json:"created_by"`
+	CreatedAt     time.Time   `json:"created_at"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+	ClinicID      int64       `json:"clinic_id"`
+	PatientName   string      `json:"patient_name"`
+	PatientPhone  pgtype.Text `json:"patient_phone"`
+	DoctorName    string      `json:"doctor_name"`
+	DoctorColor   string      `json:"doctor_color"`
+}
+
+func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointmentsInRangeParams) ([]ListAppointmentsInRangeRow, error) {
+	rows, err := q.db.Query(ctx, listAppointmentsInRange,
+		arg.ClinicID,
+		arg.From,
+		arg.To,
+		arg.DoctorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAppointmentsInRangeRow{}
+	for rows.Next() {
+		var i ListAppointmentsInRangeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PatientID,
+			&i.DoctorID,
+			&i.StartTime,
+			&i.EndTime,
+			&i.Status,
+			&i.Diagnosis,
+			&i.Description,
+			&i.NextVisitDate,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ClinicID,
 			&i.PatientName,
 			&i.PatientPhone,
 			&i.DoctorName,
@@ -424,8 +472,8 @@ SET patient_id = $2,
     description = $8,
     next_visit_date = $9,
     updated_at = now()
-WHERE id = $1
-RETURNING id, patient_id, doctor_id, start_time, end_time, status, diagnosis, description, next_visit_date, created_by, created_at, updated_at
+WHERE id = $1 AND clinic_id = $10
+RETURNING id, patient_id, doctor_id, start_time, end_time, status, diagnosis, description, next_visit_date, created_by, created_at, updated_at, clinic_id
 `
 
 type UpdateAppointmentParams struct {
@@ -438,6 +486,7 @@ type UpdateAppointmentParams struct {
 	Diagnosis     pgtype.Text `json:"diagnosis"`
 	Description   pgtype.Text `json:"description"`
 	NextVisitDate *time.Time  `json:"next_visit_date"`
+	ClinicID      int64       `json:"clinic_id"`
 }
 
 func (q *Queries) UpdateAppointment(ctx context.Context, arg UpdateAppointmentParams) (Appointment, error) {
@@ -451,6 +500,7 @@ func (q *Queries) UpdateAppointment(ctx context.Context, arg UpdateAppointmentPa
 		arg.Diagnosis,
 		arg.Description,
 		arg.NextVisitDate,
+		arg.ClinicID,
 	)
 	var i Appointment
 	err := row.Scan(
@@ -466,6 +516,7 @@ func (q *Queries) UpdateAppointment(ctx context.Context, arg UpdateAppointmentPa
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClinicID,
 	)
 	return i, err
 }

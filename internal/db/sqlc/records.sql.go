@@ -13,12 +13,13 @@ import (
 )
 
 const createPatientRecord = `-- name: CreatePatientRecord :one
-INSERT INTO patient_records (patient_id, type, title, note, file_path, file_name, created_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, patient_id, type, title, note, file_path, file_name, created_by, created_at
+INSERT INTO patient_records (clinic_id, patient_id, type, title, note, file_path, file_name, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, patient_id, type, title, note, file_path, file_name, created_by, created_at, clinic_id
 `
 
 type CreatePatientRecordParams struct {
+	ClinicID  int64       `json:"clinic_id"`
 	PatientID int64       `json:"patient_id"`
 	Type      string      `json:"type"`
 	Title     pgtype.Text `json:"title"`
@@ -30,6 +31,7 @@ type CreatePatientRecordParams struct {
 
 func (q *Queries) CreatePatientRecord(ctx context.Context, arg CreatePatientRecordParams) (PatientRecord, error) {
 	row := q.db.QueryRow(ctx, createPatientRecord,
+		arg.ClinicID,
 		arg.PatientID,
 		arg.Type,
 		arg.Title,
@@ -49,25 +51,36 @@ func (q *Queries) CreatePatientRecord(ctx context.Context, arg CreatePatientReco
 		&i.FileName,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ClinicID,
 	)
 	return i, err
 }
 
 const deletePatientRecord = `-- name: DeletePatientRecord :exec
-DELETE FROM patient_records WHERE id = $1
+DELETE FROM patient_records WHERE id = $1 AND clinic_id = $2
 `
 
-func (q *Queries) DeletePatientRecord(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deletePatientRecord, id)
+type DeletePatientRecordParams struct {
+	ID       int64 `json:"id"`
+	ClinicID int64 `json:"clinic_id"`
+}
+
+func (q *Queries) DeletePatientRecord(ctx context.Context, arg DeletePatientRecordParams) error {
+	_, err := q.db.Exec(ctx, deletePatientRecord, arg.ID, arg.ClinicID)
 	return err
 }
 
 const getPatientRecord = `-- name: GetPatientRecord :one
-SELECT id, patient_id, type, title, note, file_path, file_name, created_by, created_at FROM patient_records WHERE id = $1
+SELECT id, patient_id, type, title, note, file_path, file_name, created_by, created_at, clinic_id FROM patient_records WHERE id = $1 AND clinic_id = $2
 `
 
-func (q *Queries) GetPatientRecord(ctx context.Context, id int64) (PatientRecord, error) {
-	row := q.db.QueryRow(ctx, getPatientRecord, id)
+type GetPatientRecordParams struct {
+	ID       int64 `json:"id"`
+	ClinicID int64 `json:"clinic_id"`
+}
+
+func (q *Queries) GetPatientRecord(ctx context.Context, arg GetPatientRecordParams) (PatientRecord, error) {
+	row := q.db.QueryRow(ctx, getPatientRecord, arg.ID, arg.ClinicID)
 	var i PatientRecord
 	err := row.Scan(
 		&i.ID,
@@ -79,27 +92,31 @@ func (q *Queries) GetPatientRecord(ctx context.Context, id int64) (PatientRecord
 		&i.FileName,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ClinicID,
 	)
 	return i, err
 }
 
 const listPatientRecords = `-- name: ListPatientRecords :many
-SELECT r.id, r.patient_id, r.type, r.title, r.note, r.file_path, r.file_name,
+SELECT r.id, r.clinic_id, r.patient_id, r.type, r.title, r.note, r.file_path, r.file_name,
        r.created_by, r.created_at, COALESCE(u.full_name, '') AS created_by_name
 FROM patient_records r
 LEFT JOIN users u ON u.id = r.created_by
 WHERE r.patient_id = $1
-  AND ($2::text IS NULL OR r.type = $2::text)
+  AND r.clinic_id = $2
+  AND ($3::text IS NULL OR r.type = $3::text)
 ORDER BY r.created_at DESC
 `
 
 type ListPatientRecordsParams struct {
 	PatientID int64       `json:"patient_id"`
+	ClinicID  int64       `json:"clinic_id"`
 	Type      pgtype.Text `json:"type"`
 }
 
 type ListPatientRecordsRow struct {
 	ID            int64       `json:"id"`
+	ClinicID      int64       `json:"clinic_id"`
 	PatientID     int64       `json:"patient_id"`
 	Type          string      `json:"type"`
 	Title         pgtype.Text `json:"title"`
@@ -112,7 +129,7 @@ type ListPatientRecordsRow struct {
 }
 
 func (q *Queries) ListPatientRecords(ctx context.Context, arg ListPatientRecordsParams) ([]ListPatientRecordsRow, error) {
-	rows, err := q.db.Query(ctx, listPatientRecords, arg.PatientID, arg.Type)
+	rows, err := q.db.Query(ctx, listPatientRecords, arg.PatientID, arg.ClinicID, arg.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +139,7 @@ func (q *Queries) ListPatientRecords(ctx context.Context, arg ListPatientRecords
 		var i ListPatientRecordsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ClinicID,
 			&i.PatientID,
 			&i.Type,
 			&i.Title,

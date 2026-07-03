@@ -9,33 +9,38 @@ import (
 )
 
 type adminStatsDTO struct {
-	TotalPatients    int64 `json:"total_patients"`
-	TotalDoctors     int64 `json:"total_doctors"`
-	TotalUsers       int64 `json:"total_users"`
-	ScheduledCount   int64 `json:"scheduled_count"`
-	CompletedCount   int64 `json:"completed_count"`
-	CancelledCount   int64 `json:"cancelled_count"`
-	NoShowCount      int64 `json:"no_show_count"`
-	ArchivedCount    int64 `json:"archived_count"`
+	TotalPatients  int64 `json:"total_patients"`
+	TotalDoctors   int64 `json:"total_doctors"`
+	TotalUsers     int64 `json:"total_users"`
+	ScheduledCount int64 `json:"scheduled_count"`
+	CompletedCount int64 `json:"completed_count"`
+	CancelledCount int64 `json:"cancelled_count"`
+	NoShowCount    int64 `json:"no_show_count"`
+	ArchivedCount  int64 `json:"archived_count"`
 }
 
-// AdminStats returns aggregate statistics for the admin panel.
+// AdminStats returns aggregate statistics for the clinic admin panel.
 func (h *Handlers) AdminStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	clinicID, err := h.clinicID(ctx)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 
 	var stats adminStatsDTO
 
 	row := h.pool.QueryRow(ctx, `
 		SELECT
-			(SELECT count(*) FROM patients)::bigint,
-			(SELECT count(*) FROM doctors WHERE is_active = true)::bigint,
-			(SELECT count(*) FROM users)::bigint,
-			(SELECT count(*) FROM appointments WHERE status = 'scheduled')::bigint,
-			(SELECT count(*) FROM appointments WHERE status = 'completed')::bigint,
-			(SELECT count(*) FROM appointments WHERE status = 'cancelled')::bigint,
-			(SELECT count(*) FROM appointments WHERE status = 'no_show')::bigint,
-			(SELECT count(*) FROM appointments WHERE status IN ('completed','cancelled'))::bigint
-	`)
+			(SELECT count(*) FROM patients WHERE clinic_id = $1)::bigint,
+			(SELECT count(*) FROM doctors WHERE clinic_id = $1 AND is_active = true)::bigint,
+			(SELECT count(*) FROM users WHERE clinic_id = $1)::bigint,
+			(SELECT count(*) FROM appointments WHERE clinic_id = $1 AND status = 'scheduled')::bigint,
+			(SELECT count(*) FROM appointments WHERE clinic_id = $1 AND status = 'completed')::bigint,
+			(SELECT count(*) FROM appointments WHERE clinic_id = $1 AND status = 'cancelled')::bigint,
+			(SELECT count(*) FROM appointments WHERE clinic_id = $1 AND status = 'no_show')::bigint,
+			(SELECT count(*) FROM appointments WHERE clinic_id = $1 AND status IN ('completed','cancelled'))::bigint
+	`, clinicID)
 	if err := row.Scan(
 		&stats.TotalPatients,
 		&stats.TotalDoctors,
@@ -62,6 +67,11 @@ type dashboardDTO struct {
 // Dashboard returns today's appointments plus simple daily/weekly counts.
 func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	clinicID, err := h.clinicID(ctx)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	now := time.Now().UTC()
 	dayStart := now.Truncate(24 * time.Hour)
 	dayEnd := dayStart.Add(24 * time.Hour)
@@ -70,6 +80,7 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 	scope, _ := h.doctorScope(ctx)
 
 	todayRows, err := h.q.ListAppointmentsInRange(ctx, sqlc.ListAppointmentsInRangeParams{
+		ClinicID: clinicID,
 		From:     dayStart,
 		To:       dayEnd,
 		DoctorID: scope,
@@ -83,12 +94,12 @@ func (h *Handlers) Dashboard(w http.ResponseWriter, r *http.Request) {
 		today = append(today, fromRangeRow(a))
 	}
 
-	todayCount, err := h.q.CountAppointmentsInRange(ctx, sqlc.CountAppointmentsInRangeParams{From: dayStart, To: dayEnd, DoctorID: scope})
+	todayCount, err := h.q.CountAppointmentsInRange(ctx, sqlc.CountAppointmentsInRangeParams{ClinicID: clinicID, From: dayStart, To: dayEnd, DoctorID: scope})
 	if err != nil {
 		httpx.Fail(w, err)
 		return
 	}
-	weekCount, err := h.q.CountAppointmentsInRange(ctx, sqlc.CountAppointmentsInRangeParams{From: dayStart, To: weekEnd, DoctorID: scope})
+	weekCount, err := h.q.CountAppointmentsInRange(ctx, sqlc.CountAppointmentsInRangeParams{ClinicID: clinicID, From: dayStart, To: weekEnd, DoctorID: scope})
 	if err != nil {
 		httpx.Fail(w, err)
 		return

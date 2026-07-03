@@ -5,9 +5,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"temart/internal/db/sqlc"
@@ -30,6 +32,7 @@ func NewAppointmentService(q *sqlc.Queries) *AppointmentService {
 // AppointmentInput is the normalised set of fields used to create or update an
 // appointment. Times are in UTC.
 type AppointmentInput struct {
+	ClinicID      int64
 	PatientID     int64
 	DoctorID      int64
 	StartTime     time.Time
@@ -48,6 +51,7 @@ func (s *AppointmentService) ensureNoOverlap(ctx context.Context, in Appointment
 		return nil
 	}
 	count, err := s.q.CountOverlappingAppointments(ctx, sqlc.CountOverlappingAppointmentsParams{
+		ClinicID:  in.ClinicID,
 		DoctorID:  in.DoctorID,
 		ExcludeID: excludeID,
 		StartTime: in.StartTime,
@@ -62,15 +66,38 @@ func (s *AppointmentService) ensureNoOverlap(ctx context.Context, in Appointment
 	return nil
 }
 
+// ensureRefsInClinic verifies that the referenced patient and doctor both
+// belong to the appointment's clinic. Without this, a clinic user could attach
+// another clinic's patient/doctor to an appointment and read their data back.
+func (s *AppointmentService) ensureRefsInClinic(ctx context.Context, in AppointmentInput) error {
+	if _, err := s.q.GetPatient(ctx, sqlc.GetPatientParams{ID: in.PatientID, ClinicID: in.ClinicID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return httpx.NewError(http.StatusBadRequest, "пациент не найден в вашей клинике")
+		}
+		return err
+	}
+	if _, err := s.q.GetDoctor(ctx, sqlc.GetDoctorParams{ID: in.DoctorID, ClinicID: in.ClinicID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return httpx.NewError(http.StatusBadRequest, "врач не найден в вашей клинике")
+		}
+		return err
+	}
+	return nil
+}
+
 // Create validates and inserts a new appointment.
 func (s *AppointmentService) Create(ctx context.Context, in AppointmentInput, createdBy int64) (sqlc.Appointment, error) {
 	if !in.EndTime.After(in.StartTime) {
 		return sqlc.Appointment{}, httpx.NewError(http.StatusBadRequest, "время окончания должно быть позже начала")
 	}
+	if err := s.ensureRefsInClinic(ctx, in); err != nil {
+		return sqlc.Appointment{}, err
+	}
 	if err := s.ensureNoOverlap(ctx, in, 0); err != nil {
 		return sqlc.Appointment{}, err
 	}
 	return s.q.CreateAppointment(ctx, sqlc.CreateAppointmentParams{
+		ClinicID:      in.ClinicID,
 		PatientID:     in.PatientID,
 		DoctorID:      in.DoctorID,
 		StartTime:     in.StartTime,
@@ -88,6 +115,9 @@ func (s *AppointmentService) Update(ctx context.Context, id int64, in Appointmen
 	if !in.EndTime.After(in.StartTime) {
 		return sqlc.Appointment{}, httpx.NewError(http.StatusBadRequest, "время окончания должно быть позже начала")
 	}
+	if err := s.ensureRefsInClinic(ctx, in); err != nil {
+		return sqlc.Appointment{}, err
+	}
 	if err := s.ensureNoOverlap(ctx, in, id); err != nil {
 		return sqlc.Appointment{}, err
 	}
@@ -101,6 +131,7 @@ func (s *AppointmentService) Update(ctx context.Context, id int64, in Appointmen
 		Diagnosis:     text(in.Diagnosis),
 		Description:   text(in.Description),
 		NextVisitDate: in.NextVisitDate,
+		ClinicID:      in.ClinicID,
 	})
 }
 

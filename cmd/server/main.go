@@ -50,7 +50,7 @@ func run() error {
 	defer pool.Close()
 
 	q := sqlc.New(pool)
-	if err := db.BootstrapOwner(ctx, q, cfg.OwnerName, cfg.OwnerEmail, cfg.OwnerPassword); err != nil {
+	if err := db.BootstrapSuperadmin(ctx, q, cfg.SuperadminName, cfg.SuperadminEmail, cfg.SuperadminPassword); err != nil {
 		return err
 	}
 
