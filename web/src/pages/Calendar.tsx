@@ -19,6 +19,9 @@ interface ModalState {
   initialEnd?: string;
 }
 
+// Узкий экран (телефон) — открываем календарь в режиме дня.
+const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
 export default function CalendarPage() {
   const [range, setRange] = useState<{ from: string; to: string }>({
     from: "",
@@ -86,10 +89,11 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white p-4 shadow-sm">
+      <div className="rounded-2xl bg-white p-2 shadow-sm sm:p-4">
         <FullCalendar
           plugins={[timeGridPlugin, interactionPlugin]}
-          initialView="timeGridWeek"
+          // На телефоне по умолчанию — вид «День» (неделя не влезает по ширине).
+          initialView={isMobile ? "timeGridDay" : "timeGridWeek"}
           locale={ruLocale}
           headerToolbar={{
             left: "prev,next today",
@@ -103,6 +107,7 @@ export default function CalendarPage() {
           selectable
           selectMirror
           height="auto"
+          expandRows
           events={events}
           datesSet={onDatesSet}
           eventClick={onEventClick}

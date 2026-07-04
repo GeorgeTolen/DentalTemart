@@ -42,3 +42,24 @@ body {
 .fc .fc-col-header-cell.fc-day-sun {
   background-color: rgb(255 228 230 / 0.6);
 }
+
+/* На телефоне панель управления календарём складывается в столбик, а не
+   налезает друг на друга. */
+@media (max-width: 640px) {
+  .fc .fc-toolbar.fc-header-toolbar {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .fc .fc-toolbar-title {
+    font-size: 1.05rem;
+  }
+  .fc .fc-button {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+  }
+  .fc .fc-col-header-cell-cushion,
+  .fc .fc-timegrid-slot-label-cushion {
+    font-size: 0.75rem;
+  }
+}
