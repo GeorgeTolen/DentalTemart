@@ -1,0 +1,10 @@
+# Автоматический HTTPS (Let's Encrypt) для temart.kz.
+# Требует: DNS A-запись temart.kz -> IP сервера, открытые порты 80 и 443.
+temart.kz, www.temart.kz {
+	encode zstd gzip
+	# Загрузка медицинских файлов пациентов — до 30 МБ.
+	request_body {
+		max_size 30MB
+	}
+	reverse_proxy backend:8080
+}

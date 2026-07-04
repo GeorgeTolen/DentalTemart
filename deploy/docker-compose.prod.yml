@@ -1,0 +1,64 @@
+# Продакшен-стек Temart: PostgreSQL + backend (SPA внутри образа) + Caddy (HTTPS).
+# Разворачивается на VPS. Образ backend собирается в GitHub Actions и тянется с GHCR.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d
+name: temart
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    image: ${IMAGE:-ghcr.io/georgetolen/dentaltemart:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      PORT: "8080"
+      JWT_SECRET: ${JWT_SECRET}
+      ACCESS_TTL: 15m
+      REFRESH_TTL: 8760h
+      # Сервер за HTTPS (Caddy) — куки помечаются Secure.
+      COOKIE_SECURE: "true"
+      CORS_ORIGIN: https://temart.kz
+      SUPERADMIN_NAME: ${SUPERADMIN_NAME}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
+      WEB_DIR: /app/web
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:
