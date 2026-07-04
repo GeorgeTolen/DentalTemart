@@ -228,7 +228,7 @@ function AppointmentRow({
               </Button>
             )}
             <Button variant="secondary" className="py-1 px-3 text-xs" onClick={() => setSchedulingFollowUp(true)}>
-              Следующий приём
+              {a.next_visit_date ? "Изменить след. приём" : "Следующий приём"}
             </Button>
             {isAdmin && a.status !== "cancelled" && (
               <Button variant="danger" className="py-1 px-3 text-xs" onClick={onCancel}>

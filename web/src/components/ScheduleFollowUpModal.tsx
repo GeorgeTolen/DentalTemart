@@ -24,8 +24,11 @@ export default function ScheduleFollowUpModal({
   const originalTime = new Date(appointment.start_time);
   const pad = (n: number) => String(n).padStart(2, "0");
 
+  // Если у записи уже назначен следующий приём — режим «Изменить».
+  const isEdit = !!appointment.next_visit_date;
+
   const [doctorId, setDoctorId] = useState(appointment.doctor_id);
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(appointment.next_visit_date ?? "");
   const [time, setTime] = useState(`${pad(originalTime.getHours())}:${pad(originalTime.getMinutes())}`);
   const [error, setError] = useState("");
 
@@ -40,6 +43,7 @@ export default function ScheduleFollowUpModal({
       const endISO = new Date(
         new Date(startLocal).getTime() + (durationMs > 0 ? durationMs : 30 * 60000)
       ).toISOString();
+      // 1) создаём запись на следующий приём
       await save.mutateAsync({
         patient_id: appointment.patient_id,
         doctor_id: doctorId,
@@ -50,6 +54,19 @@ export default function ScheduleFollowUpModal({
         description: "",
         next_visit_date: "",
       });
+      // 2) отмечаем дату следующего приёма в текущей записи — тогда кнопка
+      // превращается в «Изменить след. приём».
+      await save.mutateAsync({
+        id: appointment.id,
+        patient_id: appointment.patient_id,
+        doctor_id: appointment.doctor_id,
+        start_time: appointment.start_time,
+        end_time: appointment.end_time,
+        status: appointment.status,
+        diagnosis: appointment.diagnosis,
+        description: appointment.description,
+        next_visit_date: date,
+      });
       onClose();
     } catch (e) {
       setError(errorMessage(e));
@@ -58,13 +75,13 @@ export default function ScheduleFollowUpModal({
 
   return (
     <Modal
-      title="Записать на следующий приём"
+      title={isEdit ? "Изменить следующий приём" : "Записать на следующий приём"}
       onClose={onClose}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Отмена</Button>
           <Button onClick={submit} disabled={save.isPending}>
-            {save.isPending ? "Сохранение…" : "Записать"}
+            {save.isPending ? "Сохранение…" : isEdit ? "Сохранить" : "Записать"}
           </Button>
         </>
       }

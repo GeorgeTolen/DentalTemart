@@ -324,7 +324,7 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
                 </Button>
               )}
               <Button variant="secondary" onClick={() => setSchedulingFollowUp(true)}>
-                Следующий приём
+                {a.next_visit_date ? "Изменить след. приём" : "Следующий приём"}
               </Button>
             </div>
           </div>
