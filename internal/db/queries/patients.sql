@@ -5,6 +5,7 @@
 -- name: ListPatients :many
 -- Matches when the search term is a prefix of any word in the name, a prefix
 -- of the phone number, or a prefix of the IIN. Ищет по всей платформе.
+-- Постранично: база общая и растёт, выгружать её целиком нельзя.
 SELECT p.*, c.name AS clinic_name FROM patients p
 LEFT JOIN clinics c ON c.id = p.clinic_id
 WHERE (
@@ -14,7 +15,17 @@ WHERE (
     OR p.iin LIKE sqlc.narg('search')::text || '%'
   )
 ORDER BY p.full_name
-LIMIT 200;
+LIMIT sqlc.arg('page_size') OFFSET sqlc.arg('page_offset');
+
+-- name: CountPatients :one
+-- Тот же фильтр, что и в ListPatients — для счётчика страниц.
+SELECT count(*) FROM patients p
+WHERE (
+    sqlc.narg('search')::text IS NULL
+    OR (' ' || p.full_name) ILIKE '% ' || sqlc.narg('search')::text || '%'
+    OR p.phone ILIKE sqlc.narg('search')::text || '%'
+    OR p.iin LIKE sqlc.narg('search')::text || '%'
+  );
 
 -- name: GetPatient :one
 SELECT p.*, c.name AS clinic_name FROM patients p
@@ -47,23 +58,3 @@ UPDATE patients SET avatar_path = $2 WHERE id = $1 RETURNING *;
 -- Только клиника, заведшая карточку: удаление каскадом уносит приёмы всех клиник.
 DELETE FROM patients WHERE id = $1 AND clinic_id = $2;
 
--- name: ListPatientsForDoctor :many
--- Same prefix-word search, restricted to patients that have at least one
--- appointment with the given doctor.
-SELECT DISTINCT p.*, c.name AS clinic_name FROM patients p
-JOIN appointments a ON a.patient_id = p.id
-LEFT JOIN clinics c ON c.id = p.clinic_id
-WHERE a.doctor_id = sqlc.arg('doctor_id')
-  AND (
-    sqlc.narg('search')::text IS NULL
-    OR (' ' || p.full_name) ILIKE '% ' || sqlc.narg('search')::text || '%'
-    OR p.phone ILIKE sqlc.narg('search')::text || '%'
-    OR p.iin LIKE sqlc.narg('search')::text || '%'
-  )
-ORDER BY p.full_name
-LIMIT 200;
-
--- name: PatientBelongsToDoctor :one
-SELECT EXISTS(
-    SELECT 1 FROM appointments WHERE patient_id = $1 AND doctor_id = $2
-) AS belongs;

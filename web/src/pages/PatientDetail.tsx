@@ -53,6 +53,8 @@ export default function PatientDetail() {
   const lastVisit = history.find((a) => a.status === "completed");
   const nextVisit = [...history].reverse().find((a) => a.status === "scheduled");
   const category = ageCategory(patient.birth_date);
+  // Данные карточки (включая фото) меняет только клиника, которая её завела.
+  const canEditPatient = !readOnly && patient.is_own;
 
   return (
     <div className="space-y-6">
@@ -62,9 +64,13 @@ export default function PatientDetail() {
         </Link>
         {!readOnly && (
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => setEditingPatient(true)}>
-              Редактировать
-            </Button>
+            {/* Карточка общая для платформы, но правит её только та клиника,
+                которая её завела — остальным сервер ответит 403. */}
+            {patient.is_own && (
+              <Button variant="secondary" onClick={() => setEditingPatient(true)}>
+                Редактировать
+              </Button>
+            )}
             <Button onClick={() => setNewAppt(true)}>
               + Новая запись
             </Button>
@@ -75,15 +81,15 @@ export default function PatientDetail() {
       {/* Карточка пациента */}
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start gap-4">
-          {readOnly ? (
-            <Avatar name={patient.full_name} url={patient.avatar_url} size="lg" />
-          ) : (
+          {canEditPatient ? (
             <AvatarUpload
               kind="patients"
               id={patient.id}
               name={patient.full_name}
               url={patient.avatar_url}
             />
+          ) : (
+            <Avatar name={patient.full_name} url={patient.avatar_url} size="lg" />
           )}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">

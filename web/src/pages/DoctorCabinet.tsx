@@ -20,6 +20,7 @@ import {
 import { Button, Field, Input, Modal, StatusBadge, Textarea } from "../components/ui";
 import { DateInput } from "../components/DateInputs";
 import { Avatar, AvatarUpload } from "../components/Avatar";
+import PasswordChangeForm from "../components/PasswordChangeForm";
 import type { Appointment, Doctor } from "../lib/types";
 
 const WEEKDAY_LABELS: Record<number, string> = {
@@ -136,6 +137,9 @@ export default function DoctorCabinet() {
           )}
         </>
       )}
+
+      {/* Пароль врач меняет сам — даже если профиль врача ещё не привязан. */}
+      {!readOnly && <PasswordChangeForm />}
     </div>
   );
 }

@@ -6,9 +6,17 @@ import type {
   DateSelectArg,
   DatesSetArg,
   EventClickArg,
+  EventDropArg,
 } from "@fullcalendar/core";
+import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import ruLocale from "@fullcalendar/core/locales/ru";
-import { useAppointments, useDoctors } from "../api/hooks";
+import {
+  useAppointments,
+  useDoctors,
+  useMyDoctorProfile,
+  useSaveAppointment,
+} from "../api/hooks";
+import { errorMessage } from "../api/client";
 import type { Appointment } from "../lib/types";
 import AppointmentModal from "../components/AppointmentModal";
 import { Button, Select } from "../components/ui";
@@ -24,9 +32,8 @@ interface ModalState {
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
 export default function CalendarPage() {
-  // Режим поддержки: календарь показываем, но создавать и открывать записи на
-  // редактирование нельзя — подробности приёмов видны на вкладке «Записи».
-  const { readOnly } = useAuth();
+  // Режим поддержки: календарь показываем, но создавать и двигать записи нельзя.
+  const { user, readOnly } = useAuth();
   const [range, setRange] = useState<{ from: string; to: string }>({
     from: "",
     to: "",
@@ -40,6 +47,21 @@ export default function CalendarPage() {
     range.to,
     doctorId
   );
+  const saveAppt = useSaveAppointment();
+
+  // Врач видит расписание всей клиники, но двигать может только свои приёмы —
+  // сервер чужие всё равно отклонит, так что не даём и тянуть.
+  const isDoctor = user?.role === "doctor";
+  const { data: myProfile } = useMyDoctorProfile(isDoctor);
+  const myDoctorId = isDoctor ? myProfile?.id ?? null : null;
+
+  function canMove(a: Appointment): boolean {
+    if (readOnly) return false;
+    // Завершённый приём — уже история, отменённый двигать незачем.
+    if (a.status === "completed" || a.status === "cancelled") return false;
+    if (isDoctor) return myDoctorId != null && a.doctor_id === myDoctorId;
+    return true;
+  }
 
   const events = appointments.map((a) => ({
     id: String(a.id),
@@ -47,6 +69,7 @@ export default function CalendarPage() {
     start: a.start_time,
     end: a.end_time,
     backgroundColor: a.status === "cancelled" ? "#94A3B8" : a.doctor_color,
+    editable: canMove(a),
     extendedProps: { appointment: a },
   }));
 
@@ -67,6 +90,40 @@ export default function CalendarPage() {
       initialStart: toLocalInput(arg.start),
       initialEnd: toLocalInput(arg.end),
     });
+  }
+
+  /**
+   * Перенос и растягивание приёма мышью.
+   *
+   * Отправляем запись целиком, меняя только время: UpdateAppointment на сервере
+   * перезаписывает все поля, и частичный payload стёр бы диагноз и дату
+   * следующего приёма. При отказе (например, 409 — врач уже занят) возвращаем
+   * карточку на место.
+   */
+  async function onEventMoved(info: EventDropArg | EventResizeDoneArg) {
+    const a = info.event.extendedProps.appointment as Appointment;
+    const start = info.event.start;
+    const end = info.event.end;
+    if (!start || !end) {
+      info.revert();
+      return;
+    }
+    try {
+      await saveAppt.mutateAsync({
+        id: a.id,
+        patient_id: a.patient_id,
+        doctor_id: a.doctor_id,
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        status: a.status,
+        diagnosis: a.diagnosis,
+        description: a.description,
+        next_visit_date: a.next_visit_date ?? "",
+      });
+    } catch (e) {
+      info.revert();
+      alert(errorMessage(e));
+    }
   }
 
   return (
@@ -97,6 +154,13 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {!readOnly && (
+        <p className="text-sm text-slate-400">
+          Карточку записи можно перетащить на другое время или растянуть за край,
+          чтобы изменить длительность.
+        </p>
+      )}
+
       <div className="rounded-2xl bg-white p-2 shadow-sm sm:p-4">
         <FullCalendar
           plugins={[timeGridPlugin, interactionPlugin]}
@@ -110,16 +174,27 @@ export default function CalendarPage() {
           }}
           slotMinTime="08:00:00"
           slotMaxTime="20:00:00"
+          // По умолчанию FullCalendar пишет на оси только час («8»); просим
+          // полное время, чтобы читалось как «08:00».
+          slotLabelFormat={{
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          }}
           allDaySlot={false}
           nowIndicator
           selectable={!readOnly}
           selectMirror
+          editable={!readOnly}
+          eventDurationEditable={!readOnly}
           height="auto"
           expandRows
           events={events}
           datesSet={onDatesSet}
           eventClick={onEventClick}
           select={onSelect}
+          eventDrop={onEventMoved}
+          eventResize={onEventMoved}
         />
       </div>
 

@@ -12,7 +12,9 @@ import type {
   ClinicUser,
   Dashboard,
   Doctor,
+  EventsPage,
   Patient,
+  PatientsPage,
   PatientRecord,
   PatientRecordType,
   PlatformAdmin,
@@ -124,9 +126,12 @@ function invalidateAvatarOwners(
   qc.invalidateQueries({ queryKey: ["doctor-me"] });
 }
 
-export function useMyDoctorProfile() {
+// Профиль врача, привязанный к текущей учётке. `enabled` — чтобы не дёргать
+// эндпоинт у владельца и менеджера: у них профиля врача нет и ответ будет 404.
+export function useMyDoctorProfile(enabled = true) {
   return useQuery({
     queryKey: ["doctor-me"],
+    enabled,
     retry: false,
     queryFn: async () => (await api.get<Doctor>("/doctors/me")).data,
   });
@@ -166,11 +171,21 @@ export function useSaveSchedule() {
 
 // --- Patients ---
 
-export function usePatients(search: string) {
+// PATIENTS_PAGE_SIZE must match patientsPageSize on the server.
+export const PATIENTS_PAGE_SIZE = 20;
+
+// Отдаёт одну страницу общей базы пациентов. `page` — с нуля.
+export function usePatients(search: string, page = 0) {
   return useQuery({
-    queryKey: ["patients", search],
+    queryKey: ["patients", search, page],
     queryFn: async () =>
-      (await api.get<Patient[]>("/patients", { params: { search } })).data,
+      (
+        await api.get<PatientsPage>("/patients", {
+          params: { search, offset: page * PATIENTS_PAGE_SIZE },
+        })
+      ).data,
+    // Пока грузится следующая страница, показываем прежнюю — список не мигает.
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -386,6 +401,34 @@ export function useSaveAppointmentServices() {
       qc.invalidateQueries({ queryKey: ["patient-appointments"] });
       qc.invalidateQueries({ queryKey: ["revenue"] });
     },
+  });
+}
+
+// --- Журнал действий ---
+
+// Листается курсором `before`: события пишутся непрерывно, и по смещению
+// страницы бы дублировались.
+export function useEvents(before: number) {
+  return useQuery({
+    queryKey: ["events", before],
+    queryFn: async () =>
+      (
+        await api.get<EventsPage>("/events", {
+          params: before ? { before } : undefined,
+        })
+      ).data,
+    placeholderData: (prev) => prev,
+  });
+}
+
+// --- Смена собственного пароля (любая роль клиники) ---
+
+export function useChangeMyPassword() {
+  return useMutation({
+    mutationFn: async (args: {
+      current_password: string;
+      new_password: string;
+    }) => (await api.post("/me/password", args)).data,
   });
 }
 

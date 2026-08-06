@@ -196,6 +196,61 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// ChangeMyPassword lets any signed-in user change their own password after
+// confirming the current one. Раньше это умел только администратор платформы;
+// врачу и владельцу клиники приходилось просить кого-то сбросить пароль за них.
+//
+// Смена пароля бампает token_version и убивает все прежние сессии — поэтому
+// текущей сразу выдаём свежие куки, иначе человек выкидывался бы на логин.
+func (h *Handlers) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserID(r.Context())
+	if !ok {
+		httpx.Fail(w, httpx.NewError(http.StatusUnauthorized, "требуется авторизация"))
+		return
+	}
+	var req changePasswordRequest
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if err := h.validateStruct(req); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	user, err := h.q.GetUserByID(r.Context(), userID)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if !auth.CheckPassword(user.PasswordHash, req.CurrentPassword) {
+		httpx.Fail(w, httpx.NewError(http.StatusUnauthorized, "текущий пароль неверен"))
+		return
+	}
+	hash, err := auth.HashPassword(req.NewPassword)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if err := h.q.UpdateUserPassword(r.Context(), sqlc.UpdateUserPasswordParams{ID: userID, PasswordHash: hash}); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	fresh, err := h.q.GetUserByID(r.Context(), userID)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	var clinicID int64
+	if fresh.ClinicID.Valid {
+		clinicID = fresh.ClinicID.Int64
+	}
+	if err := h.setAuthCookies(w, userID, clinicID, fresh.TokenVersion, fresh.Role); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // Me returns the currently authenticated user (with clinic info).
 func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.UserID(r.Context())

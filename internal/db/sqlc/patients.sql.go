@@ -12,6 +12,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countPatients = `-- name: CountPatients :one
+SELECT count(*) FROM patients p
+WHERE (
+    $1::text IS NULL
+    OR (' ' || p.full_name) ILIKE '% ' || $1::text || '%'
+    OR p.phone ILIKE $1::text || '%'
+    OR p.iin LIKE $1::text || '%'
+  )
+`
+
+// Тот же фильтр, что и в ListPatients — для счётчика страниц.
+func (q *Queries) CountPatients(ctx context.Context, search pgtype.Text) (int64, error) {
+	row := q.db.QueryRow(ctx, countPatients, search)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createPatient = `-- name: CreatePatient :one
 INSERT INTO patients (clinic_id, full_name, phone, birth_date, notes, iin, gender)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -160,8 +178,14 @@ WHERE (
     OR p.iin LIKE $1::text || '%'
   )
 ORDER BY p.full_name
-LIMIT 200
+LIMIT $3 OFFSET $2
 `
+
+type ListPatientsParams struct {
+	Search     pgtype.Text `json:"search"`
+	PageOffset int32       `json:"page_offset"`
+	PageSize   int32       `json:"page_size"`
+}
 
 type ListPatientsRow struct {
 	ID         int64       `json:"id"`
@@ -182,8 +206,9 @@ type ListPatientsRow struct {
 // завела карточку; она же единственная, кому разрешено её удалить.
 // Matches when the search term is a prefix of any word in the name, a prefix
 // of the phone number, or a prefix of the IIN. Ищет по всей платформе.
-func (q *Queries) ListPatients(ctx context.Context, search pgtype.Text) ([]ListPatientsRow, error) {
-	rows, err := q.db.Query(ctx, listPatients, search)
+// Постранично: база общая и растёт, выгружать её целиком нельзя.
+func (q *Queries) ListPatients(ctx context.Context, arg ListPatientsParams) ([]ListPatientsRow, error) {
+	rows, err := q.db.Query(ctx, listPatients, arg.Search, arg.PageOffset, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -212,92 +237,6 @@ func (q *Queries) ListPatients(ctx context.Context, search pgtype.Text) ([]ListP
 		return nil, err
 	}
 	return items, nil
-}
-
-const listPatientsForDoctor = `-- name: ListPatientsForDoctor :many
-SELECT DISTINCT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, p.avatar_path, c.name AS clinic_name FROM patients p
-JOIN appointments a ON a.patient_id = p.id
-LEFT JOIN clinics c ON c.id = p.clinic_id
-WHERE a.doctor_id = $1
-  AND (
-    $2::text IS NULL
-    OR (' ' || p.full_name) ILIKE '% ' || $2::text || '%'
-    OR p.phone ILIKE $2::text || '%'
-    OR p.iin LIKE $2::text || '%'
-  )
-ORDER BY p.full_name
-LIMIT 200
-`
-
-type ListPatientsForDoctorParams struct {
-	DoctorID int64       `json:"doctor_id"`
-	Search   pgtype.Text `json:"search"`
-}
-
-type ListPatientsForDoctorRow struct {
-	ID         int64       `json:"id"`
-	FullName   string      `json:"full_name"`
-	Phone      pgtype.Text `json:"phone"`
-	BirthDate  *time.Time  `json:"birth_date"`
-	Notes      pgtype.Text `json:"notes"`
-	CreatedAt  time.Time   `json:"created_at"`
-	ClinicID   int64       `json:"clinic_id"`
-	Iin        pgtype.Text `json:"iin"`
-	Gender     pgtype.Text `json:"gender"`
-	AvatarPath pgtype.Text `json:"avatar_path"`
-	ClinicName pgtype.Text `json:"clinic_name"`
-}
-
-// Same prefix-word search, restricted to patients that have at least one
-// appointment with the given doctor.
-func (q *Queries) ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]ListPatientsForDoctorRow, error) {
-	rows, err := q.db.Query(ctx, listPatientsForDoctor, arg.DoctorID, arg.Search)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListPatientsForDoctorRow{}
-	for rows.Next() {
-		var i ListPatientsForDoctorRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.FullName,
-			&i.Phone,
-			&i.BirthDate,
-			&i.Notes,
-			&i.CreatedAt,
-			&i.ClinicID,
-			&i.Iin,
-			&i.Gender,
-			&i.AvatarPath,
-			&i.ClinicName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const patientBelongsToDoctor = `-- name: PatientBelongsToDoctor :one
-SELECT EXISTS(
-    SELECT 1 FROM appointments WHERE patient_id = $1 AND doctor_id = $2
-) AS belongs
-`
-
-type PatientBelongsToDoctorParams struct {
-	PatientID int64 `json:"patient_id"`
-	DoctorID  int64 `json:"doctor_id"`
-}
-
-func (q *Queries) PatientBelongsToDoctor(ctx context.Context, arg PatientBelongsToDoctorParams) (bool, error) {
-	row := q.db.QueryRow(ctx, patientBelongsToDoctor, arg.PatientID, arg.DoctorID)
-	var belongs bool
-	err := row.Scan(&belongs)
-	return belongs, err
 }
 
 const updatePatient = `-- name: UpdatePatient :one

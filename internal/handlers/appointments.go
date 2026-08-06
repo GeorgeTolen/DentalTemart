@@ -86,9 +86,9 @@ func (h *Handlers) ListAppointments(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	if scope, scoped := h.doctorScope(r.Context()); scoped {
-		doctorID = scope
-	}
+	// Врач видит расписание всей клиники, а не только своё: без чужих приёмов
+	// нельзя понять, свободен ли кабинет и когда коллега освободится. Менять он
+	// по-прежнему может лишь свои (см. Create/Update/DeleteAppointment).
 	rows, err := h.q.ListAppointmentsInRange(r.Context(), sqlc.ListAppointmentsInRangeParams{
 		ClinicID: clinicID,
 		From:     from,
@@ -125,10 +125,6 @@ func (h *Handlers) GetAppointment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httpx.Fail(w, err)
-		return
-	}
-	if scope, scoped := h.doctorScope(r.Context()); scoped && row.DoctorID != scope.Int64 {
-		httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
 		return
 	}
 	httpx.JSON(w, http.StatusOK, fromGetRow(row))
@@ -169,7 +165,18 @@ func (h *Handlers) CreateAppointment(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventAppointmentCreate, "Создал запись "+h.appointmentLabel(r, appt.ID, clinicID))
 	h.respondAppointment(w, r, http.StatusCreated, appt.ID, clinicID)
+}
+
+// appointmentLabel renders "пациент, ДД.ММ.ГГГГ ЧЧ:ММ" for the journal. Best
+// effort: если запись уже не читается, обходимся идентификатором.
+func (h *Handlers) appointmentLabel(r *http.Request, id, clinicID int64) string {
+	row, err := h.q.GetAppointment(r.Context(), sqlc.GetAppointmentParams{ID: id, ClinicID: clinicID})
+	if err != nil {
+		return "#" + itoa(id)
+	}
+	return row.PatientName + ", " + row.StartTime.Local().Format("02.01.2006 15:04")
 }
 
 // UpdateAppointment edits an appointment (with overlap protection).
@@ -224,6 +231,12 @@ func (h *Handlers) UpdateAppointment(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	// Отмена — самостоятельное событие: в журнале её ищут отдельно от правок.
+	action, verb := eventAppointmentUpdate, "Изменил запись "
+	if in.Status == service.StatusCancelled {
+		action, verb = eventAppointmentCancel, "Отменил запись "
+	}
+	h.logEvent(r.Context(), clinicID, action, verb+h.appointmentLabel(r, appt.ID, clinicID))
 	h.respondAppointment(w, r, http.StatusOK, appt.ID, clinicID)
 }
 
@@ -254,10 +267,13 @@ func (h *Handlers) DeleteAppointment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Метку собираем до удаления — после записи уже не будет.
+	label := h.appointmentLabel(r, id, clinicID)
 	if err := h.q.DeleteAppointment(r.Context(), sqlc.DeleteAppointmentParams{ID: id, ClinicID: clinicID}); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventAppointmentDelete, "Удалил запись "+label)
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

@@ -45,6 +45,8 @@ func (h *Handlers) Router() http.Handler {
 			r.Use(mw.Authenticator(h.tokens))
 
 			r.Get("/me", h.Me)
+			// Смена собственного пароля — для любой роли, вне режима поддержки.
+			r.Post("/me/password", h.ChangeMyPassword)
 
 			// Platform administration (superadmin only; handlers self-guard).
 			r.Route("/platform", func(r chi.Router) {
@@ -131,6 +133,7 @@ func (h *Handlers) Router() http.Handler {
 
 				r.Get("/dashboard", h.Dashboard)
 				r.Get("/admin/stats", h.AdminStats)
+				r.Get("/events", h.ListEvents)
 			})
 
 			r.Route("/users", func(r chi.Router) {

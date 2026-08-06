@@ -6,7 +6,7 @@ import {
   useSavePatient,
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
-import type { Appointment, AppointmentStatus, Doctor } from "../lib/types";
+import type { Appointment, AppointmentStatus, Doctor, Patient } from "../lib/types";
 import { STATUS_LABELS } from "../lib/types";
 import {
   formatDateTime,
@@ -27,6 +27,10 @@ import {
   Textarea,
 } from "./ui";
 import { DateInput, DateTimeInput } from "./DateInputs";
+import { PickerDrawer, PickerField, PickerRow, useDebounced } from "./PickerDrawer";
+import { Avatar } from "./Avatar";
+import AppointmentBillModal from "./AppointmentBillModal";
+import { useAuth } from "../auth/AuthContext";
 
 interface Props {
   doctors: Doctor[];
@@ -53,6 +57,15 @@ export default function AppointmentModal(props: Props) {
   return <EditCard {...props} />;
 }
 
+// Приём по умолчанию длится час: так его чаще всего и планируют, а сдвинуть
+// окончание можно вручную.
+const DEFAULT_DURATION_MIN = 60;
+
+/** Строка для поля-кнопки выбора пациента. */
+function patientLabel(p: Patient): string {
+  return p.phone ? `${p.full_name} · ${p.phone}` : p.full_name;
+}
+
 // --- editable appointment (new or not-yet-completed) ---
 
 function EditCard({
@@ -62,7 +75,8 @@ function EditCard({
   initialEnd,
   onClose,
 }: Props) {
-  const { data: patients = [] } = usePatients("");
+  const { user, readOnly } = useAuth();
+  const isManager = user?.role === "owner" || user?.role === "admin";
   const saveAppt = useSaveAppointment();
   const savePatient = useSavePatient();
 
@@ -74,14 +88,19 @@ function EditCard({
   const [patientId, setPatientId] = useState<number | "new" | "">(
     existing?.patient_id ?? ""
   );
+  // Подпись выбранного пациента: список теперь листается страницами, и найти в
+  // нём выбранного, чтобы показать имя, уже нельзя — храним рядом.
+  const [patientName, setPatientName] = useState(existing?.patient_name ?? "");
   const [newPatientName, setNewPatientName] = useState("");
   const [newPatientPhone, setNewPatientPhone] = useState("");
   const [newPatientIin, setNewPatientIin] = useState("");
   const [doctorId, setDoctorId] = useState<number | "">(
     existing?.doctor_id ?? activeDoctors[0]?.id ?? ""
   );
+  const [pickingPatient, setPickingPatient] = useState(false);
+  const [pickingDoctor, setPickingDoctor] = useState(false);
   // Новая запись по умолчанию начинается сегодня, в ближайшее рабочее время
-  // (8:00–20:00), длится 30 минут.
+  // (8:00–20:00), длится час.
   const [start, setStart] = useState(
     existing
       ? isoToLocalInput(existing.start_time)
@@ -90,8 +109,12 @@ function EditCard({
   const [end, setEnd] = useState(
     existing
       ? isoToLocalInput(existing.end_time)
-      : initialEnd ?? addMinutesToLocalInput(defaultAppointmentStart(), 30)
+      : initialEnd ??
+          addMinutesToLocalInput(defaultAppointmentStart(), DEFAULT_DURATION_MIN)
   );
+  // Пока окончание не трогали руками, оно едет за началом (+1 час). После
+  // ручной правки перестаём его переписывать — иначе затрём выбор человека.
+  const [endTouched, setEndTouched] = useState(Boolean(existing || initialEnd));
   const [status, setStatus] = useState<AppointmentStatus>(
     existing?.status ?? "scheduled"
   );
@@ -99,8 +122,44 @@ function EditCard({
   const [description, setDescription] = useState(existing?.description ?? "");
   const [nextVisit, setNextVisit] = useState(existing?.next_visit_date ?? "");
   const [error, setError] = useState("");
+  const [billing, setBilling] = useState(false);
 
   const busy = saveAppt.isPending || savePatient.isPending;
+  const selectedDoctor = activeDoctors.find((d) => d.id === doctorId);
+
+  function changeStart(v: string) {
+    setStart(v);
+    if (!endTouched && v) setEnd(addMinutesToLocalInput(v, DEFAULT_DURATION_MIN));
+  }
+
+  function changeEnd(v: string) {
+    setEndTouched(true);
+    setEnd(v);
+  }
+
+  // «Завершить» прямо из карточки: администратору сразу открывается расчёт
+  // стоимости, врачу — просто закрытие (деньги ему не показываем).
+  async function complete() {
+    if (!existing) return;
+    setError("");
+    try {
+      await saveAppt.mutateAsync({
+        id: existing.id,
+        patient_id: existing.patient_id,
+        doctor_id: existing.doctor_id,
+        start_time: existing.start_time,
+        end_time: existing.end_time,
+        status: "completed",
+        diagnosis,
+        description,
+        next_visit_date: existing.next_visit_date ?? "",
+      });
+      if (isManager) setBilling(true);
+      else onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
 
   async function onSubmit() {
     setError("");
@@ -172,12 +231,17 @@ function EditCard({
       footer={
         <>
           {existing && existing.status !== "cancelled" && (
-            <Button variant="danger" onClick={onCancel} className="mr-auto">
+            <Button variant="secondary" onClick={onCancel} className="mr-auto">
               Отменить
             </Button>
           )}
+          {existing && existing.status !== "cancelled" && !readOnly && (
+            <Button onClick={complete} disabled={busy}>
+              Завершить
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose}>
-            Отмена
+            Закрыть
           </Button>
           <Button onClick={onSubmit} disabled={busy}>
             {busy ? "Сохранение…" : "Сохранить"}
@@ -187,21 +251,11 @@ function EditCard({
     >
       <div className="space-y-4">
         <Field label="Пациент">
-          <Select
-            value={patientId === "new" ? "new" : String(patientId)}
-            onChange={(e) => {
-              const v = e.target.value;
-              setPatientId(v === "new" ? "new" : v === "" ? "" : Number(v));
-            }}
-          >
-            <option value="">— выберите —</option>
-            <option value="new">+ Новый пациент</option>
-            {patients.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name} {p.phone && `· ${p.phone}`}
-              </option>
-            ))}
-          </Select>
+          <PickerField
+            value={patientId === "new" ? "Новый пациент" : patientName}
+            placeholder="Выберите пациента"
+            onClick={() => setPickingPatient(true)}
+          />
         </Field>
 
         {patientId === "new" && (
@@ -235,18 +289,17 @@ function EditCard({
         )}
 
         <Field label="Врач">
-          <Select
-            value={String(doctorId)}
-            onChange={(e) => setDoctorId(Number(e.target.value))}
-          >
-            <option value="">— выберите —</option>
-            {activeDoctors.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.full_name}
-                {d.specialization && ` · ${d.specialization}`}
-              </option>
-            ))}
-          </Select>
+          <PickerField
+            value={
+              selectedDoctor
+                ? selectedDoctor.specialization
+                  ? `${selectedDoctor.full_name} · ${selectedDoctor.specialization}`
+                  : selectedDoctor.full_name
+                : ""
+            }
+            placeholder="Выберите врача"
+            onClick={() => setPickingDoctor(true)}
+          />
         </Field>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -254,14 +307,14 @@ function EditCard({
             <DateTimeInput
               value={start}
               maxDate={maxAppointmentInput().slice(0, 10)}
-              onChange={setStart}
+              onChange={changeStart}
             />
           </Field>
-          <Field label="Окончание">
+          <Field label={endTouched ? "Окончание" : "Окончание (+1 час)"}>
             <DateTimeInput
               value={end}
               maxDate={maxAppointmentInput().slice(0, 10)}
-              onChange={setEnd}
+              onChange={changeEnd}
             />
           </Field>
         </div>
@@ -283,6 +336,7 @@ function EditCard({
           <Input
             value={diagnosis}
             onChange={(e) => setDiagnosis(e.target.value)}
+            placeholder="(желательно)"
           />
         </Field>
 
@@ -290,6 +344,7 @@ function EditCard({
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            placeholder="(не обязательно)"
           />
         </Field>
 
@@ -306,7 +361,150 @@ function EditCard({
           </div>
         )}
       </div>
+
+      {pickingPatient && (
+        <PatientPicker
+          onPick={(p) => {
+            setPatientId(p.id);
+            setPatientName(patientLabel(p));
+            setPickingPatient(false);
+          }}
+          onNew={() => {
+            setPatientId("new");
+            setPatientName("");
+            setPickingPatient(false);
+          }}
+          onClose={() => setPickingPatient(false)}
+        />
+      )}
+
+      {pickingDoctor && (
+        <DoctorPicker
+          doctors={activeDoctors}
+          selectedId={typeof doctorId === "number" ? doctorId : null}
+          onPick={(d) => {
+            setDoctorId(d.id);
+            setPickingDoctor(false);
+          }}
+          onClose={() => setPickingDoctor(false)}
+        />
+      )}
+
+      {billing && existing && (
+        <AppointmentBillModal
+          appointment={existing}
+          onClose={() => {
+            setBilling(false);
+            onClose();
+          }}
+        />
+      )}
     </Modal>
+  );
+}
+
+// --- шторки выбора ---
+
+/**
+ * Выбор пациента: серверный поиск по общей базе с debounce. Показываем первую
+ * страницу результатов — если нужного нет, уточняют запрос.
+ */
+export function PatientPicker({
+  onPick,
+  onNew,
+  onClose,
+}: {
+  onPick: (p: Patient) => void;
+  onNew?: () => void;
+  onClose: () => void;
+}) {
+  const [input, setInput] = useState("");
+  const search = useDebounced(input);
+  const { data, isFetching } = usePatients(search);
+  const patients = data?.items ?? [];
+  const total = data?.total ?? 0;
+
+  return (
+    <PickerDrawer
+      title="Пациент"
+      placeholder="ФИО, телефон или ИИН…"
+      search={input}
+      onSearch={setInput}
+      loading={isFetching && patients.length === 0}
+      isEmpty={patients.length === 0}
+      emptyLabel="Пациент не найден"
+      onClose={onClose}
+      footer={
+        onNew && (
+          <Button variant="secondary" className="w-full" onClick={onNew}>
+            + Новый пациент
+          </Button>
+        )
+      }
+    >
+      {patients.map((p) => (
+        <PickerRow
+          key={p.id}
+          onClick={() => onPick(p)}
+          media={<Avatar name={p.full_name} url={p.avatar_url} size="sm" />}
+          title={p.full_name}
+          subtitle={[p.phone, p.iin].filter(Boolean).join(" · ")}
+        />
+      ))}
+      {total > patients.length && (
+        <p className="px-3 py-2 text-xs text-slate-400">
+          Показаны первые {patients.length} из {total} — уточните поиск.
+        </p>
+      )}
+    </PickerDrawer>
+  );
+}
+
+/** Выбор врача: список короткий, поэтому фильтруем локально. */
+function DoctorPicker({
+  doctors,
+  selectedId,
+  onPick,
+  onClose,
+}: {
+  doctors: Doctor[];
+  selectedId: number | null;
+  onPick: (d: Doctor) => void;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? doctors.filter(
+        (d) =>
+          d.full_name.toLowerCase().includes(q) ||
+          d.specialization.toLowerCase().includes(q)
+      )
+    : doctors;
+
+  return (
+    <PickerDrawer
+      title="Врач"
+      placeholder="ФИО или направление…"
+      search={search}
+      onSearch={setSearch}
+      isEmpty={filtered.length === 0}
+      emptyLabel="Врач не найден"
+      onClose={onClose}
+    >
+      {filtered.map((d) => (
+        <PickerRow
+          key={d.id}
+          onClick={() => onPick(d)}
+          selected={d.id === selectedId}
+          media={
+            <Avatar name={d.full_name} url={d.avatar_url} size="sm" color={d.color} />
+          }
+          title={d.full_name}
+          subtitle={d.specialization}
+        />
+      ))}
+    </PickerDrawer>
   );
 }
 

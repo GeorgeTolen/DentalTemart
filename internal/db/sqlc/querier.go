@@ -16,12 +16,15 @@ type Querier interface {
 	// Guards against removing a clinic's last owner (nobody could administer it).
 	CountClinicOwners(ctx context.Context, clinicID pgtype.Int8) (int64, error)
 	CountOverlappingAppointments(ctx context.Context, arg CountOverlappingAppointmentsParams) (int64, error)
+	// Тот же фильтр, что и в ListPatients — для счётчика страниц.
+	CountPatients(ctx context.Context, search pgtype.Text) (int64, error)
 	CountSuperadmins(ctx context.Context) (int64, error)
 	CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error)
 	CreateAppointmentService(ctx context.Context, arg CreateAppointmentServiceParams) (AppointmentService, error)
 	CreateClinic(ctx context.Context, arg CreateClinicParams) (Clinic, error)
 	CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doctor, error)
 	CreateDoctorSchedule(ctx context.Context, arg CreateDoctorScheduleParams) (DoctorSchedule, error)
+	CreateEvent(ctx context.Context, arg CreateEventParams) error
 	CreatePatient(ctx context.Context, arg CreatePatientParams) (Patient, error)
 	CreatePatientRecord(ctx context.Context, arg CreatePatientRecordParams) (PatientRecord, error)
 	CreateService(ctx context.Context, arg CreateServiceParams) (Service, error)
@@ -83,6 +86,10 @@ type Querier interface {
 	ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedulesParams) ([]DoctorSchedule, error)
 	// Includes the linked account's login (email) so the admin panel can show it.
 	ListDoctors(ctx context.Context, clinicID int64) ([]ListDoctorsRow, error)
+	// Курсор по id, а не OFFSET: события пишутся непрерывно, и при листании
+	// по смещению уже показанные строки уезжали бы вниз и дублировались.
+	// before = 0 — первая страница.
+	ListEvents(ctx context.Context, arg ListEventsParams) ([]Event, error)
 	// Медкарта пациента общая для платформы: снимки и аллергии, заведённые одной
 	// клиникой, видит и лечащий врач другой. Название клиники показываем, чтобы
 	// было понятно, кто запись сделал; удалять и править можно только свои.
@@ -92,10 +99,8 @@ type Querier interface {
 	// завела карточку; она же единственная, кому разрешено её удалить.
 	// Matches when the search term is a prefix of any word in the name, a prefix
 	// of the phone number, or a prefix of the IIN. Ищет по всей платформе.
-	ListPatients(ctx context.Context, search pgtype.Text) ([]ListPatientsRow, error)
-	// Same prefix-word search, restricted to patients that have at least one
-	// appointment with the given doctor.
-	ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]ListPatientsForDoctorRow, error)
+	// Постранично: база общая и растёт, выгружать её целиком нельзя.
+	ListPatients(ctx context.Context, arg ListPatientsParams) ([]ListPatientsRow, error)
 	// Прайс услуг и оказанные услуги приёма. Всё строго внутри клиники: деньги —
 	// единственное, что общая база пациентов не делает публичным.
 	// Весь прайс клиники; неактивные тоже, чтобы владелец видел их в справочнике.
@@ -106,7 +111,6 @@ type Querier interface {
 	// (or linked to the given doctor, so editing keeps showing its own link).
 	ListUnlinkedDoctorUsers(ctx context.Context, arg ListUnlinkedDoctorUsersParams) ([]ListUnlinkedDoctorUsersRow, error)
 	ListUsersByClinic(ctx context.Context, clinicID pgtype.Int8) ([]ListUsersByClinicRow, error)
-	PatientBelongsToDoctor(ctx context.Context, arg PatientBelongsToDoctorParams) (bool, error)
 	// Выработка врачей. Исполнитель берётся из позиции, а если он не указан — из
 	// врача приёма, иначе выработка «потерялась бы».
 	RevenueByDoctor(ctx context.Context, arg RevenueByDoctorParams) ([]RevenueByDoctorRow, error)

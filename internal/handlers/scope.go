@@ -80,9 +80,10 @@ func (h *Handlers) doctorScope(ctx context.Context) (doctorID pgtype.Int8, scope
 
 // checkPatientAccess returns a 404 error if the given patient is not reachable
 // by the caller. The patient directory is shared across the platform, so any
-// clinic user may open any existing card; a "doctor" role user must
-// additionally have an appointment with them. Returning 404 (rather than 403)
-// avoids confirming the patient exists.
+// clinic user — including a doctor — may open any existing card: врач должен
+// видеть историю пациента, даже если тот лечился у коллеги или в другой клинике.
+// Изменять карточку при этом может только заведшая её клиника
+// (см. requireOwnPatient).
 func (h *Handlers) checkPatientAccess(ctx context.Context, patientID int64) error {
 	if _, ok := middleware.ClinicID(ctx); !ok {
 		return httpx.NewError(http.StatusForbidden, "нет доступа к данным клиники")
@@ -92,21 +93,6 @@ func (h *Handlers) checkPatientAccess(ctx context.Context, patientID int64) erro
 			return httpx.NewError(http.StatusNotFound, "пациент не найден")
 		}
 		return err
-	}
-
-	scope, scoped := h.doctorScope(ctx)
-	if !scoped {
-		return nil
-	}
-	belongs, err := h.q.PatientBelongsToDoctor(ctx, sqlc.PatientBelongsToDoctorParams{
-		PatientID: patientID,
-		DoctorID:  scope.Int64,
-	})
-	if err != nil {
-		return err
-	}
-	if !belongs {
-		return httpx.NewError(http.StatusNotFound, "пациент не найден")
 	}
 	return nil
 }

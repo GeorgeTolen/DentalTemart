@@ -196,6 +196,7 @@ func (h *Handlers) CreateDoctor(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventDoctorCreate, "Добавил врача: "+d.FullName)
 	httpx.JSON(w, http.StatusCreated, toDoctorDTO(d))
 }
 
@@ -353,6 +354,7 @@ func (h *Handlers) GetMyDoctorProfile(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventDoctorUpdate, "Изменил карточку врача: "+d.FullName)
 	httpx.JSON(w, http.StatusOK, toDoctorDTO(d))
 }
 
@@ -418,6 +420,7 @@ func (h *Handlers) UpdateDoctorProfile(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventDoctorUpdate, "Изменил профиль врача: "+d.FullName)
 	httpx.JSON(w, http.StatusOK, toDoctorDTO(d))
 }
 
@@ -506,10 +509,15 @@ func (h *Handlers) DeleteDoctor(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	name := "#" + itoa(id)
+	if d, gerr := h.q.GetDoctor(r.Context(), sqlc.GetDoctorParams{ID: id, ClinicID: clinicID}); gerr == nil {
+		name = d.FullName
+	}
 	if err := h.q.DeleteDoctor(r.Context(), sqlc.DeleteDoctorParams{ID: id, ClinicID: clinicID}); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventDoctorDelete, "Удалил врача: "+name)
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

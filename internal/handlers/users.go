@@ -114,6 +114,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, emailConflict(err))
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventUserCreate, "Создал учётную запись: "+user.FullName+" ("+user.Email+")")
 	httpx.JSON(w, http.StatusCreated, userDTO{
 		ID:       user.ID,
 		FullName: user.FullName,
@@ -178,6 +179,7 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	h.logEvent(r.Context(), clinicID, eventUserUpdate, "Изменил учётную запись: "+user.FullName+" ("+user.Email+")")
 	httpx.JSON(w, http.StatusOK, userDTO{
 		ID:       user.ID,
 		FullName: user.FullName,
@@ -207,6 +209,13 @@ func (h *Handlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "нельзя удалить собственный аккаунт"))
 		return
 	}
+	name := "#" + itoa(id)
+	if u, gerr := h.q.GetClinicUser(r.Context(), sqlc.GetClinicUserParams{
+		ID:       id,
+		ClinicID: pgtype.Int8{Int64: clinicID, Valid: true},
+	}); gerr == nil {
+		name = u.FullName + " (" + u.Email + ")"
+	}
 	if err := h.q.DeleteClinicUser(r.Context(), sqlc.DeleteClinicUserParams{
 		ID:       id,
 		ClinicID: pgtype.Int8{Int64: clinicID, Valid: true},
@@ -214,5 +223,6 @@ func (h *Handlers) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventUserDelete, "Удалил учётную запись: "+name)
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

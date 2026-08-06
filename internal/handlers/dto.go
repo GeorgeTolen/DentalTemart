@@ -146,17 +146,6 @@ func fromPatientListRow(r sqlc.ListPatientsRow) patientJoin {
 	}
 }
 
-func fromDoctorPatientRow(r sqlc.ListPatientsForDoctorRow) patientJoin {
-	return patientJoin{
-		Patient: sqlc.Patient{
-			ID: r.ID, FullName: r.FullName, Phone: r.Phone, BirthDate: r.BirthDate,
-			Notes: r.Notes, ClinicID: r.ClinicID, Iin: r.Iin, Gender: r.Gender,
-			AvatarPath: r.AvatarPath,
-		},
-		ClinicID: r.ClinicID, ClinicName: r.ClinicName,
-	}
-}
-
 func fromPatientGetRow(r sqlc.GetPatientRow) patientJoin {
 	return patientJoin{
 		Patient: sqlc.Patient{

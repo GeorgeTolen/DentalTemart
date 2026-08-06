@@ -1,20 +1,38 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { usePatients, useSavePatient } from "../api/hooks";
+import { PATIENTS_PAGE_SIZE, usePatients, useSavePatient } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import type { Gender, Patient } from "../lib/types";
 import { GENDER_LABELS } from "../lib/types";
 import { Button, Field, Input, Modal, Select, Textarea } from "../components/ui";
 import { Avatar } from "../components/Avatar";
+import { useDebounced } from "../components/PickerDrawer";
 import { useAuth } from "../auth/AuthContext";
 import { DateInput } from "../components/DateInputs";
-import { formatDate, validateBirthDate, minBirthDateInput, todayInput, ageCategory } from "../lib/datetime";
+import { formatDate, validateBirthDate, minBirthDateInput, todayInput } from "../lib/datetime";
+
+// В таблице пол показываем одной буквой — колонка узкая, слово не нужно.
+const GENDER_SHORT: Record<"male" | "female", string> = { male: "М", female: "Ж" };
 
 export default function Patients() {
   const { readOnly } = useAuth();
-  const [search, setSearch] = useState("");
-  const { data: patients = [], isLoading } = usePatients(search);
+  const [input, setInput] = useState("");
+  const search = useDebounced(input);
+  const [page, setPage] = useState(0);
+  const { data, isLoading } = usePatients(search, page);
+  const patients = data?.items ?? [];
+  const total = data?.total ?? 0;
   const [editing, setEditing] = useState<Patient | "new" | null>(null);
+
+  // Новый поисковый запрос — снова с первой страницы, иначе можно оказаться на
+  // пустой третьей странице узкой выборки.
+  useEffect(() => {
+    setPage(0);
+  }, [search]);
+
+  const from = total === 0 ? 0 : page * PATIENTS_PAGE_SIZE + 1;
+  const to = Math.min(total, (page + 1) * PATIENTS_PAGE_SIZE);
+  const hasNext = to < total;
 
   return (
     <div className="space-y-5">
@@ -28,8 +46,8 @@ export default function Patients() {
       <div className="max-w-md">
         <Input
           placeholder="Поиск по ФИО, телефону или ИИН…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
         />
         <p className="mt-1.5 text-xs text-slate-400">
           База пациентов общая для всех клиник платформы.
@@ -44,7 +62,7 @@ export default function Patients() {
               <th className="px-5 py-3 font-medium">ИИН</th>
               <th className="px-5 py-3 font-medium">Телефон</th>
               <th className="px-5 py-3 font-medium">Дата рождения</th>
-              <th className="px-5 py-3 font-medium">Категория</th>
+              <th className="px-5 py-3 font-medium">Пол</th>
               <th className="px-5 py-3" />
             </tr>
           </thead>
@@ -58,37 +76,19 @@ export default function Patients() {
                       {p.full_name}
                     </Link>
                   </span>
-                  {!p.is_own && p.clinic_name && (
-                    <span
-                      className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"
-                      title="Карточку завела другая клиника"
-                    >
-                      {p.clinic_name}
-                    </span>
-                  )}
                 </td>
                 <td className="px-5 py-3 text-slate-600">{p.iin || "—"}</td>
                 <td className="px-5 py-3 text-slate-600">{p.phone || "—"}</td>
                 <td className="px-5 py-3 text-slate-600">
                   {formatDate(p.birth_date)}
                 </td>
-                <td className="px-5 py-3">
-                  {ageCategory(p.birth_date) ? (
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        ageCategory(p.birth_date) === "Детский"
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {ageCategory(p.birth_date)}
-                    </span>
-                  ) : (
-                    <span className="text-slate-300">—</span>
-                  )}
+                <td className="px-5 py-3 text-slate-600">
+                  {p.gender ? GENDER_SHORT[p.gender] : "—"}
                 </td>
                 <td className="px-5 py-3 text-right">
-                  {!readOnly && (
+                  {/* Карточка общая, но правит её только заведшая клиника —
+                      сервер откажет остальным. */}
+                  {!readOnly && p.is_own && (
                     <button
                       onClick={() => setEditing(p)}
                       className="text-brand hover:underline"
@@ -109,6 +109,31 @@ export default function Patients() {
           </tbody>
         </table>
       </div>
+
+      {/* База общая и большая — листаем по 20, а не выгружаем целиком. */}
+      {total > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm text-slate-400">
+            {from}–{to} из {total}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              disabled={page === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              ← Назад
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={!hasNext}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Следующие {PATIENTS_PAGE_SIZE} →
+            </Button>
+          </div>
+        </div>
+      )}
 
       {editing && (
         <PatientForm

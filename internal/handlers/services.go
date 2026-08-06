@@ -96,6 +96,7 @@ func (h *Handlers) CreateService(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, conflict(err, "услуга с таким названием уже есть в прайсе"))
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventServiceCreate, "Добавил услугу в прайс: "+s.Name)
 	httpx.JSON(w, http.StatusCreated, toServiceDTO(s))
 }
 
@@ -144,6 +145,7 @@ func (h *Handlers) UpdateService(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, conflict(err, "услуга с таким названием уже есть в прайсе"))
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventServiceUpdate, "Изменил услугу в прайсе: "+s.Name)
 	httpx.JSON(w, http.StatusOK, toServiceDTO(s))
 }
 
@@ -164,10 +166,16 @@ func (h *Handlers) DeleteService(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	// Название берём до удаления — иначе в журнале останется голый id.
+	name := "#" + itoa(id)
+	if s, gerr := h.q.GetService(r.Context(), sqlc.GetServiceParams{ID: id, ClinicID: clinicID}); gerr == nil {
+		name = s.Name
+	}
 	if err := h.q.DeleteService(r.Context(), sqlc.DeleteServiceParams{ID: id, ClinicID: clinicID}); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventServiceDelete, "Удалил услугу из прайса: "+name)
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -317,5 +325,7 @@ func (h *Handlers) PutAppointmentServices(w http.ResponseWriter, r *http.Request
 		httpx.Fail(w, err)
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventAppointmentBill,
+		"Пробил услуги ("+itoa(int64(len(req.Items)))+" поз., "+itoa(total)+" ₸) в записи "+h.appointmentLabel(r, id, clinicID))
 	httpx.JSON(w, http.StatusOK, map[string]int64{"total": total})
 }

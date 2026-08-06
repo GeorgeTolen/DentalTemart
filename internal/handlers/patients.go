@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -41,10 +42,18 @@ func optText(s string) pgtype.Text {
 	return pgtype.Text{String: s, Valid: s != ""}
 }
 
-// ListPatients returns patients, optionally filtered by a name/phone/IIN
-// search. The patient directory is shared platform-wide — a card created by one
-// clinic is visible to the others. A "doctor" role user still only sees
-// patients who have an appointment with them.
+// patientsPageSize is how many patients one page of the list holds. Список
+// общий для платформы и растёт, поэтому отдаём его страницами.
+const patientsPageSize = 20
+
+type patientsResponse struct {
+	Items []patientDTO `json:"items"`
+	Total int64        `json:"total"`
+}
+
+// ListPatients returns a page of patients, optionally filtered by a
+// name/phone/IIN search. The patient directory is shared platform-wide — a card
+// created by one clinic is visible to (and searchable by) all the others.
 func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
 	clinicID, err := h.clinicID(r.Context())
 	if err != nil {
@@ -56,33 +65,33 @@ func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
 	if search != "" {
 		arg = pgtype.Text{String: search, Valid: true}
 	}
-
-	var patients []patientJoin
-	if scope, scoped := h.doctorScope(r.Context()); scoped {
-		rows, derr := h.q.ListPatientsForDoctor(r.Context(), sqlc.ListPatientsForDoctorParams{
-			DoctorID: scope.Int64,
-			Search:   arg,
-		})
-		err = derr
-		for _, p := range rows {
-			patients = append(patients, fromDoctorPatientRow(p))
-		}
-	} else {
-		rows, lerr := h.q.ListPatients(r.Context(), arg)
-		err = lerr
-		for _, p := range rows {
-			patients = append(patients, fromPatientListRow(p))
+	offset := int32(0)
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		if v, cerr := strconv.ParseInt(raw, 10, 32); cerr == nil && v > 0 {
+			offset = int32(v)
 		}
 	}
+
+	rows, err := h.q.ListPatients(r.Context(), sqlc.ListPatientsParams{
+		Search:     arg,
+		PageSize:   patientsPageSize,
+		PageOffset: offset,
+	})
 	if err != nil {
 		httpx.Fail(w, err)
 		return
 	}
-	out := make([]patientDTO, 0, len(patients))
-	for _, p := range patients {
-		out = append(out, p.dto(clinicID))
+	total, err := h.q.CountPatients(r.Context(), arg)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
 	}
-	httpx.JSON(w, http.StatusOK, out)
+
+	resp := patientsResponse{Items: make([]patientDTO, 0, len(rows)), Total: total}
+	for _, p := range rows {
+		resp.Items = append(resp.Items, fromPatientListRow(p).dto(clinicID))
+	}
+	httpx.JSON(w, http.StatusOK, resp)
 }
 
 // GetPatient returns a single patient. A "doctor" role user gets 404 for
@@ -183,23 +192,6 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 	if req.IIN != "" {
 		existing, err := h.q.GetPatientByIIN(r.Context(), optText(req.IIN))
 		if err == nil {
-			// A doctor-role user must only see patients they treat: don't leak
-			// another doctor's patient PII through the dedupe response. Return a
-			// bare 409 that discloses nothing about the record.
-			if scope, scoped := h.doctorScope(r.Context()); scoped {
-				belongs, berr := h.q.PatientBelongsToDoctor(r.Context(), sqlc.PatientBelongsToDoctorParams{
-					PatientID: existing.ID,
-					DoctorID:  scope.Int64,
-				})
-				if berr != nil {
-					httpx.Fail(w, berr)
-					return
-				}
-				if !belongs {
-					httpx.Fail(w, httpx.NewError(http.StatusConflict, "пациент с таким ИИН уже существует"))
-					return
-				}
-			}
 			httpx.JSON(w, http.StatusOK, fromPatientIINRow(existing).dto(clinicID))
 			return
 		}
@@ -224,7 +216,27 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 	}
 	dto := toPatientDTO(p)
 	dto.IsOwn = true
+	h.logEvent(r.Context(), clinicID, eventPatientCreate, "Добавил пациента: "+p.FullName)
 	httpx.JSON(w, http.StatusCreated, dto)
+}
+
+// requireOwnPatient returns the patient and a 403 unless the caller's clinic is
+// the one that created the card. База пациентов общая — читают все, но правит
+// карточку только заведшая её клиника, иначе клиники затирали бы данные
+// друг друга.
+func (h *Handlers) requireOwnPatient(r *http.Request, id, clinicID int64) (sqlc.GetPatientRow, error) {
+	p, err := h.q.GetPatient(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return sqlc.GetPatientRow{}, httpx.NewError(http.StatusNotFound, "пациент не найден")
+		}
+		return sqlc.GetPatientRow{}, err
+	}
+	if p.ClinicID != clinicID {
+		return sqlc.GetPatientRow{}, httpx.NewError(http.StatusForbidden,
+			"карточку пациента может изменять только клиника, которая её завела")
+	}
+	return p, nil
 }
 
 // DeletePatient removes a patient together with their appointments and records
@@ -241,10 +253,16 @@ func (h *Handlers) DeletePatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	p, err := h.requireOwnPatient(r, id, clinicID)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
 	if err := h.q.DeletePatient(r.Context(), sqlc.DeletePatientParams{ID: id, ClinicID: clinicID}); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
+	h.logEvent(r.Context(), clinicID, eventPatientDelete, "Удалил пациента: "+p.FullName)
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -260,7 +278,7 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	if err := h.checkPatientAccess(r.Context(), id); err != nil {
+	if _, err := h.requireOwnPatient(r, id, clinicID); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -305,5 +323,6 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 	}
 	dto := toPatientDTO(p)
 	dto.IsOwn = p.ClinicID == clinicID
+	h.logEvent(r.Context(), clinicID, eventPatientUpdate, "Изменил карточку пациента: "+p.FullName)
 	httpx.JSON(w, http.StatusOK, dto)
 }

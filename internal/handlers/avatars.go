@@ -120,11 +120,8 @@ func (h *Handlers) UploadPatientAvatar(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	if err := h.checkPatientAccess(r.Context(), id); err != nil {
-		httpx.Fail(w, err)
-		return
-	}
-	before, err := h.q.GetPatient(r.Context(), id)
+	// Фото — часть карточки, значит и менять его может только заведшая клиника.
+	before, err := h.requireOwnPatient(r, id, clinicID)
 	if err != nil {
 		httpx.Fail(w, err)
 		return
@@ -161,11 +158,7 @@ func (h *Handlers) DeletePatientAvatar(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	if err := h.checkPatientAccess(r.Context(), id); err != nil {
-		httpx.Fail(w, err)
-		return
-	}
-	before, err := h.q.GetPatient(r.Context(), id)
+	before, err := h.requireOwnPatient(r, id, clinicID)
 	if err != nil {
 		httpx.Fail(w, err)
 		return

@@ -4,7 +4,6 @@ import {
   useDeleteAppointment,
   useDoctors,
   useSaveAppointment,
-  usePatients,
   useSavePatient,
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
@@ -15,6 +14,8 @@ import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../c
 import { DateInput, DateTimeInput } from "../components/DateInputs";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import AppointmentBillModal from "../components/AppointmentBillModal";
+import { PatientPicker } from "../components/AppointmentModal";
+import { PickerField } from "../components/PickerDrawer";
 import { formatMoney } from "../lib/money";
 import { useAuth } from "../auth/AuthContext";
 
@@ -324,7 +325,6 @@ function AppointmentEditModal({
 
   const save = useSaveAppointment();
   const savePatient = useSavePatient();
-  const { data: patients = [] } = usePatients("");
 
   const [doctorId, setDoctorId] = useState(appointment.doctor_id);
   const [start, setStart] = useState(isoToLocalInput(appointment.start_time));
@@ -334,6 +334,10 @@ function AppointmentEditModal({
   const [description, setDescription] = useState(appointment.description ?? "");
   const [nextVisit, setNextVisit] = useState(appointment.next_visit_date ?? "");
   const [patientId, setPatientId] = useState<number | "new">(appointment.patient_id);
+  // Имя выбранного пациента храним рядом: база листается страницами, найти его
+  // в загруженном куске списка уже нельзя.
+  const [patientName, setPatientName] = useState(appointment.patient_name);
+  const [pickingPatient, setPickingPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState("");
   const [newPatientPhone, setNewPatientPhone] = useState("");
   const [newPatientIin, setNewPatientIin] = useState("");
@@ -384,15 +388,11 @@ function AppointmentEditModal({
       <div className="space-y-4">
         {isAdmin ? (
           <Field label="Пациент">
-            <Select
-              value={patientId === "new" ? "new" : String(patientId)}
-              onChange={(e) => setPatientId(e.target.value === "new" ? "new" : Number(e.target.value))}
-            >
-              <option value="new">+ Новый пациент</option>
-              {patients.map((p) => (
-                <option key={p.id} value={p.id}>{p.full_name}{p.phone && ` · ${p.phone}`}</option>
-              ))}
-            </Select>
+            <PickerField
+              value={patientId === "new" ? "Новый пациент" : patientName}
+              placeholder="Выберите пациента"
+              onClick={() => setPickingPatient(true)}
+            />
           </Field>
         ) : (
           <div className="text-sm text-slate-500">Пациент: <strong className="text-ink">{appointment.patient_name}</strong></div>
@@ -431,11 +431,39 @@ function AppointmentEditModal({
             ))}
           </Select>
         </Field>
-        <Field label="Диагноз"><Input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} /></Field>
-        <Field label="Описание приёма"><Textarea value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+        <Field label="Диагноз">
+          <Input
+            value={diagnosis}
+            onChange={(e) => setDiagnosis(e.target.value)}
+            placeholder="(желательно)"
+          />
+        </Field>
+        <Field label="Описание приёма">
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="(не обязательно)"
+          />
+        </Field>
         <Field label="Следующий приём"><DateInput value={nextVisit} onChange={setNextVisit} /></Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
       </div>
+
+      {pickingPatient && (
+        <PatientPicker
+          onPick={(p) => {
+            setPatientId(p.id);
+            setPatientName(p.phone ? `${p.full_name} · ${p.phone}` : p.full_name);
+            setPickingPatient(false);
+          }}
+          onNew={() => {
+            setPatientId("new");
+            setPatientName("");
+            setPickingPatient(false);
+          }}
+          onClose={() => setPickingPatient(false)}
+        />
+      )}
     </Modal>
   );
 }

@@ -150,6 +150,27 @@ export interface AppointmentServices {
   total: number;
 }
 
+// Страница общей базы пациентов: база растёт, выгружаем по 20.
+export interface PatientsPage {
+  items: Patient[];
+  total: number;
+}
+
+// Запись журнала действий клиники.
+export interface ClinicEvent {
+  id: number;
+  user_name: string;
+  action: string;
+  message: string;
+  created_at: string;
+}
+
+export interface EventsPage {
+  items: ClinicEvent[];
+  // 0 — больше страниц нет.
+  next_before: number;
+}
+
 export interface RevenueBucket {
   revenue: number;
   services_count: number;

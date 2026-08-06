@@ -1,9 +1,19 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../lib/types";
 
-const baseLinks = [
-  { to: "/", label: "Календарь", end: true },
+interface NavItem {
+  to: string;
+  label: string;
+  end?: boolean;
+}
+
+// Календарь — главный экран: именно в нём администраторы и врачи ставят записи,
+// поэтому он выделен и стоит первым.
+const CALENDAR: NavItem = { to: "/", label: "Календарь", end: true };
+
+const CLINIC_LINKS: NavItem[] = [
   { to: "/appointments", label: "Записи" },
   { to: "/patients", label: "Пациенты" },
   { to: "/doctors", label: "Врачи" },
@@ -12,20 +22,34 @@ const baseLinks = [
 export default function Layout() {
   const { user, logout, supportClinic, exitSupport } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const isManager = user?.role === "owner" || user?.role === "admin";
-  // В режиме поддержки нет ни личного кабинета, ни управления учётками —
-  // администратор платформы только смотрит данные клиники.
-  const links = supportClinic
-    ? baseLinks
-    : isManager
-      ? [...baseLinks, { to: "/admin", label: "Управление", end: undefined }]
-      : [...baseLinks, { to: "/my-cabinet", label: "Мой кабинет", end: undefined }];
+  const isOwner = user?.role === "owner";
+  const isManager = isOwner || user?.role === "admin";
+  // В режиме поддержки суперадмин только смотрит: у него нет ни прайса, ни
+  // управления — сервер всё равно ответит 403 на эти запросы.
+  const canManage = isManager && !supportClinic;
 
-  // Клик по имени открывает личную зону: кабинет врача или панель управления.
-  const cabinetPath = isManager ? "/admin" : "/my-cabinet";
+  // Прайс и деньги менеджерские: /api/services закрыт requireManager.
+  const mainLinks: NavItem[] = canManage
+    ? [...CLINIC_LINKS, { to: "/services", label: "Услуги" }]
+    : CLINIC_LINKS;
 
-  // Название клиники: в режиме поддержки — открытой, иначе — своей.
+  const manageLinks: NavItem[] = canManage
+    ? [
+        { to: "/admin/new-appointment", label: "Создать запись" },
+        ...(isOwner ? [{ to: "/admin/users", label: "Пользователи" }] : []),
+        { to: "/admin/stats", label: "Статистика" },
+        { to: "/admin/archive", label: "Архив" },
+        { to: "/admin/events", label: "События" },
+      ]
+    : [];
+
+  // Группа раскрыта, пока пользователь внутри неё — иначе он не видит, где стоит.
+  const inManage = location.pathname.startsWith("/admin");
+  const [manageOpen, setManageOpen] = useState(inManage);
+  const showManage = manageOpen || inManage;
+
   const clinicName = supportClinic?.name ?? user?.clinic_name;
 
   // Выход из режима поддержки возвращает в панель платформы, а не разлогинивает.
@@ -37,6 +61,10 @@ export default function Layout() {
     }
     logout();
   }
+
+  // Плоский список для мобильной полосы вкладок: выпадающая группа на узком
+  // экране только мешает.
+  const mobileLinks = [CALENDAR, ...mainLinks, ...manageLinks];
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -60,9 +88,7 @@ export default function Layout() {
           <div className="min-w-0">
             <div className="text-lg font-bold leading-none text-brand">Temart</div>
             {clinicName && (
-              <div className="mt-0.5 truncate text-xs text-slate-400">
-                {clinicName}
-              </div>
+              <div className="mt-0.5 truncate text-xs text-slate-400">{clinicName}</div>
             )}
           </div>
           <div className="flex min-w-0 items-center gap-2">
@@ -72,9 +98,9 @@ export default function Layout() {
               </span>
             ) : (
               <button
-                onClick={() => navigate(cabinetPath)}
+                onClick={() => navigate("/my-cabinet")}
                 className="max-w-[42vw] truncate text-sm font-medium text-ink"
-                title="Мой кабинет"
+                title="Личный кабинет"
               >
                 {user?.full_name}
               </button>
@@ -90,7 +116,7 @@ export default function Layout() {
 
         {/* Мобильные вкладки навигации — отдельная строка, прокручивается вбок */}
         <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden">
-          {links.map((l) => (
+          {mobileLinks.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}
@@ -113,17 +139,31 @@ export default function Layout() {
           <div className="mb-6 px-2">
             <div className="text-2xl font-bold text-brand">Temart</div>
             {clinicName && (
-              <div className="mt-0.5 truncate text-sm text-slate-400">
-                {clinicName}
-              </div>
+              <div className="mt-0.5 truncate text-sm text-slate-400">{clinicName}</div>
             )}
           </div>
+
           <nav className="flex flex-1 flex-col gap-1">
-            {links.map((l) => (
+            {/* Календарь выделен рамкой: это точка входа в рабочий день. */}
+            <NavLink
+              to={CALENDAR.to}
+              end
+              className={({ isActive }) =>
+                `flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
+                  isActive
+                    ? "border-brand bg-brand text-white"
+                    : "border-brand-light bg-brand-bg text-brand-dark hover:bg-brand-light"
+                }`
+              }
+            >
+              <span aria-hidden>📅</span>
+              {CALENDAR.label}
+            </NavLink>
+
+            {mainLinks.map((l) => (
               <NavLink
                 key={l.to}
                 to={l.to}
-                end={l.end}
                 className={({ isActive }) =>
                   `rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                     isActive
@@ -135,30 +175,59 @@ export default function Layout() {
                 {l.label}
               </NavLink>
             ))}
-          </nav>
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            {supportClinic ? (
-              <div className="px-3 py-1.5">
-                <span className="block text-sm font-medium text-ink">
-                  {user?.full_name}
-                </span>
-                <span className="block text-xs text-slate-400">
-                  {user ? ROLE_LABELS[user.role] : ""}
-                </span>
+
+            {manageLinks.length > 0 && (
+              <div className="mt-2">
+                <button
+                  onClick={() => setManageOpen((v) => !v)}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                >
+                  Управление
+                  <span className="text-xs text-slate-400">{showManage ? "▾" : "▸"}</span>
+                </button>
+                {showManage && (
+                  <div className="mt-1 space-y-1 border-l border-slate-100 pl-3">
+                    {manageLinks.map((l) => (
+                      <NavLink
+                        key={l.to}
+                        to={l.to}
+                        className={({ isActive }) =>
+                          `block rounded-xl px-3 py-2 text-sm transition ${
+                            isActive
+                              ? "bg-brand-bg font-medium text-brand-dark"
+                              : "text-slate-500 hover:bg-slate-50 hover:text-ink"
+                          }`
+                        }
+                      >
+                        {l.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
               </div>
-            ) : (
-              <button
-                onClick={() => navigate(cabinetPath)}
-                className="block w-full rounded-xl px-3 py-1.5 text-left transition hover:bg-brand-bg"
-                title="Открыть мой кабинет"
+            )}
+          </nav>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <div className="px-3 py-1.5">
+              <span className="block text-sm font-medium text-ink">{user?.full_name}</span>
+              <span className="block text-xs text-slate-400">
+                {user ? ROLE_LABELS[user.role] : ""}
+              </span>
+            </div>
+            {!supportClinic && (
+              <NavLink
+                to="/my-cabinet"
+                className={({ isActive }) =>
+                  `mt-2 block rounded-xl px-3 py-2 text-sm font-medium transition ${
+                    isActive
+                      ? "bg-brand-bg text-brand-dark"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`
+                }
               >
-                <span className="block text-sm font-medium text-ink">
-                  {user?.full_name}
-                </span>
-                <span className="block text-xs text-slate-400">
-                  {user ? ROLE_LABELS[user.role] : ""}
-                </span>
-              </button>
+                Личный кабинет
+              </NavLink>
             )}
             <button
               onClick={onExit}

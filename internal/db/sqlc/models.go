@@ -74,6 +74,16 @@ type DoctorSchedule struct {
 	EndTime   string `json:"end_time"`
 }
 
+type Event struct {
+	ID        int64       `json:"id"`
+	ClinicID  int64       `json:"clinic_id"`
+	UserID    pgtype.Int8 `json:"user_id"`
+	UserName  string      `json:"user_name"`
+	Action    string      `json:"action"`
+	Message   string      `json:"message"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
 type Patient struct {
 	ID        int64       `json:"id"`
 	FullName  string      `json:"full_name"`

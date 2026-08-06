@@ -12,7 +12,13 @@ import { useAuth } from "../auth/AuthContext";
 export default function Doctors() {
   const { user, readOnly } = useAuth();
   const canManage = user?.role !== "doctor" && !readOnly;
-  const { data: doctors = [] } = useDoctors();
+  const { data: allDoctors = [] } = useDoctors();
+  // Врач смотрит на коллег — себя в этом списке видеть незачем, его профиль
+  // живёт в личном кабинете.
+  const doctors =
+    user?.role === "doctor"
+      ? allDoctors.filter((d) => d.user_id !== user.id)
+      : allDoctors;
   const del = useDeleteDoctor();
   const [editing, setEditing] = useState<Doctor | "new" | null>(null);
   const [viewing, setViewing] = useState<Doctor | null>(null);
@@ -43,7 +49,13 @@ export default function Doctors() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {doctors.map((d) => (
           <div key={d.id} className="rounded-2xl bg-white p-5 shadow-sm">
-            <div className="flex items-start gap-3">
+            {/* Клик по фото или имени открывает карточку врача — отдельная
+                кнопка «Профиль» для этого не нужна. */}
+            <button
+              onClick={() => setViewing(d)}
+              className="flex w-full items-start gap-3 text-left"
+              title="Открыть профиль врача"
+            >
               <Avatar
                 name={d.full_name}
                 url={d.avatar_url}
@@ -51,7 +63,7 @@ export default function Doctors() {
                 color={d.color}
               />
               <div className="min-w-0 flex-1">
-                <div className="font-semibold">{d.full_name}</div>
+                <div className="font-semibold hover:text-brand">{d.full_name}</div>
                 <div className="text-sm text-slate-500">
                   {d.specialization || "—"}
                 </div>
@@ -72,14 +84,8 @@ export default function Doctors() {
                   </span>
                 )}
               </div>
-            </div>
+            </button>
             <div className="mt-4 flex flex-wrap gap-3 text-sm">
-              <button
-                onClick={() => setViewing(d)}
-                className="text-brand hover:underline"
-              >
-                Профиль
-              </button>
               {canManage && (
                 <>
                   <button

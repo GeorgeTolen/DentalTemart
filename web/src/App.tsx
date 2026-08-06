@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import Layout from "./components/Layout";
@@ -9,8 +10,14 @@ import Patients from "./pages/Patients";
 import PatientDetail from "./pages/PatientDetail";
 import Doctors from "./pages/Doctors";
 import Admin from "./pages/Admin";
+import Services from "./pages/Services";
+import Stats from "./pages/Stats";
+import Users from "./pages/Users";
+import Archive from "./pages/Archive";
+import Events from "./pages/Events";
 import AppointmentsPage from "./pages/Appointments";
 import DoctorCabinet from "./pages/DoctorCabinet";
+import OwnerCabinet from "./pages/OwnerCabinet";
 
 function FullScreen({ children }: { children: React.ReactNode }) {
   return (
@@ -49,7 +56,18 @@ export default function App() {
 
   // Clinic screens: a clinic user (owner / admin / doctor) or the superadmin
   // in support mode.
-  const isManager = user.role === "owner" || user.role === "admin";
+  const isOwner = user.role === "owner";
+  const isManager = isOwner || user.role === "admin";
+  // Управление и прайс закрыты requireManager на сервере; в режиме поддержки
+  // суперадмин только смотрит, поэтому и здесь их не показываем.
+  const canManage = isManager && !supportClinic;
+  // Кабинет врача завязан на профиль врача, которого у владельца нет.
+  const cabinet = user.role === "doctor" ? <DoctorCabinet /> : <OwnerCabinet />;
+  // Куда ведёт «Управление» по умолчанию: у менеджера нет вкладки пользователей.
+  const manageHome = isOwner ? "/admin/users" : "/admin/stats";
+  const managed = (element: ReactNode) =>
+    canManage ? element : <Navigate to="/" replace />;
+
   return (
     <Routes>
       <Route path="/login" element={<Navigate to="/" replace />} />
@@ -60,11 +78,17 @@ export default function App() {
         <Route path="/patients/:id" element={<PatientDetail />} />
         <Route path="/doctors" element={<Doctors />} />
         <Route path="/appointments" element={<AppointmentsPage />} />
-        <Route path="/my-cabinet" element={<DoctorCabinet />} />
+        <Route path="/my-cabinet" element={cabinet} />
+        <Route path="/services" element={managed(<Services />)} />
+        <Route path="/admin" element={<Navigate to={manageHome} replace />} />
+        <Route path="/admin/new-appointment" element={managed(<Admin />)} />
         <Route
-          path="/admin"
-          element={isManager ? <Admin /> : <Navigate to="/" replace />}
+          path="/admin/users"
+          element={canManage && isOwner ? <Users /> : <Navigate to="/" replace />}
         />
+        <Route path="/admin/stats" element={managed(<Stats />)} />
+        <Route path="/admin/archive" element={managed(<Archive />)} />
+        <Route path="/admin/events" element={managed(<Events />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
