@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import {
   useAppointments,
+  useDeleteAppointment,
   useDoctors,
   useSaveAppointment,
   usePatients,
@@ -53,6 +54,7 @@ export default function AppointmentsPage() {
 
   const { data: appointments = [], isLoading } = useAppointments(from, to, doctorFilter);
   const saveApptTop = useSaveAppointment();
+  const deleteAppt = useDeleteAppointment();
 
   const filtered = statusFilter
     ? appointments.filter((a) => a.status === statusFilter)
@@ -73,6 +75,24 @@ export default function AppointmentsPage() {
         next_visit_date: a.next_visit_date ?? "",
       });
     } catch (e) { alert(errorMessage(e)); }
+  }
+
+  // Отмена оставляет запись в календаре серой; удаление стирает её полностью
+  // вместе с пробитыми услугами — поэтому предупреждаем отдельно.
+  async function remove(a: Appointment) {
+    if (
+      !confirm(
+        `Удалить запись пациента ${a.patient_name} от ${formatDate(a.start_time)} безвозвратно?\n\n` +
+          `Она исчезнет из календаря и истории пациента вместе с пробитыми услугами. ` +
+          `Чтобы просто пометить приём несостоявшимся, используйте «Отменить».`
+      )
+    )
+      return;
+    try {
+      await deleteAppt.mutateAsync(a.id);
+    } catch (e) {
+      alert(errorMessage(e));
+    }
   }
 
   return (
@@ -133,6 +153,7 @@ export default function AppointmentsPage() {
               readOnly={readOnly}
               onEdit={() => setEditing(a)}
               onCancel={() => cancel(a)}
+              onDelete={() => remove(a)}
             />
           ))}
         </div>
@@ -155,6 +176,7 @@ function AppointmentRow({
   readOnly,
   onEdit,
   onCancel,
+  onDelete,
 }: {
   appointment: Appointment;
   isAdmin: boolean;
@@ -162,6 +184,7 @@ function AppointmentRow({
   readOnly: boolean;
   onEdit: () => void;
   onCancel: () => void;
+  onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
@@ -253,8 +276,15 @@ function AppointmentRow({
                 {a.next_visit_date ? "Изменить след. приём" : "Следующий приём"}
               </Button>
               {isAdmin && a.status !== "cancelled" && (
-                <Button variant="danger" className="py-1 px-3 text-xs" onClick={onCancel}>
+                <Button variant="secondary" className="py-1 px-3 text-xs" onClick={onCancel}>
                   Отменить
+                </Button>
+              )}
+              {/* Отменённая запись остаётся в календаре серой. Удаление стирает
+                  её насовсем — вместе с пробитыми услугами. */}
+              {isAdmin && (
+                <Button variant="danger" className="py-1 px-3 text-xs" onClick={onDelete}>
+                  Удалить
                 </Button>
               )}
             </div>

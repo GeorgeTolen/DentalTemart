@@ -27,6 +27,7 @@ import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../c
 import { DateInput, DateTimeInput } from "../components/DateInputs";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import AppointmentBillModal from "../components/AppointmentBillModal";
+import { Avatar, AvatarUpload } from "../components/Avatar";
 import { formatMoney } from "../lib/money";
 import type { Appointment, AppointmentStatus, Gender, PatientRecordType } from "../lib/types";
 import { STATUS_LABELS, RECORD_TYPE_LABELS, GENDER_LABELS } from "../lib/types";
@@ -73,10 +74,17 @@ export default function PatientDetail() {
 
       {/* Карточка пациента */}
       <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <div className="flex items-start gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-bg text-2xl font-bold text-brand">
-            {patient.full_name.charAt(0).toUpperCase()}
-          </div>
+        <div className="flex flex-wrap items-start gap-4">
+          {readOnly ? (
+            <Avatar name={patient.full_name} url={patient.avatar_url} size="lg" />
+          ) : (
+            <AvatarUpload
+              kind="patients"
+              id={patient.id}
+              name={patient.full_name}
+              url={patient.avatar_url}
+            />
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold text-ink">{patient.full_name}</h1>
@@ -89,6 +97,14 @@ export default function PatientDetail() {
                   }`}
                 >
                   {category}
+                </span>
+              )}
+              {!patient.is_own && patient.clinic_name && (
+                <span
+                  className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-500"
+                  title="Карточку завела другая клиника платформы"
+                >
+                  {patient.clinic_name}
                 </span>
               )}
             </div>

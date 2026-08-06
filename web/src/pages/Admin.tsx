@@ -13,6 +13,7 @@ import {
   useSaveUser,
   useUsers,
   useDeleteDoctor,
+  useDeleteAppointment,
   useAppointments,
   useServices,
   useSaveService,
@@ -1160,6 +1161,7 @@ function AppointmentsPanel() {
   const range = useMemo(() => todayRange(), []);
   const { data: appointments = [], isLoading } = useAppointments(range.from, range.to, null);
   const saveAppt = useSaveAppointment();
+  const deleteAppt = useDeleteAppointment();
   const { data: doctors = [] } = useDoctors();
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [error, setError] = useState("");
@@ -1179,6 +1181,19 @@ function AppointmentsPanel() {
         next_visit_date: a.next_visit_date ?? "",
       });
     } catch (e) { setError(errorMessage(e)); }
+  }
+
+  // Отменённая запись остаётся в календаре серой; удаление стирает её насовсем.
+  async function remove(a: Appointment) {
+    if (
+      !confirm(
+        `Удалить запись пациента ${a.patient_name} от ${formatDate(a.start_time)} безвозвратно?\n\n` +
+          `Она исчезнет из календаря и истории пациента вместе с пробитыми услугами.`
+      )
+    )
+      return;
+    try { await deleteAppt.mutateAsync(a.id); }
+    catch (e) { setError(errorMessage(e)); }
   }
 
   if (isLoading) return <p className="text-sm text-slate-400">Загрузка…</p>;
@@ -1209,8 +1224,9 @@ function AppointmentsPanel() {
                   <div className="flex gap-2 justify-end">
                     <Button variant="secondary" className="py-1 px-2 text-xs" onClick={() => setEditing(a)}>Изменить</Button>
                     {a.status !== "cancelled" && (
-                      <Button variant="danger" className="py-1 px-2 text-xs" onClick={() => cancel(a)}>Отменить</Button>
+                      <Button variant="secondary" className="py-1 px-2 text-xs" onClick={() => cancel(a)}>Отменить</Button>
                     )}
+                    <Button variant="danger" className="py-1 px-2 text-xs" onClick={() => remove(a)}>Удалить</Button>
                   </div>
                 </td>
               </tr>

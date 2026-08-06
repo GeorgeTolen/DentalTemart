@@ -34,10 +34,29 @@ VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: UpdateDoctor :one
+-- Административные поля. Профильные (стаж, опыт, навыки) врач ведёт сам —
+-- см. UpdateDoctorProfile, чтобы правки владельца и врача не затирали друг друга.
 UPDATE doctors
 SET full_name = $2, specialization = $3, phone = $4, color = $5, is_active = $6, user_id = $7
 WHERE id = $1 AND clinic_id = $8
 RETURNING *;
+
+-- name: UpdateDoctorProfile :one
+-- Профиль врача: его он редактирует в личном кабинете (владелец — тоже, из
+-- карточки врача). Цвет, активность и привязку к учётке здесь не трогаем.
+UPDATE doctors
+SET specialization   = $2,
+    phone            = $3,
+    birth_date       = $4,
+    experience_years = $5,
+    bio              = $6,
+    skills           = $7,
+    education        = $8
+WHERE id = $1 AND clinic_id = $9
+RETURNING *;
+
+-- name: UpdateDoctorAvatar :one
+UPDATE doctors SET avatar_path = $2 WHERE id = $1 AND clinic_id = $3 RETURNING *;
 
 -- name: ListUnlinkedDoctorUsers :many
 -- Clinic users with the "doctor" role not yet linked to a doctor profile

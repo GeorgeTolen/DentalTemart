@@ -15,7 +15,7 @@ import (
 const createDoctor = `-- name: CreateDoctor :one
 INSERT INTO doctors (clinic_id, full_name, specialization, phone, color, is_active, user_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id
+RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id, avatar_path, birth_date, experience_years, bio, skills, education
 `
 
 type CreateDoctorParams struct {
@@ -49,6 +49,12 @@ func (q *Queries) CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doc
 		&i.CreatedAt,
 		&i.UserID,
 		&i.ClinicID,
+		&i.AvatarPath,
+		&i.BirthDate,
+		&i.ExperienceYears,
+		&i.Bio,
+		&i.Skills,
+		&i.Education,
 	)
 	return i, err
 }
@@ -149,7 +155,7 @@ func (q *Queries) DoctorUserInClinic(ctx context.Context, arg DoctorUserInClinic
 }
 
 const getDoctor = `-- name: GetDoctor :one
-SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id FROM doctors WHERE id = $1 AND clinic_id = $2
+SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id, avatar_path, birth_date, experience_years, bio, skills, education FROM doctors WHERE id = $1 AND clinic_id = $2
 `
 
 type GetDoctorParams struct {
@@ -170,12 +176,18 @@ func (q *Queries) GetDoctor(ctx context.Context, arg GetDoctorParams) (Doctor, e
 		&i.CreatedAt,
 		&i.UserID,
 		&i.ClinicID,
+		&i.AvatarPath,
+		&i.BirthDate,
+		&i.ExperienceYears,
+		&i.Bio,
+		&i.Skills,
+		&i.Education,
 	)
 	return i, err
 }
 
 const getDoctorByUserID = `-- name: GetDoctorByUserID :one
-SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id FROM doctors WHERE user_id = $1 AND clinic_id = $2
+SELECT id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id, avatar_path, birth_date, experience_years, bio, skills, education FROM doctors WHERE user_id = $1 AND clinic_id = $2
 `
 
 type GetDoctorByUserIDParams struct {
@@ -198,6 +210,12 @@ func (q *Queries) GetDoctorByUserID(ctx context.Context, arg GetDoctorByUserIDPa
 		&i.CreatedAt,
 		&i.UserID,
 		&i.ClinicID,
+		&i.AvatarPath,
+		&i.BirthDate,
+		&i.ExperienceYears,
+		&i.Bio,
+		&i.Skills,
+		&i.Education,
 	)
 	return i, err
 }
@@ -241,7 +259,7 @@ func (q *Queries) ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedul
 }
 
 const listDoctors = `-- name: ListDoctors :many
-SELECT d.id, d.full_name, d.specialization, d.phone, d.color, d.is_active, d.created_at, d.user_id, d.clinic_id, COALESCE(u.email, '') AS user_email
+SELECT d.id, d.full_name, d.specialization, d.phone, d.color, d.is_active, d.created_at, d.user_id, d.clinic_id, d.avatar_path, d.birth_date, d.experience_years, d.bio, d.skills, d.education, COALESCE(u.email, '') AS user_email
 FROM doctors d
 LEFT JOIN users u ON u.id = d.user_id
 WHERE d.clinic_id = $1
@@ -249,16 +267,22 @@ ORDER BY d.full_name
 `
 
 type ListDoctorsRow struct {
-	ID             int64       `json:"id"`
-	FullName       string      `json:"full_name"`
-	Specialization pgtype.Text `json:"specialization"`
-	Phone          pgtype.Text `json:"phone"`
-	Color          string      `json:"color"`
-	IsActive       bool        `json:"is_active"`
-	CreatedAt      time.Time   `json:"created_at"`
-	UserID         pgtype.Int8 `json:"user_id"`
-	ClinicID       int64       `json:"clinic_id"`
-	UserEmail      string      `json:"user_email"`
+	ID              int64       `json:"id"`
+	FullName        string      `json:"full_name"`
+	Specialization  pgtype.Text `json:"specialization"`
+	Phone           pgtype.Text `json:"phone"`
+	Color           string      `json:"color"`
+	IsActive        bool        `json:"is_active"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UserID          pgtype.Int8 `json:"user_id"`
+	ClinicID        int64       `json:"clinic_id"`
+	AvatarPath      pgtype.Text `json:"avatar_path"`
+	BirthDate       *time.Time  `json:"birth_date"`
+	ExperienceYears int32       `json:"experience_years"`
+	Bio             pgtype.Text `json:"bio"`
+	Skills          pgtype.Text `json:"skills"`
+	Education       pgtype.Text `json:"education"`
+	UserEmail       string      `json:"user_email"`
 }
 
 // Includes the linked account's login (email) so the admin panel can show it.
@@ -281,6 +305,12 @@ func (q *Queries) ListDoctors(ctx context.Context, clinicID int64) ([]ListDoctor
 			&i.CreatedAt,
 			&i.UserID,
 			&i.ClinicID,
+			&i.AvatarPath,
+			&i.BirthDate,
+			&i.ExperienceYears,
+			&i.Bio,
+			&i.Skills,
+			&i.Education,
 			&i.UserEmail,
 		); err != nil {
 			return nil, err
@@ -341,7 +371,7 @@ const updateDoctor = `-- name: UpdateDoctor :one
 UPDATE doctors
 SET full_name = $2, specialization = $3, phone = $4, color = $5, is_active = $6, user_id = $7
 WHERE id = $1 AND clinic_id = $8
-RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id
+RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id, avatar_path, birth_date, experience_years, bio, skills, education
 `
 
 type UpdateDoctorParams struct {
@@ -355,6 +385,8 @@ type UpdateDoctorParams struct {
 	ClinicID       int64       `json:"clinic_id"`
 }
 
+// Административные поля. Профильные (стаж, опыт, навыки) врач ведёт сам —
+// см. UpdateDoctorProfile, чтобы правки владельца и врача не затирали друг друга.
 func (q *Queries) UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error) {
 	row := q.db.QueryRow(ctx, updateDoctor,
 		arg.ID,
@@ -377,6 +409,105 @@ func (q *Queries) UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doc
 		&i.CreatedAt,
 		&i.UserID,
 		&i.ClinicID,
+		&i.AvatarPath,
+		&i.BirthDate,
+		&i.ExperienceYears,
+		&i.Bio,
+		&i.Skills,
+		&i.Education,
+	)
+	return i, err
+}
+
+const updateDoctorAvatar = `-- name: UpdateDoctorAvatar :one
+UPDATE doctors SET avatar_path = $2 WHERE id = $1 AND clinic_id = $3 RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id, avatar_path, birth_date, experience_years, bio, skills, education
+`
+
+type UpdateDoctorAvatarParams struct {
+	ID         int64       `json:"id"`
+	AvatarPath pgtype.Text `json:"avatar_path"`
+	ClinicID   int64       `json:"clinic_id"`
+}
+
+func (q *Queries) UpdateDoctorAvatar(ctx context.Context, arg UpdateDoctorAvatarParams) (Doctor, error) {
+	row := q.db.QueryRow(ctx, updateDoctorAvatar, arg.ID, arg.AvatarPath, arg.ClinicID)
+	var i Doctor
+	err := row.Scan(
+		&i.ID,
+		&i.FullName,
+		&i.Specialization,
+		&i.Phone,
+		&i.Color,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UserID,
+		&i.ClinicID,
+		&i.AvatarPath,
+		&i.BirthDate,
+		&i.ExperienceYears,
+		&i.Bio,
+		&i.Skills,
+		&i.Education,
+	)
+	return i, err
+}
+
+const updateDoctorProfile = `-- name: UpdateDoctorProfile :one
+UPDATE doctors
+SET specialization   = $2,
+    phone            = $3,
+    birth_date       = $4,
+    experience_years = $5,
+    bio              = $6,
+    skills           = $7,
+    education        = $8
+WHERE id = $1 AND clinic_id = $9
+RETURNING id, full_name, specialization, phone, color, is_active, created_at, user_id, clinic_id, avatar_path, birth_date, experience_years, bio, skills, education
+`
+
+type UpdateDoctorProfileParams struct {
+	ID              int64       `json:"id"`
+	Specialization  pgtype.Text `json:"specialization"`
+	Phone           pgtype.Text `json:"phone"`
+	BirthDate       *time.Time  `json:"birth_date"`
+	ExperienceYears int32       `json:"experience_years"`
+	Bio             pgtype.Text `json:"bio"`
+	Skills          pgtype.Text `json:"skills"`
+	Education       pgtype.Text `json:"education"`
+	ClinicID        int64       `json:"clinic_id"`
+}
+
+// Профиль врача: его он редактирует в личном кабинете (владелец — тоже, из
+// карточки врача). Цвет, активность и привязку к учётке здесь не трогаем.
+func (q *Queries) UpdateDoctorProfile(ctx context.Context, arg UpdateDoctorProfileParams) (Doctor, error) {
+	row := q.db.QueryRow(ctx, updateDoctorProfile,
+		arg.ID,
+		arg.Specialization,
+		arg.Phone,
+		arg.BirthDate,
+		arg.ExperienceYears,
+		arg.Bio,
+		arg.Skills,
+		arg.Education,
+		arg.ClinicID,
+	)
+	var i Doctor
+	err := row.Scan(
+		&i.ID,
+		&i.FullName,
+		&i.Specialization,
+		&i.Phone,
+		&i.Color,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UserID,
+		&i.ClinicID,
+		&i.AvatarPath,
+		&i.BirthDate,
+		&i.ExperienceYears,
+		&i.Bio,
+		&i.Skills,
+		&i.Education,
 	)
 	return i, err
 }

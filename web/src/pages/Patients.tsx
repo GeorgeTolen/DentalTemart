@@ -5,6 +5,7 @@ import { errorMessage } from "../api/client";
 import type { Gender, Patient } from "../lib/types";
 import { GENDER_LABELS } from "../lib/types";
 import { Button, Field, Input, Modal, Select, Textarea } from "../components/ui";
+import { Avatar } from "../components/Avatar";
 import { useAuth } from "../auth/AuthContext";
 import { DateInput } from "../components/DateInputs";
 import { formatDate, validateBirthDate, minBirthDateInput, todayInput, ageCategory } from "../lib/datetime";
@@ -51,9 +52,12 @@ export default function Patients() {
             {patients.map((p) => (
               <tr key={p.id} className="border-t border-slate-100">
                 <td className="px-5 py-3 font-medium">
-                  <Link to={`/patients/${p.id}`} className="hover:text-brand">
-                    {p.full_name}
-                  </Link>
+                  <span className="inline-flex items-center gap-2 align-middle">
+                    <Avatar name={p.full_name} url={p.avatar_url} size="sm" />
+                    <Link to={`/patients/${p.id}`} className="hover:text-brand">
+                      {p.full_name}
+                    </Link>
+                  </span>
                   {!p.is_own && p.clinic_name && (
                     <span
                       className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"

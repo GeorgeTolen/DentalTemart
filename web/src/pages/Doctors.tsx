@@ -2,8 +2,11 @@ import { useState } from "react";
 import { useDeleteDoctor, useDoctors } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import type { Doctor } from "../lib/types";
-import { Button } from "../components/ui";
+import { Button, Modal } from "../components/ui";
 import DoctorModal from "../components/DoctorModal";
+import { Avatar } from "../components/Avatar";
+import { DoctorProfileCard, DoctorProfileModal } from "./DoctorCabinet";
+import { yearsLabel } from "../lib/datetime";
 import { useAuth } from "../auth/AuthContext";
 
 export default function Doctors() {
@@ -12,6 +15,8 @@ export default function Doctors() {
   const { data: doctors = [] } = useDoctors();
   const del = useDeleteDoctor();
   const [editing, setEditing] = useState<Doctor | "new" | null>(null);
+  const [viewing, setViewing] = useState<Doctor | null>(null);
+  const [editingProfile, setEditingProfile] = useState<Doctor | null>(null);
 
   async function onDelete(d: Doctor) {
     if (
@@ -39,9 +44,11 @@ export default function Doctors() {
         {doctors.map((d) => (
           <div key={d.id} className="rounded-2xl bg-white p-5 shadow-sm">
             <div className="flex items-start gap-3">
-              <span
-                className="mt-1 h-4 w-4 shrink-0 rounded-full"
-                style={{ backgroundColor: d.color }}
+              <Avatar
+                name={d.full_name}
+                url={d.avatar_url}
+                size="md"
+                color={d.color}
               />
               <div className="min-w-0 flex-1">
                 <div className="font-semibold">{d.full_name}</div>
@@ -49,6 +56,11 @@ export default function Doctors() {
                   {d.specialization || "—"}
                 </div>
                 <div className="text-sm text-slate-400">{d.phone}</div>
+                {d.experience_years > 0 && (
+                  <div className="text-sm text-slate-400">
+                    Стаж: {d.experience_years} {yearsLabel(d.experience_years)}
+                  </div>
+                )}
                 {canManage && d.user_email && (
                   <div className="mt-1 truncate text-xs text-slate-400">
                     Логин: {d.user_email}
@@ -61,22 +73,30 @@ export default function Doctors() {
                 )}
               </div>
             </div>
-            {canManage && (
-              <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                <button
-                  onClick={() => setEditing(d)}
-                  className="text-brand hover:underline"
-                >
-                  Изменить
-                </button>
-                <button
-                  onClick={() => onDelete(d)}
-                  className="text-red-500 hover:underline"
-                >
-                  Удалить
-                </button>
-              </div>
-            )}
+            <div className="mt-4 flex flex-wrap gap-3 text-sm">
+              <button
+                onClick={() => setViewing(d)}
+                className="text-brand hover:underline"
+              >
+                Профиль
+              </button>
+              {canManage && (
+                <>
+                  <button
+                    onClick={() => setEditing(d)}
+                    className="text-brand hover:underline"
+                  >
+                    Изменить
+                  </button>
+                  <button
+                    onClick={() => onDelete(d)}
+                    className="text-red-500 hover:underline"
+                  >
+                    Удалить
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         ))}
         {doctors.length === 0 && (
@@ -90,6 +110,27 @@ export default function Doctors() {
         <DoctorModal
           doctor={editing === "new" ? null : editing}
           onClose={() => setEditing(null)}
+        />
+      )}
+      {viewing && (
+        <Modal
+          title={viewing.full_name}
+          onClose={() => setViewing(null)}
+          footer={<Button onClick={() => setViewing(null)}>Закрыть</Button>}
+        >
+          {/* Владелец и менеджер могут дополнить профиль врача за него —
+              например, пока врач не завёл себе учётную запись. */}
+          <DoctorProfileCard
+            doctor={viewing}
+            editable={canManage}
+            onEdit={() => setEditingProfile(viewing)}
+          />
+        </Modal>
+      )}
+      {editingProfile && (
+        <DoctorProfileModal
+          doctor={editingProfile}
+          onClose={() => setEditingProfile(null)}
         />
       )}
     </div>

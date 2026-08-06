@@ -49,15 +49,21 @@ type Clinic struct {
 }
 
 type Doctor struct {
-	ID             int64       `json:"id"`
-	FullName       string      `json:"full_name"`
-	Specialization pgtype.Text `json:"specialization"`
-	Phone          pgtype.Text `json:"phone"`
-	Color          string      `json:"color"`
-	IsActive       bool        `json:"is_active"`
-	CreatedAt      time.Time   `json:"created_at"`
-	UserID         pgtype.Int8 `json:"user_id"`
-	ClinicID       int64       `json:"clinic_id"`
+	ID              int64       `json:"id"`
+	FullName        string      `json:"full_name"`
+	Specialization  pgtype.Text `json:"specialization"`
+	Phone           pgtype.Text `json:"phone"`
+	Color           string      `json:"color"`
+	IsActive        bool        `json:"is_active"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UserID          pgtype.Int8 `json:"user_id"`
+	ClinicID        int64       `json:"clinic_id"`
+	AvatarPath      pgtype.Text `json:"avatar_path"`
+	BirthDate       *time.Time  `json:"birth_date"`
+	ExperienceYears int32       `json:"experience_years"`
+	Bio             pgtype.Text `json:"bio"`
+	Skills          pgtype.Text `json:"skills"`
+	Education       pgtype.Text `json:"education"`
 }
 
 type DoctorSchedule struct {
@@ -76,9 +82,10 @@ type Patient struct {
 	Notes     pgtype.Text `json:"notes"`
 	CreatedAt time.Time   `json:"created_at"`
 	// клиника, заведшая карточку; сама карточка общая для платформы
-	ClinicID int64       `json:"clinic_id"`
-	Iin      pgtype.Text `json:"iin"`
-	Gender   pgtype.Text `json:"gender"`
+	ClinicID   int64       `json:"clinic_id"`
+	Iin        pgtype.Text `json:"iin"`
+	Gender     pgtype.Text `json:"gender"`
+	AvatarPath pgtype.Text `json:"avatar_path"`
 }
 
 type PatientRecord struct {

@@ -108,6 +108,9 @@ func (h *Handlers) Router() http.Handler {
 					r.Post("/{id}/records", h.CreatePatientRecord)
 					r.Delete("/{id}/records/{recordId}", h.DeletePatientRecord)
 					r.Get("/{id}/records/{recordId}/file", h.GetPatientRecordFile)
+					r.Get("/{id}/avatar", h.GetPatientAvatar)
+					r.Post("/{id}/avatar", h.UploadPatientAvatar)
+					r.Delete("/{id}/avatar", h.DeletePatientAvatar)
 				})
 
 				r.Route("/doctors", func(r chi.Router) {
@@ -119,6 +122,11 @@ func (h *Handlers) Router() http.Handler {
 					r.Delete("/{id}", h.DeleteDoctor)
 					r.Get("/{id}/schedule", h.GetSchedule)
 					r.Put("/{id}/schedule", h.PutSchedule)
+					// Профиль и аватарку врач правит сам (или менеджер за него).
+					r.Put("/{id}/profile", h.UpdateDoctorProfile)
+					r.Get("/{id}/avatar", h.GetDoctorAvatar)
+					r.Post("/{id}/avatar", h.UploadDoctorAvatar)
+					r.Delete("/{id}/avatar", h.DeleteDoctorAvatar)
 				})
 
 				r.Get("/dashboard", h.Dashboard)

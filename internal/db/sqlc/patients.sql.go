@@ -15,7 +15,7 @@ import (
 const createPatient = `-- name: CreatePatient :one
 INSERT INTO patients (clinic_id, full_name, phone, birth_date, notes, iin, gender)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender
+RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender, avatar_path
 `
 
 type CreatePatientParams struct {
@@ -49,6 +49,7 @@ func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (P
 		&i.ClinicID,
 		&i.Iin,
 		&i.Gender,
+		&i.AvatarPath,
 	)
 	return i, err
 }
@@ -69,7 +70,7 @@ func (q *Queries) DeletePatient(ctx context.Context, arg DeletePatientParams) er
 }
 
 const getPatient = `-- name: GetPatient :one
-SELECT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, c.name AS clinic_name FROM patients p
+SELECT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, p.avatar_path, c.name AS clinic_name FROM patients p
 LEFT JOIN clinics c ON c.id = p.clinic_id
 WHERE p.id = $1
 `
@@ -84,6 +85,7 @@ type GetPatientRow struct {
 	ClinicID   int64       `json:"clinic_id"`
 	Iin        pgtype.Text `json:"iin"`
 	Gender     pgtype.Text `json:"gender"`
+	AvatarPath pgtype.Text `json:"avatar_path"`
 	ClinicName pgtype.Text `json:"clinic_name"`
 }
 
@@ -100,13 +102,14 @@ func (q *Queries) GetPatient(ctx context.Context, id int64) (GetPatientRow, erro
 		&i.ClinicID,
 		&i.Iin,
 		&i.Gender,
+		&i.AvatarPath,
 		&i.ClinicName,
 	)
 	return i, err
 }
 
 const getPatientByIIN = `-- name: GetPatientByIIN :one
-SELECT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, c.name AS clinic_name FROM patients p
+SELECT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, p.avatar_path, c.name AS clinic_name FROM patients p
 LEFT JOIN clinics c ON c.id = p.clinic_id
 WHERE p.iin = $1
 `
@@ -121,6 +124,7 @@ type GetPatientByIINRow struct {
 	ClinicID   int64       `json:"clinic_id"`
 	Iin        pgtype.Text `json:"iin"`
 	Gender     pgtype.Text `json:"gender"`
+	AvatarPath pgtype.Text `json:"avatar_path"`
 	ClinicName pgtype.Text `json:"clinic_name"`
 }
 
@@ -139,6 +143,7 @@ func (q *Queries) GetPatientByIIN(ctx context.Context, iin pgtype.Text) (GetPati
 		&i.ClinicID,
 		&i.Iin,
 		&i.Gender,
+		&i.AvatarPath,
 		&i.ClinicName,
 	)
 	return i, err
@@ -146,7 +151,7 @@ func (q *Queries) GetPatientByIIN(ctx context.Context, iin pgtype.Text) (GetPati
 
 const listPatients = `-- name: ListPatients :many
 
-SELECT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, c.name AS clinic_name FROM patients p
+SELECT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, p.avatar_path, c.name AS clinic_name FROM patients p
 LEFT JOIN clinics c ON c.id = p.clinic_id
 WHERE (
     $1::text IS NULL
@@ -168,6 +173,7 @@ type ListPatientsRow struct {
 	ClinicID   int64       `json:"clinic_id"`
 	Iin        pgtype.Text `json:"iin"`
 	Gender     pgtype.Text `json:"gender"`
+	AvatarPath pgtype.Text `json:"avatar_path"`
 	ClinicName pgtype.Text `json:"clinic_name"`
 }
 
@@ -195,6 +201,7 @@ func (q *Queries) ListPatients(ctx context.Context, search pgtype.Text) ([]ListP
 			&i.ClinicID,
 			&i.Iin,
 			&i.Gender,
+			&i.AvatarPath,
 			&i.ClinicName,
 		); err != nil {
 			return nil, err
@@ -208,7 +215,7 @@ func (q *Queries) ListPatients(ctx context.Context, search pgtype.Text) ([]ListP
 }
 
 const listPatientsForDoctor = `-- name: ListPatientsForDoctor :many
-SELECT DISTINCT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, c.name AS clinic_name FROM patients p
+SELECT DISTINCT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, p.avatar_path, c.name AS clinic_name FROM patients p
 JOIN appointments a ON a.patient_id = p.id
 LEFT JOIN clinics c ON c.id = p.clinic_id
 WHERE a.doctor_id = $1
@@ -237,6 +244,7 @@ type ListPatientsForDoctorRow struct {
 	ClinicID   int64       `json:"clinic_id"`
 	Iin        pgtype.Text `json:"iin"`
 	Gender     pgtype.Text `json:"gender"`
+	AvatarPath pgtype.Text `json:"avatar_path"`
 	ClinicName pgtype.Text `json:"clinic_name"`
 }
 
@@ -261,6 +269,7 @@ func (q *Queries) ListPatientsForDoctor(ctx context.Context, arg ListPatientsFor
 			&i.ClinicID,
 			&i.Iin,
 			&i.Gender,
+			&i.AvatarPath,
 			&i.ClinicName,
 		); err != nil {
 			return nil, err
@@ -295,7 +304,7 @@ const updatePatient = `-- name: UpdatePatient :one
 UPDATE patients
 SET full_name = $2, phone = $3, birth_date = $4, notes = $5, iin = $6, gender = $7
 WHERE id = $1
-RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender
+RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender, avatar_path
 `
 
 type UpdatePatientParams struct {
@@ -329,6 +338,35 @@ func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (P
 		&i.ClinicID,
 		&i.Iin,
 		&i.Gender,
+		&i.AvatarPath,
+	)
+	return i, err
+}
+
+const updatePatientAvatar = `-- name: UpdatePatientAvatar :one
+UPDATE patients SET avatar_path = $2 WHERE id = $1 RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender, avatar_path
+`
+
+type UpdatePatientAvatarParams struct {
+	ID         int64       `json:"id"`
+	AvatarPath pgtype.Text `json:"avatar_path"`
+}
+
+// Карточка общая для платформы, поэтому аватарку может обновить любая клиника.
+func (q *Queries) UpdatePatientAvatar(ctx context.Context, arg UpdatePatientAvatarParams) (Patient, error) {
+	row := q.db.QueryRow(ctx, updatePatientAvatar, arg.ID, arg.AvatarPath)
+	var i Patient
+	err := row.Scan(
+		&i.ID,
+		&i.FullName,
+		&i.Phone,
+		&i.BirthDate,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.ClinicID,
+		&i.Iin,
+		&i.Gender,
+		&i.AvatarPath,
 	)
 	return i, err
 }

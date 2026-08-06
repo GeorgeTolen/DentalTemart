@@ -356,6 +356,109 @@ func (h *Handlers) GetMyDoctorProfile(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, toDoctorDTO(d))
 }
 
+type doctorProfileRequest struct {
+	Specialization  string `json:"specialization"`
+	Phone           string `json:"phone"`
+	BirthDate       string `json:"birth_date"`
+	ExperienceYears int32  `json:"experience_years"`
+	Bio             string `json:"bio"`
+	Skills          string `json:"skills"`
+	Education       string `json:"education"`
+}
+
+// UpdateDoctorProfile edits the doctor's own profile card: направление, стаж,
+// опыт, навыки, образование, дата рождения. Врач правит свой профиль сам; ФИО,
+// цвет в календаре, активность и привязку к учётной записи по-прежнему меняет
+// только владелец — иначе врач мог бы «спрятаться» из расписания.
+func (h *Handlers) UpdateDoctorProfile(w http.ResponseWriter, r *http.Request) {
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	doctor, err := h.resolveProfileTarget(r, clinicID)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	var req doctorProfileRequest
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if req.ExperienceYears < 0 || req.ExperienceYears > 80 {
+		httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "стаж должен быть от 0 до 80 лет"))
+		return
+	}
+	birth, err := parseDate(req.BirthDate)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if err := validateBirthDate(birth); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	d, err := h.q.UpdateDoctorProfile(r.Context(), sqlc.UpdateDoctorProfileParams{
+		ID:              doctor.ID,
+		ClinicID:        clinicID,
+		Specialization:  optText(req.Specialization),
+		Phone:           optText(req.Phone),
+		BirthDate:       birth,
+		ExperienceYears: req.ExperienceYears,
+		Bio:             optText(req.Bio),
+		Skills:          optText(req.Skills),
+		Education:       optText(req.Education),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "врач не найден"))
+			return
+		}
+		httpx.Fail(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toDoctorDTO(d))
+}
+
+// resolveProfileTarget returns the doctor whose profile is being edited: for the
+// "doctor" role it is always their own profile (the {id} in the URL is ignored,
+// so a doctor cannot edit a colleague), for a manager it is the requested one.
+func (h *Handlers) resolveProfileTarget(r *http.Request, clinicID int64) (sqlc.Doctor, error) {
+	if middleware.Role(r.Context()) == "doctor" {
+		userID, ok := middleware.UserID(r.Context())
+		if !ok {
+			return sqlc.Doctor{}, httpx.NewError(http.StatusUnauthorized, "требуется авторизация")
+		}
+		d, err := h.q.GetDoctorByUserID(r.Context(), sqlc.GetDoctorByUserIDParams{
+			UserID:   pgtype.Int8{Int64: userID, Valid: true},
+			ClinicID: clinicID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return sqlc.Doctor{}, httpx.NewError(http.StatusNotFound, "профиль врача не привязан к этому аккаунту")
+			}
+			return sqlc.Doctor{}, err
+		}
+		return d, nil
+	}
+	if err := h.requireManager(r.Context()); err != nil {
+		return sqlc.Doctor{}, err
+	}
+	id, err := idParam(r)
+	if err != nil {
+		return sqlc.Doctor{}, err
+	}
+	d, err := h.q.GetDoctor(r.Context(), sqlc.GetDoctorParams{ID: id, ClinicID: clinicID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return sqlc.Doctor{}, httpx.NewError(http.StatusNotFound, "врач не найден")
+		}
+		return sqlc.Doctor{}, err
+	}
+	return d, nil
+}
+
 // ListUnlinkedDoctorUsers returns clinic users with the doctor role that are not
 // yet linked to a doctor profile (used to populate the "link account" selector).
 // The optional exclude_doctor_id query param keeps a doctor's current link

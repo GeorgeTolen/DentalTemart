@@ -124,8 +124,16 @@ type Querier interface {
 	SumRevenueInRange(ctx context.Context, arg SumRevenueInRangeParams) (SumRevenueInRangeRow, error)
 	UpdateAppointment(ctx context.Context, arg UpdateAppointmentParams) (Appointment, error)
 	UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Clinic, error)
+	// Административные поля. Профильные (стаж, опыт, навыки) врач ведёт сам —
+	// см. UpdateDoctorProfile, чтобы правки владельца и врача не затирали друг друга.
 	UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error)
+	UpdateDoctorAvatar(ctx context.Context, arg UpdateDoctorAvatarParams) (Doctor, error)
+	// Профиль врача: его он редактирует в личном кабинете (владелец — тоже, из
+	// карточки врача). Цвет, активность и привязку к учётке здесь не трогаем.
+	UpdateDoctorProfile(ctx context.Context, arg UpdateDoctorProfileParams) (Doctor, error)
 	UpdatePatient(ctx context.Context, arg UpdatePatientParams) (Patient, error)
+	// Карточка общая для платформы, поэтому аватарку может обновить любая клиника.
+	UpdatePatientAvatar(ctx context.Context, arg UpdatePatientAvatarParams) (Patient, error)
 	UpdateService(ctx context.Context, arg UpdateServiceParams) (Service, error)
 	// Only name/email; the password goes through UpdateUserPassword.
 	UpdateSuperadmin(ctx context.Context, arg UpdateSuperadminParams) (UpdateSuperadminRow, error)

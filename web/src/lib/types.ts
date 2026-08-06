@@ -71,6 +71,13 @@ export interface Doctor {
   user_id: number | null;
   // Login (email) of the linked account; empty when no account is linked.
   user_email: string;
+  // Профиль, который врач ведёт сам в личном кабинете.
+  birth_date: string | null;
+  experience_years: number;
+  bio: string;
+  skills: string;
+  education: string;
+  avatar_url: string | null;
 }
 
 export type PatientRecordType = "xray" | "allergy" | "scan3d";
@@ -115,6 +122,7 @@ export interface Patient {
   // карточку; is_own — она же ваша (только ей можно удалить пациента).
   clinic_name: string;
   is_own: boolean;
+  avatar_url: string | null;
 }
 
 // Услуга из прайса клиники. Цена — целое число тенге.

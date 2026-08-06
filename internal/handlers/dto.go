@@ -44,6 +44,13 @@ type doctorDTO struct {
 	UserID         *int64 `json:"user_id"`
 	// UserEmail is the login of the linked account (empty when not linked).
 	UserEmail string `json:"user_email"`
+	// Профиль, который врач ведёт сам.
+	BirthDate       *string `json:"birth_date"`
+	ExperienceYears int32   `json:"experience_years"`
+	Bio             string  `json:"bio"`
+	Skills          string  `json:"skills"`
+	Education       string  `json:"education"`
+	AvatarURL       *string `json:"avatar_url"`
 }
 
 func toDoctorDTO(d sqlc.Doctor) doctorDTO {
@@ -52,13 +59,19 @@ func toDoctorDTO(d sqlc.Doctor) doctorDTO {
 		userID = &d.UserID.Int64
 	}
 	return doctorDTO{
-		ID:             d.ID,
-		FullName:       d.FullName,
-		Specialization: textVal(d.Specialization),
-		Phone:          textVal(d.Phone),
-		Color:          d.Color,
-		IsActive:       d.IsActive,
-		UserID:         userID,
+		ID:              d.ID,
+		FullName:        d.FullName,
+		Specialization:  textVal(d.Specialization),
+		Phone:           textVal(d.Phone),
+		Color:           d.Color,
+		IsActive:        d.IsActive,
+		UserID:          userID,
+		BirthDate:       dateStr(d.BirthDate),
+		ExperienceYears: d.ExperienceYears,
+		Bio:             textVal(d.Bio),
+		Skills:          textVal(d.Skills),
+		Education:       textVal(d.Education),
+		AvatarURL:       avatarURL("doctors", d.ID, d.AvatarPath),
 	}
 }
 
@@ -66,6 +79,8 @@ func fromDoctorListRow(d sqlc.ListDoctorsRow) doctorDTO {
 	dto := toDoctorDTO(sqlc.Doctor{
 		ID: d.ID, FullName: d.FullName, Specialization: d.Specialization,
 		Phone: d.Phone, Color: d.Color, IsActive: d.IsActive, UserID: d.UserID,
+		BirthDate: d.BirthDate, ExperienceYears: d.ExperienceYears, Bio: d.Bio,
+		Skills: d.Skills, Education: d.Education, AvatarPath: d.AvatarPath,
 	})
 	dto.UserEmail = d.UserEmail
 	return dto
@@ -84,8 +99,9 @@ type patientDTO struct {
 	// Карточки пациентов общие для платформы: ClinicName — клиника, которая
 	// завела карточку, IsOwn — она же и есть клиника читателя (только ей можно
 	// удалить пациента).
-	ClinicName string `json:"clinic_name"`
-	IsOwn      bool   `json:"is_own"`
+	ClinicName string  `json:"clinic_name"`
+	IsOwn      bool    `json:"is_own"`
+	AvatarURL  *string `json:"avatar_url"`
 }
 
 func toPatientDTO(p sqlc.Patient) patientDTO {
@@ -97,6 +113,7 @@ func toPatientDTO(p sqlc.Patient) patientDTO {
 		Notes:     textVal(p.Notes),
 		IIN:       textVal(p.Iin),
 		Gender:    textVal(p.Gender),
+		AvatarURL: avatarURL("patients", p.ID, p.AvatarPath),
 	}
 }
 
@@ -123,6 +140,7 @@ func fromPatientListRow(r sqlc.ListPatientsRow) patientJoin {
 		Patient: sqlc.Patient{
 			ID: r.ID, FullName: r.FullName, Phone: r.Phone, BirthDate: r.BirthDate,
 			Notes: r.Notes, ClinicID: r.ClinicID, Iin: r.Iin, Gender: r.Gender,
+			AvatarPath: r.AvatarPath,
 		},
 		ClinicID: r.ClinicID, ClinicName: r.ClinicName,
 	}
@@ -133,6 +151,7 @@ func fromDoctorPatientRow(r sqlc.ListPatientsForDoctorRow) patientJoin {
 		Patient: sqlc.Patient{
 			ID: r.ID, FullName: r.FullName, Phone: r.Phone, BirthDate: r.BirthDate,
 			Notes: r.Notes, ClinicID: r.ClinicID, Iin: r.Iin, Gender: r.Gender,
+			AvatarPath: r.AvatarPath,
 		},
 		ClinicID: r.ClinicID, ClinicName: r.ClinicName,
 	}
@@ -143,6 +162,7 @@ func fromPatientGetRow(r sqlc.GetPatientRow) patientJoin {
 		Patient: sqlc.Patient{
 			ID: r.ID, FullName: r.FullName, Phone: r.Phone, BirthDate: r.BirthDate,
 			Notes: r.Notes, ClinicID: r.ClinicID, Iin: r.Iin, Gender: r.Gender,
+			AvatarPath: r.AvatarPath,
 		},
 		ClinicID: r.ClinicID, ClinicName: r.ClinicName,
 	}
@@ -153,6 +173,7 @@ func fromPatientIINRow(r sqlc.GetPatientByIINRow) patientJoin {
 		Patient: sqlc.Patient{
 			ID: r.ID, FullName: r.FullName, Phone: r.Phone, BirthDate: r.BirthDate,
 			Notes: r.Notes, ClinicID: r.ClinicID, Iin: r.Iin, Gender: r.Gender,
+			AvatarPath: r.AvatarPath,
 		},
 		ClinicID: r.ClinicID, ClinicName: r.ClinicName,
 	}

@@ -64,6 +64,66 @@ export function useDeleteDoctor() {
   });
 }
 
+export interface DoctorProfilePayload {
+  specialization: string;
+  phone: string;
+  birth_date: string;
+  experience_years: number;
+  bio: string;
+  skills: string;
+  education: string;
+}
+
+// Профиль врача правит он сам (или менеджер за него).
+export function useSaveDoctorProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { doctorId: number; profile: DoctorProfilePayload }) =>
+      (await api.put<Doctor>(`/doctors/${args.doctorId}/profile`, args.profile)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["doctors"] });
+      qc.invalidateQueries({ queryKey: ["doctor-me"] });
+    },
+  });
+}
+
+// --- Аватарки ---
+
+export function useUploadAvatar(kind: "patients" | "doctors") {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { id: number; file: File }) => {
+      const form = new FormData();
+      form.append("file", args.file);
+      return (await api.post(`/${kind}/${args.id}/avatar`, form)).data;
+    },
+    onSuccess: () => invalidateAvatarOwners(qc, kind),
+  });
+}
+
+export function useDeleteAvatar(kind: "patients" | "doctors") {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => api.delete(`/${kind}/${id}/avatar`),
+    onSuccess: () => invalidateAvatarOwners(qc, kind),
+  });
+}
+
+// Аватарка входит в карточку, поэтому после загрузки перечитываем те запросы,
+// которые её показывают.
+function invalidateAvatarOwners(
+  qc: ReturnType<typeof useQueryClient>,
+  kind: "patients" | "doctors"
+) {
+  if (kind === "patients") {
+    qc.invalidateQueries({ queryKey: ["patients"] });
+    qc.invalidateQueries({ queryKey: ["patient"] });
+    return;
+  }
+  qc.invalidateQueries({ queryKey: ["doctors"] });
+  qc.invalidateQueries({ queryKey: ["doctor-me"] });
+}
+
 export function useMyDoctorProfile() {
   return useQuery({
     queryKey: ["doctor-me"],

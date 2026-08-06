@@ -39,6 +39,10 @@ SET full_name = $2, phone = $3, birth_date = $4, notes = $5, iin = $6, gender = 
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdatePatientAvatar :one
+-- Карточка общая для платформы, поэтому аватарку может обновить любая клиника.
+UPDATE patients SET avatar_path = $2 WHERE id = $1 RETURNING *;
+
 -- name: DeletePatient :exec
 -- Только клиника, заведшая карточку: удаление каскадом уносит приёмы всех клиник.
 DELETE FROM patients WHERE id = $1 AND clinic_id = $2;
