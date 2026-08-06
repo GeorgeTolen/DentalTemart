@@ -417,7 +417,8 @@ export function useEvents(before: number) {
           params: before ? { before } : undefined,
         })
       ).data,
-    placeholderData: (prev) => prev,
+    // Без placeholderData: страницы накапливаются на стороне экрана, и показ
+    // предыдущего ответа во время загрузки следующего продублировал бы строки.
   });
 }
 
