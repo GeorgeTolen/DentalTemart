@@ -11,12 +11,11 @@ import type { Appointment, AppointmentStatus, Doctor } from "../lib/types";
 import { STATUS_LABELS } from "../lib/types";
 import { isoToLocalInput, localInputToISO, formatDate } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
-import { DateInput } from "../components/DateInputs";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import AppointmentBillModal from "../components/AppointmentBillModal";
 import AppointmentModal, { PatientPicker } from "../components/AppointmentModal";
 import { PickerField } from "../components/PickerDrawer";
-import TimePickerDrawer from "../components/TimePickerDrawer";
+import TimePickerDrawer, { DateField } from "../components/TimePickerDrawer";
 import { formatMoney } from "../lib/money";
 import { useAuth } from "../auth/AuthContext";
 
@@ -38,17 +37,41 @@ export default function AppointmentsPage() {
 
   const { data: doctors = [] } = useDoctors();
 
-  // Вместо фильтра «с — по» — месяц и лента его дней: клик по числу показывает
-  // записи этого дня. По умолчанию — сегодня.
+  // Вместо фильтра «с - по» - месяц и лента его дней: клик по числу показывает
+  // записи этого дня. По умолчанию - сегодня. В режиме «Диапазон» два клика
+  // задают отрезок: первый - начало, второй - конец.
   const today = new Date();
   const [monthDate, setMonthDate] = useState(
     () => new Date(today.getFullYear(), today.getMonth(), 1)
   );
   const [selectedDay, setSelectedDay] = useState(localDateStr(today));
+  // Конец диапазона; пустая строка - выбран один день.
+  const [rangeEnd, setRangeEnd] = useState("");
+  const [rangeMode, setRangeMode] = useState(false);
   const [doctorFilter, setDoctorFilter] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | "">("");
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [creating, setCreating] = useState(false);
+
+  function pickDay(value: string) {
+    if (rangeMode && selectedDay && !rangeEnd && value !== selectedDay) {
+      // Второй клик: замыкаем диапазон (клики в любом порядке).
+      if (value < selectedDay) {
+        setRangeEnd(selectedDay);
+        setSelectedDay(value);
+      } else {
+        setRangeEnd(value);
+      }
+      return;
+    }
+    setSelectedDay(value);
+    setRangeEnd("");
+  }
+
+  function toggleRangeMode() {
+    setRangeMode((v) => !v);
+    setRangeEnd("");
+  }
 
   const daysInMonth = new Date(
     monthDate.getFullYear(),
@@ -64,6 +87,7 @@ export default function AppointmentsPage() {
     const sameMonth =
       next.getFullYear() === today.getFullYear() && next.getMonth() === today.getMonth();
     setSelectedDay(sameMonth ? todayStr : localDateStr(next));
+    setRangeEnd("");
   }
 
   function dayStr(day: number): string {
@@ -77,10 +101,10 @@ export default function AppointmentsPage() {
 
   const from = useMemo(() => new Date(selectedDay + "T00:00:00").toISOString(), [selectedDay]);
   const to = useMemo(() => {
-    const d = new Date(selectedDay + "T00:00:00");
+    const d = new Date((rangeEnd || selectedDay) + "T00:00:00");
     d.setDate(d.getDate() + 1);
     return d.toISOString();
-  }, [selectedDay]);
+  }, [selectedDay, rangeEnd]);
 
   const { data: appointments = [], isLoading } = useAppointments(from, to, doctorFilter);
   const saveApptTop = useSaveAppointment();
@@ -108,7 +132,7 @@ export default function AppointmentsPage() {
   }
 
   // Отмена оставляет запись в календаре серой; удаление стирает её полностью
-  // вместе с пробитыми услугами — поэтому предупреждаем отдельно.
+  // вместе с пробитыми услугами - поэтому предупреждаем отдельно.
   async function remove(a: Appointment) {
     if (
       !confirm(
@@ -134,44 +158,72 @@ export default function AppointmentsPage() {
         )}
       </div>
 
-      {/* Месяц и лента его дней: быстрее, чем два поля дат. */}
+      {/* Месяц и лента его дней: быстрее, чем два поля дат. Кнопка «Диапазон»
+          включает выбор отрезка двумя кликами. */}
       <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-between gap-2">
           <button
-            onClick={() => shiftMonth(-1)}
-            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
-            aria-label="Предыдущий месяц"
+            onClick={toggleRangeMode}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+              rangeMode
+                ? "bg-brand text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
           >
-            ←
+            Диапазон
           </button>
-          <span className="min-w-[10rem] text-center text-sm font-semibold capitalize text-ink">
-            {MONTH_LABELS[monthDate.getMonth()]} {monthDate.getFullYear()}
-          </span>
-          <button
-            onClick={() => shiftMonth(1)}
-            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
-            aria-label="Следующий месяц"
-          >
-            →
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => shiftMonth(-1)}
+              className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
+              aria-label="Предыдущий месяц"
+            >
+              ←
+            </button>
+            <span className="min-w-[9rem] text-center text-sm font-semibold capitalize text-ink">
+              {MONTH_LABELS[monthDate.getMonth()]} {monthDate.getFullYear()}
+            </span>
+            <button
+              onClick={() => shiftMonth(1)}
+              className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
+              aria-label="Следующий месяц"
+            >
+              →
+            </button>
+          </div>
+          {/* Симметричная заглушка, чтобы месяц оставался по центру. */}
+          <span className="w-[4.5rem]" />
         </div>
+        {rangeMode && (
+          <p className="text-center text-xs text-slate-400">
+            {rangeEnd
+              ? "Диапазон выбран. Клик по дню начнёт новый."
+              : selectedDay
+                ? "Теперь выберите последний день диапазона"
+                : "Выберите первый день диапазона"}
+          </p>
+        )}
         <div className="flex gap-1 overflow-x-auto pb-1">
           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
             const value = dayStr(day);
-            const selected = value === selectedDay;
+            const isEdge = value === selectedDay || value === rangeEnd;
+            const inRange =
+              rangeEnd !== "" && value > selectedDay && value < rangeEnd;
             const isToday = value === todayStr;
             return (
               <button
                 key={day}
-                onClick={() => setSelectedDay(value)}
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-medium transition ${
-                  selected
-                    ? "bg-brand text-white"
-                    : isToday
+                onClick={() => pickDay(value)}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-medium transition-all duration-300 ${
+                  isEdge
+                    ? "scale-110 bg-brand text-white shadow-md"
+                    : inRange
                       ? "bg-brand-light text-brand-dark"
-                      : isWeekend(day)
-                        ? "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                        : "text-slate-600 hover:bg-slate-100"
+                      : isToday
+                        ? "bg-brand-light text-brand-dark"
+                        : isWeekend(day)
+                          ? "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                          : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 {day}
@@ -289,7 +341,7 @@ function AppointmentRow({
         description: a.description,
         next_visit_date: a.next_visit_date ?? "",
       });
-      // Врачу деньги не показываем — окно расчёта только для владельца и менеджера.
+      // Врачу деньги не показываем - окно расчёта только для владельца и менеджера.
       if (isAdmin) setBilling(true);
     } catch (e) {
       alert(errorMessage(e));
@@ -328,7 +380,7 @@ function AppointmentRow({
         <div className="border-t border-slate-100 px-4 pb-4 pt-3 space-y-3">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 text-sm">
             <Info label="Пациент" value={a.patient_name} />
-            <Info label="Телефон" value={a.patient_phone || "—"} />
+            <Info label="Телефон" value={a.patient_phone || "-"} />
             <Info label="Врач" value={a.doctor_name} />
             <Info label="Дата" value={formatDate(a.start_time)} />
             <Info label="Начало" value={startDate.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} />
@@ -361,7 +413,7 @@ function AppointmentRow({
                 </Button>
               )}
               {/* Отменённая запись остаётся в календаре серой. Удаление стирает
-                  её насовсем — вместе с пробитыми услугами. */}
+                  её насовсем - вместе с пробитыми услугами. */}
               {isAdmin && (
                 <Button variant="danger" className="py-1 px-3 text-xs" onClick={onDelete}>
                   Удалить
@@ -532,7 +584,13 @@ function AppointmentEditModal({
             placeholder="(не обязательно)"
           />
         </Field>
-        <Field label="Следующий приём"><DateInput value={nextVisit} onChange={setNextVisit} /></Field>
+        <Field label="Следующий приём">
+          <DateField
+            value={nextVisit}
+            onChange={setNextVisit}
+            drawerTitle="Дата следующего приёма"
+          />
+        </Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
       </div>
 

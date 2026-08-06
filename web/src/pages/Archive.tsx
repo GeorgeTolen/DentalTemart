@@ -85,15 +85,15 @@ export default function Archive() {
                   <td className="px-4 py-3 font-medium">{a.patient_name}</td>
                   <td className="px-4 py-3 text-slate-500">{a.doctor_name}</td>
                   <td className="px-4 py-3 text-slate-500">{formatDateTime(a.start_time)}</td>
-                  <td className="px-4 py-3 text-slate-500">{a.diagnosis || "—"}</td>
+                  <td className="px-4 py-3 text-slate-500">{a.diagnosis || "-"}</td>
                   <td
                     className="max-w-xs truncate px-4 py-3 text-slate-500"
                     title={a.description}
                   >
-                    {a.description || "—"}
+                    {a.description || "-"}
                   </td>
                   <td className="px-4 py-3 text-slate-500">
-                    {a.next_visit_date ? formatDate(a.next_visit_date) : "—"}
+                    {a.next_visit_date ? formatDate(a.next_visit_date) : "-"}
                   </td>
                 </tr>
               ))}

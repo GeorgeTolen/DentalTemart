@@ -59,7 +59,7 @@ func (h *Handlers) logEvent(ctx context.Context, clinicID int64, action, message
 		}
 	}
 	if name == "" {
-		name = "—"
+		name = "-"
 	}
 
 	if err := h.q.CreateEvent(ctx, sqlc.CreateEventParams{

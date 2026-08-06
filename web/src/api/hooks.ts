@@ -126,7 +126,7 @@ function invalidateAvatarOwners(
   qc.invalidateQueries({ queryKey: ["doctor-me"] });
 }
 
-// Профиль врача, привязанный к текущей учётке. `enabled` — чтобы не дёргать
+// Профиль врача, привязанный к текущей учётке. `enabled` - чтобы не дёргать
 // эндпоинт у владельца и менеджера: у них профиля врача нет и ответ будет 404.
 export function useMyDoctorProfile(enabled = true) {
   return useQuery({
@@ -174,7 +174,7 @@ export function useSaveSchedule() {
 // PATIENTS_PAGE_SIZE must match patientsPageSize on the server.
 export const PATIENTS_PAGE_SIZE = 10;
 
-// Отдаёт одну страницу общей базы пациентов. `page` — с нуля.
+// Отдаёт одну страницу общей базы пациентов. `page` - с нуля.
 export function usePatients(search: string, page = 0) {
   return useQuery({
     queryKey: ["patients", search, page],
@@ -184,7 +184,7 @@ export function usePatients(search: string, page = 0) {
           params: { search, offset: page * PATIENTS_PAGE_SIZE },
         })
       ).data,
-    // Пока грузится следующая страница, показываем прежнюю — список не мигает.
+    // Пока грузится следующая страница, показываем прежнюю - список не мигает.
     placeholderData: (prev) => prev,
   });
 }
@@ -565,7 +565,7 @@ export interface ClinicPayload {
   address: string;
   phone: string;
   is_active: boolean;
-  // Only on create: пробный период в днях (0 — бессрочный доступ).
+  // Only on create: пробный период в днях (0 - бессрочный доступ).
   trial_days?: number;
   // Only used on create: the clinic's first owner account.
   owner_name?: string;

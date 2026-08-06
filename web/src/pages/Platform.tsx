@@ -331,7 +331,7 @@ function ClinicAccessModal({
 
   return (
     <Modal
-      title={`Доступ — ${clinic.name}`}
+      title={`Доступ - ${clinic.name}`}
       onClose={onClose}
       footer={<Button variant="secondary" onClick={onClose}>Закрыть</Button>}
     >
@@ -365,7 +365,7 @@ function ClinicAccessModal({
             </Button>
           </div>
           <p className="text-xs text-slate-400">
-            Срок отсчитывается от текущего момента — подходит и для продления, и
+            Срок отсчитывается от текущего момента - подходит и для продления, и
             для разморозки.
           </p>
         </div>
@@ -376,7 +376,7 @@ function ClinicAccessModal({
             onClick={() => run("unlimited")}
             disabled={setAccess.isPending}
           >
-            Оплачено — доступ навсегда
+            Оплачено - доступ навсегда
           </Button>
           <Button
             variant="danger"
@@ -419,7 +419,7 @@ function PlatformAdmins() {
         <div>
           <h1 className="text-2xl font-bold text-ink">Администраторы платформы</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Учётные записи с полным доступом ко всем клиникам. Вход — на странице
+            Учётные записи с полным доступом ко всем клиникам. Вход - на странице
             «Вход для администратора платформы».
           </p>
         </div>
@@ -510,7 +510,7 @@ function PlatformAdminModal({
     setError("");
     if (!fullName.trim()) return setError("Введите ФИО");
     if (!email.trim()) return setError("Введите email");
-    // При создании пароль обязателен, при изменении — только если его меняют.
+    // При создании пароль обязателен, при изменении - только если его меняют.
     if ((!admin || password) && password.length < 6)
       return setError("Пароль должен быть не короче 6 символов");
     try {
@@ -568,7 +568,7 @@ function PlatformAdminModal({
         </Field>
         {admin?.is_self && password && (
           <p className="text-xs text-slate-400">
-            Вы меняете пароль собственной учётной записи — сессия сохранится, но
+            Вы меняете пароль собственной учётной записи - сессия сохранится, но
             на других устройствах придётся войти заново.
           </p>
         )}
@@ -708,7 +708,7 @@ function ClinicUsersModal({
 
   return (
     <Modal
-      title={`Учётные записи — ${clinic.name}`}
+      title={`Учётные записи - ${clinic.name}`}
       onClose={onClose}
       footer={<Button onClick={onClose}>Закрыть</Button>}
     >
@@ -733,7 +733,7 @@ function ClinicUsersModal({
           <p className="text-sm text-slate-400">Загрузка…</p>
         ) : users.length === 0 ? (
           <p className="text-sm text-slate-400">
-            В клинике нет ни одной учётной записи — добавьте владельца.
+            В клинике нет ни одной учётной записи - добавьте владельца.
           </p>
         ) : (
           <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
@@ -812,7 +812,7 @@ function ClinicModal({
   // Пробный период (только при создании): тумблер + число дней.
   const [trial, setTrial] = useState(false);
   const [trialDays, setTrialDays] = useState("7");
-  // Only used when creating a new clinic — its first owner.
+  // Only used when creating a new clinic - its first owner.
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
@@ -871,7 +871,7 @@ function ClinicModal({
             placeholder="Temart"
           />
         </Field>
-        <Field label="Идентификатор (slug, латиницей — оставьте пустым для авто)">
+        <Field label="Идентификатор (slug, латиницей - оставьте пустым для авто)">
           <Input
             value={slug}
             onChange={(e) => setSlug(e.target.value)}
@@ -930,7 +930,7 @@ function ClinicModal({
         {!clinic && (
           <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
             <p className="text-sm font-medium text-slate-600">
-              Владелец клиники (необязательно — можно добавить позже)
+              Владелец клиники (необязательно - можно добавить позже)
             </p>
             <Field label="ФИО владельца">
               <Input
@@ -1001,7 +1001,7 @@ function AddOwnerModal({
 
   return (
     <Modal
-      title={`Новый владелец — ${clinic.name}`}
+      title={`Новый владелец - ${clinic.name}`}
       onClose={onClose}
       footer={
         <>

@@ -140,7 +140,7 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
     const birthErr = validateBirthDate(birthDate);
     if (birthErr) { setError(birthErr); return; }
     try {
-      // Если пациент с таким ИИН уже есть — сервер вернёт его, дубликата не будет.
+      // Если пациент с таким ИИН уже есть - сервер вернёт его, дубликата не будет.
       const p = await savePatient.mutateAsync({ full_name: name.trim(), phone, iin, gender, birth_date: birthDate, notes });
       setError("");
       onNext(p);
@@ -197,13 +197,13 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
                 inputMode="numeric"
                 maxLength={12}
                 onChange={(e) => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
-                placeholder="Если ИИН уже есть в базе — подставится тот пациент"
+                placeholder="Если ИИН уже есть в базе - подставится тот пациент"
               />
             </Field>
             <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7..." /></Field>
             <Field label="Пол">
               <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
-                <option value="">— не указан —</option>
+                <option value="">- не указан -</option>
                 <option value="male">{GENDER_LABELS.male}</option>
                 <option value="female">{GENDER_LABELS.female}</option>
               </Select>
@@ -231,7 +231,7 @@ function FlowStep2({ patient, onNext, onBack, setError }: {
   const saveAppt = useSaveAppointment();
 
   const [doctorId, setDoctorId] = useState<number | "">(activeDoctors[0]?.id ?? "");
-  // По умолчанию — ближайшее время сегодня (рабочий день 8:00–20:00), приём 30 мин.
+  // По умолчанию - ближайшее время сегодня (рабочий день 8:00–20:00), приём 30 мин.
   const [start, setStart] = useState(() => defaultAppointmentStart());
   const [end, setEnd] = useState(() => addMinutesToLocalInput(defaultAppointmentStart(), 30));
 
@@ -265,7 +265,7 @@ function FlowStep2({ patient, onNext, onBack, setError }: {
       <div className="space-y-3">
         <Field label="Врач">
           <Select value={String(doctorId)} onChange={(e) => setDoctorId(Number(e.target.value))}>
-            <option value="">— выберите —</option>
+            <option value="">- выберите -</option>
             {activeDoctors.map((d) => (
               <option key={d.id} value={d.id}>{d.full_name}{d.specialization && ` · ${d.specialization}`}</option>
             ))}
@@ -366,7 +366,7 @@ function FlowStep4({ appointment, onNext, onBack, setError }: {
         {appointment.diagnosis && <div>Диагноз: <strong>{appointment.diagnosis}</strong></div>}
         {appointment.description && <div>Описание: <span className="text-slate-600">{appointment.description}</span></div>}
       </div>
-      <p className="text-sm text-slate-600">Подтвердите закрытие записи — статус изменится на «Завершён».</p>
+      <p className="text-sm text-slate-600">Подтвердите закрытие записи - статус изменится на «Завершён».</p>
       <div className="flex gap-3">
         <Button variant="secondary" onClick={onBack}>Назад</Button>
         <Button onClick={complete} disabled={saveAppt.isPending}>
@@ -425,7 +425,7 @@ function FlowStep5({ appointment, onFinish, setError }: {
         <div className="space-y-3">
           <Field label="Врач">
             <Select value={String(doctorId)} onChange={(e) => setDoctorId(Number(e.target.value))}>
-              <option value="">— выберите —</option>
+              <option value="">- выберите -</option>
               {activeDoctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.full_name}</option>
               ))}

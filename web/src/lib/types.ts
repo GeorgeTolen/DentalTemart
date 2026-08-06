@@ -42,7 +42,7 @@ export interface Clinic {
   owner_count: number;
   patient_count: number;
   doctor_count: number;
-  // Срок доступа: null — бессрочный (оплачено); frozen — срок истёк.
+  // Срок доступа: null - бессрочный (оплачено); frozen - срок истёк.
   access_expires_at: string | null;
   frozen: boolean;
 }
@@ -98,7 +98,7 @@ export interface PatientRecord {
   file_name: string;
   created_by_name: string;
   created_at: string;
-  // Медкарта общая: clinic_name — кто сделал запись, is_own — можно ли удалить.
+  // Медкарта общая: clinic_name - кто сделал запись, is_own - можно ли удалить.
   clinic_name: string;
   is_own: boolean;
 }
@@ -124,14 +124,14 @@ export interface Patient {
   notes: string;
   iin: string;
   gender: Gender;
-  // База пациентов общая для платформы: clinic_name — клиника, заведшая
-  // карточку; is_own — она же ваша (только ей можно удалить пациента).
+  // База пациентов общая для платформы: clinic_name - клиника, заведшая
+  // карточку; is_own - она же ваша (только ей можно удалить пациента).
   clinic_name: string;
   is_own: boolean;
   avatar_url: string | null;
 }
 
-// Услуга из прайса клиники. Цена — целое число тенге.
+// Услуга из прайса клиники. Цена - целое число тенге.
 export interface Service {
   id: number;
   name: string;
@@ -174,7 +174,7 @@ export interface ClinicEvent {
 
 export interface EventsPage {
   items: ClinicEvent[];
-  // 0 — больше страниц нет.
+  // 0 - больше страниц нет.
   next_before: number;
 }
 
@@ -214,7 +214,7 @@ export interface Appointment {
   diagnosis: string;
   description: string;
   next_visit_date: string | null;
-  // Стоимость оказанных услуг, тенге. null — приём чужой клиники: история
+  // Стоимость оказанных услуг, тенге. null - приём чужой клиники: история
   // пациента общая, деньги нет.
   total: number | null;
   clinic_name: string;

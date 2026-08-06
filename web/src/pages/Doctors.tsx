@@ -13,7 +13,7 @@ export default function Doctors() {
   const { user, readOnly } = useAuth();
   const canManage = user?.role !== "doctor" && !readOnly;
   const { data: allDoctors = [] } = useDoctors();
-  // Врач смотрит на коллег — себя в этом списке видеть незачем, его профиль
+  // Врач смотрит на коллег - себя в этом списке видеть незачем, его профиль
   // живёт в личном кабинете.
   const doctors =
     user?.role === "doctor"
@@ -48,12 +48,12 @@ export default function Doctors() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {doctors.map((d) => (
-          <div key={d.id} className="rounded-2xl bg-white p-5 shadow-sm">
-            {/* Клик по фото или имени открывает карточку врача — отдельная
+          <div key={d.id} className="flex flex-col rounded-2xl bg-white p-5 shadow-sm">
+            {/* Клик по фото или имени открывает карточку врача - отдельная
                 кнопка «Профиль» для этого не нужна. */}
             <button
               onClick={() => setViewing(d)}
-              className="flex w-full items-start gap-3 text-left"
+              className="flex w-full flex-1 items-start gap-3 text-left"
               title="Открыть профиль врача"
             >
               <Avatar
@@ -65,7 +65,7 @@ export default function Doctors() {
               <div className="min-w-0 flex-1">
                 <div className="font-semibold hover:text-brand">{d.full_name}</div>
                 <div className="text-sm text-slate-500">
-                  {d.specialization || "—"}
+                  {d.specialization || "-"}
                 </div>
                 <div className="text-sm text-slate-400">{d.phone}</div>
                 {d.experience_years > 0 && (
@@ -85,7 +85,9 @@ export default function Doctors() {
                 )}
               </div>
             </button>
-            <div className="mt-4 flex flex-wrap gap-3 text-sm">
+            {/* mt-auto прижимает кнопки к низу: карточки в ряду одной высоты,
+                и «Изменить/Удалить» не прыгают от объёма профиля соседа. */}
+            <div className="mt-auto flex flex-wrap gap-3 pt-4 text-sm">
               {canManage && (
                 <>
                   <button
@@ -124,7 +126,7 @@ export default function Doctors() {
           onClose={() => setViewing(null)}
           footer={<Button onClick={() => setViewing(null)}>Закрыть</Button>}
         >
-          {/* Владелец и менеджер могут дополнить профиль врача за него —
+          {/* Владелец и менеджер могут дополнить профиль врача за него -
               например, пока врач не завёл себе учётную запись. */}
           <DoctorProfileCard
             doctor={viewing}

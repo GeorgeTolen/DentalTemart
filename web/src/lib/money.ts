@@ -1,4 +1,4 @@
-// Деньги в системе — целое число тенге. Дробных тиынов в прайсе не бывает, а
+// Деньги в системе - целое число тенге. Дробных тиынов в прайсе не бывает, а
 // целое число избавляет от неточностей чисел с плавающей точкой при суммировании.
 
 const formatter = new Intl.NumberFormat("ru-RU");
@@ -8,7 +8,7 @@ export function formatMoney(tenge: number): string {
   return `${formatter.format(Math.round(tenge))} ₸`;
 }
 
-// formatAmount — то же без символа валюты (для полей ввода и таблиц).
+// formatAmount - то же без символа валюты (для полей ввода и таблиц).
 export function formatAmount(tenge: number): string {
   return formatter.format(Math.round(tenge));
 }

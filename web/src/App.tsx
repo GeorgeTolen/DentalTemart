@@ -43,7 +43,7 @@ export default function App() {
     );
   }
 
-  // Platform superadmin: dedicated single-page panel, no clinic UI — unless
+  // Platform superadmin: dedicated single-page panel, no clinic UI - unless
   // they opened a clinic in support mode, where they get the clinic screens
   // read-only (the server refuses any write in that mode).
   if (user.role === "superadmin" && !supportClinic) {
@@ -55,7 +55,7 @@ export default function App() {
     );
   }
 
-  // Пробный период клиники истёк: вместо приложения — экран с контактами для
+  // Пробный период клиники истёк: вместо приложения - экран с контактами для
   // продления. Суперадмина в режиме поддержки это не касается.
   if (user.role !== "superadmin" && user.clinic_frozen) {
     return <Frozen />;

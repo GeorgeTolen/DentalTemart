@@ -5,7 +5,7 @@ import PasswordChangeForm from "../components/PasswordChangeForm";
 
 /**
  * Личный кабинет владельца и менеджера: своя учётная запись, смена пароля и
- * короткая сводка по клинике на сегодня. У врача свой кабинет (DoctorCabinet) —
+ * короткая сводка по клинике на сегодня. У врача свой кабинет (DoctorCabinet) -
  * он завязан на профиль врача, которого у владельца нет.
  */
 export default function OwnerCabinet() {

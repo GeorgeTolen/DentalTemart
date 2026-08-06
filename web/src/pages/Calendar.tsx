@@ -27,7 +27,7 @@ interface ModalState {
   initialEnd?: string;
 }
 
-// Узкий экран (телефон) — открываем календарь в режиме дня.
+// Узкий экран (телефон) - открываем календарь в режиме дня.
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
 export default function CalendarPage() {
@@ -48,7 +48,7 @@ export default function CalendarPage() {
   );
   const saveAppt = useSaveAppointment();
 
-  // Врач видит расписание всей клиники, но двигать может только свои приёмы —
+  // Врач видит расписание всей клиники, но двигать может только свои приёмы -
   // сервер чужие всё равно отклонит, так что не даём и тянуть.
   const isDoctor = user?.role === "doctor";
   const { data: myProfile } = useMyDoctorProfile(isDoctor);
@@ -56,19 +56,34 @@ export default function CalendarPage() {
 
   function canMove(a: Appointment): boolean {
     if (readOnly) return false;
-    // Завершённый приём — уже история, отменённый двигать незачем.
+    // Завершённый приём - уже история, отменённый двигать незачем.
     if (a.status === "completed" || a.status === "cancelled") return false;
     if (isDoctor) return myDoctorId != null && a.doctor_id === myDoctorId;
     return true;
   }
 
+  // Статус видно прямо на карточке: отменённые серые и перечёркнутые,
+  // завершённые с галочкой и приглушены, «не пришёл» помечен крестом.
+  const STATUS_MARK: Record<string, string> = {
+    completed: "✓ ",
+    cancelled: "✕ отменён · ",
+    no_show: "✕ не пришёл · ",
+  };
   const events = appointments.map((a) => ({
     id: String(a.id),
-    title: `${a.patient_name} · ${a.doctor_name}`,
+    title: `${STATUS_MARK[a.status] ?? ""}${a.patient_name} · ${a.doctor_name}`,
     start: a.start_time,
     end: a.end_time,
     backgroundColor: a.status === "cancelled" ? "#94A3B8" : a.doctor_color,
     editable: canMove(a),
+    classNames:
+      a.status === "cancelled"
+        ? ["appt-cancelled"]
+        : a.status === "completed"
+          ? ["appt-completed"]
+          : a.status === "no_show"
+            ? ["appt-no-show"]
+            : [],
     extendedProps: { appointment: a },
   }));
 
@@ -96,7 +111,7 @@ export default function CalendarPage() {
    *
    * Отправляем запись целиком, меняя только время: UpdateAppointment на сервере
    * перезаписывает все поля, и частичный payload стёр бы диагноз и дату
-   * следующего приёма. При отказе (например, 409 — врач уже занят) возвращаем
+   * следующего приёма. При отказе (например, 409 - врач уже занят) возвращаем
    * карточку на место.
    */
   async function onEventMoved(info: { event: EventApi; revert: () => void }) {
@@ -163,7 +178,7 @@ export default function CalendarPage() {
       <div className="rounded-2xl bg-white p-2 shadow-sm sm:p-4">
         <FullCalendar
           plugins={[timeGridPlugin, interactionPlugin]}
-          // На телефоне по умолчанию — вид «День» (неделя не влезает по ширине).
+          // На телефоне по умолчанию - вид «День» (неделя не влезает по ширине).
           initialView={isMobile ? "timeGridDay" : "timeGridWeek"}
           locale={ruLocale}
           headerToolbar={{

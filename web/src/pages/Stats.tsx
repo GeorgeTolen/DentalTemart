@@ -29,7 +29,7 @@ function Finance() {
     { label: "Этот год", bucket: stats.year },
     { label: "За всё время", bucket: stats.all_time },
   ];
-  // Масштаб столбиков — от лучшего месяца, иначе разница между месяцами не видна.
+  // Масштаб столбиков - от лучшего месяца, иначе разница между месяцами не видна.
   const maxMonth = Math.max(1, ...stats.by_month.map((m) => m.revenue));
 
   return (
@@ -118,7 +118,7 @@ function RevenueBreakdown({
             <tbody className="divide-y divide-slate-100">
               {rows.map((r) => (
                 <tr key={r.name}>
-                  <td className="px-5 py-3 font-medium text-ink">{r.name || "—"}</td>
+                  <td className="px-5 py-3 font-medium text-ink">{r.name || "-"}</td>
                   <td className="px-5 py-3 text-right text-slate-400">
                     {r.services_count} {countLabel}
                   </td>

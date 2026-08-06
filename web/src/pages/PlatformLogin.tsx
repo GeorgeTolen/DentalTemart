@@ -5,7 +5,7 @@ import { errorMessage } from "../api/client";
 import { Button, Field, Input } from "../components/ui";
 import { AuthShell } from "./Login";
 
-// Separate login for the platform superadmin — the person who manages every
+// Separate login for the platform superadmin - the person who manages every
 // clinic. No clinic is chosen here.
 export default function PlatformLogin() {
   const { platformLogin } = useAuth();

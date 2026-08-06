@@ -11,7 +11,7 @@ import type { Appointment } from "../lib/types";
 import { formatMoney, parseMoneyInput, formatAmount } from "../lib/money";
 import { Button, Field, Input, Modal, Select } from "./ui";
 
-// Строка чека в состоянии редактирования. service_id = 0 — разовая услуга,
+// Строка чека в состоянии редактирования. service_id = 0 - разовая услуга,
 // вбитая руками (её нет в прайсе).
 interface Row {
   service_id: number;
@@ -43,7 +43,7 @@ export default function AppointmentBillModal({
   const [rows, setRows] = useState<Row[]>([]);
   const [picked, setPicked] = useState<number | "">("");
   const [error, setError] = useState("");
-  // Уже загруженный чек подставляем один раз, дальше не трогаем — иначе правки
+  // Уже загруженный чек подставляем один раз, дальше не трогаем - иначе правки
   // затирались бы фоновым обновлением запроса.
   const [loaded, setLoaded] = useState(false);
 
@@ -68,7 +68,7 @@ export default function AppointmentBillModal({
     const s = services.find((x) => x.id === serviceId);
     if (!s) return;
     setRows((prev) => {
-      // Та же услуга второй раз — увеличиваем количество, а не плодим строки.
+      // Та же услуга второй раз - увеличиваем количество, а не плодим строки.
       const at = prev.findIndex(
         (r) => r.service_id === s.id && r.price === s.price
       );
@@ -136,7 +136,7 @@ export default function AppointmentBillModal({
 
   return (
     <Modal
-      title={`Услуги и стоимость — ${appointment.patient_name}`}
+      title={`Услуги и стоимость - ${appointment.patient_name}`}
       onClose={onClose}
       footer={
         <>
@@ -169,10 +169,10 @@ export default function AppointmentBillModal({
                       if (id) addFromCatalog(id);
                     }}
                   >
-                    <option value="">— выберите услугу —</option>
+                    <option value="">- выберите услугу -</option>
                     {activeServices.map((s) => (
                       <option key={s.id} value={s.id} title={s.description}>
-                        {s.name} — {formatAmount(s.price)} ₸
+                        {s.name} - {formatAmount(s.price)} ₸
                       </option>
                     ))}
                   </Select>

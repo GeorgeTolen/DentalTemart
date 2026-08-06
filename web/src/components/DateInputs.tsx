@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { fieldClass } from "./ui";
+import { CalendarIcon } from "./icons";
 
 // Locale-independent date & time inputs that ALWAYS show day-month-year
 // (ДД.ММ.ГГГГ). Native <input type="date"> renders in the browser's locale
-// (often month-first), which a page cannot override — so we use masked text
+// (often month-first), which a page cannot override - so we use masked text
 // fields, keeping a native calendar popup behind a transparent overlay.
 //
 // The public value/onChange formats match the native inputs they replace, so
@@ -99,7 +100,7 @@ export function DateInput({
         autoFocus={autoFocus}
       />
       {/* Transparent native date input over the calendar icon: clicking it opens
-          the browser's calendar popup (a visual month grid — no locale text). */}
+          the browser's calendar popup (a visual month grid - no locale text). */}
       <input
         type="date"
         value={value}
@@ -115,7 +116,7 @@ export function DateInput({
         className="absolute inset-y-0 right-0 w-10 cursor-pointer opacity-0 disabled:cursor-not-allowed"
       />
       <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
-        📅
+        <CalendarIcon className="h-4 w-4" />
       </span>
     </div>
   );

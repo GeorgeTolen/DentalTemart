@@ -85,7 +85,7 @@ function isAuthCall(url: string): boolean {
 let refreshing: Promise<unknown> | null = null;
 
 // Silent session renewal: when the short-lived access token expires (401), we
-// refresh it via the long-lived refresh cookie and retry the request — the
+// refresh it via the long-lived refresh cookie and retry the request - the
 // user signs in once and the session stays active.
 api.interceptors.response.use(
   (res) => res,

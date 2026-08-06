@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../lib/types";
 import ThemeToggle from "./ThemeToggle";
+import { CalendarIcon } from "./icons";
 
 interface NavItem {
   to: string;
@@ -10,7 +11,7 @@ interface NavItem {
   end?: boolean;
 }
 
-// Календарь — главный экран: именно в нём администраторы и врачи ставят записи,
+// Календарь - главный экран: именно в нём администраторы и врачи ставят записи,
 // поэтому он выделен и стоит первым.
 const CALENDAR: NavItem = { to: "/", label: "Календарь", end: true };
 
@@ -28,7 +29,7 @@ export default function Layout() {
   const isOwner = user?.role === "owner";
   const isManager = isOwner || user?.role === "admin";
   // В режиме поддержки суперадмин только смотрит: у него нет ни прайса, ни
-  // управления — сервер всё равно ответит 403 на эти запросы.
+  // управления - сервер всё равно ответит 403 на эти запросы.
   const canManage = isManager && !supportClinic;
 
   // Прайс и деньги менеджерские: /api/services закрыт requireManager.
@@ -46,7 +47,7 @@ export default function Layout() {
       ]
     : [];
 
-  // Группа раскрыта, пока пользователь внутри неё — иначе он не видит, где стоит.
+  // Группа раскрыта, пока пользователь внутри неё - иначе он не видит, где стоит.
   const inManage = location.pathname.startsWith("/admin");
   const [manageOpen, setManageOpen] = useState(inManage);
   const showManage = manageOpen || inManage;
@@ -72,7 +73,7 @@ export default function Layout() {
       {supportClinic && (
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-amber-500 px-4 py-1.5 text-center text-xs font-medium text-white">
           <span>
-            Режим поддержки: «{supportClinic.name}» — только просмотр, изменения
+            Режим поддержки: «{supportClinic.name}» - только просмотр, изменения
             недоступны
           </span>
           <button
@@ -118,7 +119,7 @@ export default function Layout() {
           </div>
         </header>
 
-        {/* Мобильные вкладки навигации — отдельная строка, прокручивается вбок */}
+        {/* Мобильные вкладки навигации - отдельная строка, прокручивается вбок */}
         <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden">
           {mobileLinks.map((l) => (
             <NavLink
@@ -164,7 +165,7 @@ export default function Layout() {
                 }`
               }
             >
-              <span aria-hidden>📅</span>
+              <CalendarIcon className="h-5 w-5" />
               {CALENDAR.label}
             </NavLink>
 
@@ -186,7 +187,7 @@ export default function Layout() {
           </nav>
 
           {/* «Управление» живёт внизу, рядом с личной зоной, а личный кабинет
-              открывается кликом по имени — отдельный пункт меню не нужен. */}
+              открывается кликом по имени - отдельный пункт меню не нужен. */}
           <div className="mt-4 border-t border-slate-100 pt-4">
             {manageLinks.length > 0 && (
               <div className="mb-2">

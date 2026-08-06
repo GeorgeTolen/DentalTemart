@@ -25,9 +25,9 @@ import {
   StatusBadge,
   Textarea,
 } from "./ui";
-import { DateInput } from "./DateInputs";
 import { PickerDrawer, PickerField, PickerRow, useDebounced } from "./PickerDrawer";
-import TimePickerDrawer from "./TimePickerDrawer";
+import TimePickerDrawer, { DateField } from "./TimePickerDrawer";
+import { ClockIcon } from "./icons";
 import { Avatar } from "./Avatar";
 import AppointmentBillModal from "./AppointmentBillModal";
 import { useAuth } from "../auth/AuthContext";
@@ -49,7 +49,7 @@ const STATUSES: AppointmentStatus[] = [
 ];
 
 export default function AppointmentModal(props: Props) {
-  // A completed appointment can no longer be edited — instead the card turns
+  // A completed appointment can no longer be edited - instead the card turns
   // into a "schedule the follow-up visit" form.
   if (props.existing?.status === "completed") {
     return <CompletedCard {...props} existing={props.existing} />;
@@ -89,7 +89,7 @@ function EditCard({
     existing?.patient_id ?? ""
   );
   // Подпись выбранного пациента: список теперь листается страницами, и найти в
-  // нём выбранного, чтобы показать имя, уже нельзя — храним рядом.
+  // нём выбранного, чтобы показать имя, уже нельзя - храним рядом.
   const [patientName, setPatientName] = useState(existing?.patient_name ?? "");
   const [newPatientName, setNewPatientName] = useState("");
   const [newPatientPhone, setNewPatientPhone] = useState("");
@@ -134,7 +134,7 @@ function EditCard({
     : "";
 
   // «Завершить» прямо из карточки: администратору сразу открывается расчёт
-  // стоимости, врачу — просто закрытие (деньги ему не показываем).
+  // стоимости, врачу - просто закрытие (деньги ему не показываем).
   async function complete() {
     if (!existing) return;
     setError("");
@@ -171,7 +171,7 @@ function EditCard({
           return setError("Введите ФИО нового пациента");
         if (newPatientIin && newPatientIin.length !== 12)
           return setError("ИИН должен состоять из 12 цифр");
-        // Если ИИН уже есть в базе — сервер вернёт существующего пациента.
+        // Если ИИН уже есть в базе - сервер вернёт существующего пациента.
         const created = await savePatient.mutateAsync({
           full_name: newPatientName.trim(),
           phone: newPatientPhone.trim(),
@@ -243,15 +243,16 @@ function EditCard({
       }
     >
       <div className="space-y-4">
-        {/* Шапка: время приёма и статус — самое главное, всегда сверху. */}
+        {/* Шапка: время приёма и статус - самое главное, всегда сверху. */}
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-brand-bg px-3 py-2.5">
           <button
             type="button"
             onClick={() => setPickingTime(true)}
             title="Изменить дату и время"
-            className="text-sm font-semibold text-brand-dark hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-dark hover:underline"
           >
-            🕐 {timeLabel || "Выбрать дату и время"}
+            <ClockIcon className="h-4 w-4" />
+            {timeLabel || "Выбрать дату и время"}
           </button>
           <span className="ml-auto">
             <StatusBadge status={status} />
@@ -283,7 +284,7 @@ function EditCard({
                 onChange={(e) =>
                   setNewPatientIin(e.target.value.replace(/\D/g, "").slice(0, 12))
                 }
-                placeholder="Если уже есть — подставится пациент"
+                placeholder="Если уже есть - подставится пациент"
               />
             </Field>
             <Field label="Телефон">
@@ -346,7 +347,11 @@ function EditCard({
         {/* Дата следующего приёма заполняется позже, при работе с записью. */}
         {existing && (
           <Field label="Дата следующего приёма">
-            <DateInput value={nextVisit ?? ""} onChange={setNextVisit} />
+            <DateField
+              value={nextVisit ?? ""}
+              onChange={setNextVisit}
+              drawerTitle="Дата следующего приёма"
+            />
           </Field>
         )}
 
@@ -414,7 +419,7 @@ function EditCard({
 
 /**
  * Выбор пациента: серверный поиск по общей базе с debounce. Показываем первую
- * страницу результатов — если нужного нет, уточняют запрос.
+ * страницу результатов - если нужного нет, уточняют запрос.
  */
 export function PatientPicker({
   onPick,
@@ -460,7 +465,7 @@ export function PatientPicker({
       ))}
       {total > patients.length && (
         <p className="px-3 py-2 text-xs text-slate-400">
-          Показаны первые {patients.length} из {total} — уточните поиск.
+          Показаны первые {patients.length} из {total} - уточните поиск.
         </p>
       )}
     </PickerDrawer>
@@ -622,7 +627,7 @@ function CompletedCard({
           </div>
           <Row label="Врач" value={existing.doctor_name} />
           <Row label="Время" value={formatDateTime(existing.start_time)} />
-          <Row label="Диагноз" value={existing.diagnosis || "—"} />
+          <Row label="Диагноз" value={existing.diagnosis || "-"} />
           {existing.description && (
             <div>
               <div className="text-slate-400">Описание</div>
@@ -630,7 +635,7 @@ function CompletedCard({
             </div>
           )}
           <p className="pt-1 text-xs text-slate-400">
-            Приём завершён — данные приёма изменить нельзя. Можно записать
+            Приём завершён - данные приёма изменить нельзя. Можно записать
             пациента на следующий приём.
           </p>
         </div>
@@ -640,7 +645,11 @@ function CompletedCard({
           <h3 className="text-sm font-semibold text-ink">Следующий приём</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Дата">
-              <DateInput value={nextDate} onChange={setNextDate} />
+              <DateField
+                value={nextDate}
+                onChange={setNextDate}
+                drawerTitle="Дата следующего приёма"
+              />
             </Field>
             <Field label="Время">
               <Input
@@ -651,7 +660,7 @@ function CompletedCard({
             </Field>
           </div>
 
-          <Field label="Врач (по умолчанию — тот же)">
+          <Field label="Врач (по умолчанию - тот же)">
             <Select
               value={String(nextDoctorId)}
               onChange={(e) => setNextDoctorId(Number(e.target.value))}

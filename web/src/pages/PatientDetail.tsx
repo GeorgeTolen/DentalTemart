@@ -28,6 +28,7 @@ import { DateInput, DateTimeInput } from "../components/DateInputs";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import AppointmentBillModal from "../components/AppointmentBillModal";
 import { Avatar, AvatarUpload } from "../components/Avatar";
+import { PaperclipIcon } from "../components/icons";
 import { formatMoney } from "../lib/money";
 import type { Appointment, AppointmentStatus, Gender, PatientRecordType } from "../lib/types";
 import { STATUS_LABELS, RECORD_TYPE_LABELS, GENDER_LABELS } from "../lib/types";
@@ -65,7 +66,7 @@ export default function PatientDetail() {
         {!readOnly && (
           <div className="flex gap-2">
             {/* Карточка общая для платформы, но правит её только та клиника,
-                которая её завела — остальным сервер ответит 403. */}
+                которая её завела - остальным сервер ответит 403. */}
             {patient.is_own && (
               <Button variant="secondary" onClick={() => setEditingPatient(true)}>
                 Редактировать
@@ -290,7 +291,7 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
         description: a.description,
         next_visit_date: a.next_visit_date ?? "",
       });
-      // Сразу считаем стоимость — пока приём свежий в памяти.
+      // Сразу считаем стоимость - пока приём свежий в памяти.
       if (canBill) setBilling(true);
     } catch (e) {
       alert(errorMessage(e));
@@ -467,11 +468,12 @@ function PatientRecordsSection({ patientId }: { patientId: number }) {
                       rel="noreferrer"
                       className="mt-2 inline-block text-sm text-brand hover:underline"
                     >
-                      📎 {r.file_name || "Открыть файл"}
+                      <PaperclipIcon className="mr-1 inline h-4 w-4 align-text-bottom" />
+                      {r.file_name || "Открыть файл"}
                     </a>
                   )}
                 </div>
-                {/* Удалять можно только записи своей клиники — медкарта общая,
+                {/* Удалять можно только записи своей клиники - медкарта общая,
                     но хозяин у каждой записи один. */}
                 {!readOnly && r.is_own && (
                   <button
@@ -612,7 +614,7 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
           </Field>
           <Field label="Пол">
             <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
-              <option value="">— не указан —</option>
+              <option value="">- не указан -</option>
               <option value="male">{GENDER_LABELS.male}</option>
               <option value="female">{GENDER_LABELS.female}</option>
             </Select>
@@ -635,7 +637,7 @@ function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: n
   const save = useSaveAppointment();
 
   const [doctorId, setDoctorId] = useState<number | "">(activeDoctors[0]?.id ?? "");
-  // По умолчанию — ближайшее время сегодня, приём 30 минут.
+  // По умолчанию - ближайшее время сегодня, приём 30 минут.
   const [start, setStart] = useState(() => defaultAppointmentStart());
   const [end, setEnd] = useState(() => addMinutesToLocalInput(defaultAppointmentStart(), 30));
   const [diagnosis, setDiagnosis] = useState("");
@@ -680,7 +682,7 @@ function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: n
         </div>
         <Field label="Врач">
           <Select value={String(doctorId)} onChange={(e) => setDoctorId(Number(e.target.value))}>
-            <option value="">— выберите врача —</option>
+            <option value="">- выберите врача -</option>
             {activeDoctors.map((d) => (
               <option key={d.id} value={d.id}>{d.full_name}{d.specialization && ` · ${d.specialization}`}</option>
             ))}

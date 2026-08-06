@@ -10,7 +10,7 @@ export function formatTime(iso: string): string {
 }
 
 export function formatDate(value: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   // Date-only values (YYYY-MM-DD, e.g. birth_date / next_visit_date) must be
   // rendered from their literal parts, not via new Date(), which would shift
   // them by the local timezone offset (an off-by-one-day bug west of UTC).
@@ -19,7 +19,7 @@ export function formatDate(value: string | null): string {
     return `${dateOnly[3]}.${dateOnly[2]}.${dateOnly[1]}`;
   }
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 

@@ -75,7 +75,7 @@ func (h *Handlers) checkDoctorColor(r *http.Request, clinicID int64, color strin
 		return err
 	}
 	if taken {
-		return httpx.NewError(http.StatusConflict, "этот цвет уже занят другим врачом — выберите другой")
+		return httpx.NewError(http.StatusConflict, "этот цвет уже занят другим врачом, выберите другой")
 	}
 	return nil
 }

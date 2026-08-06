@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useDoctors, useSaveAppointment } from "../api/hooks";
 import { errorMessage } from "../api/client";
-import { localInputToISO, maxAppointmentInput, validateAppointmentDate } from "../lib/datetime";
+import { localInputToISO, validateAppointmentDate } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select } from "./ui";
-import { DateInput } from "./DateInputs";
+import { DateField } from "./TimePickerDrawer";
 import type { Appointment } from "../lib/types";
 
 // Quick "schedule the next visit" modal, reused from the Dashboard, the
@@ -24,7 +24,7 @@ export default function ScheduleFollowUpModal({
   const originalTime = new Date(appointment.start_time);
   const pad = (n: number) => String(n).padStart(2, "0");
 
-  // Если у записи уже назначен следующий приём — режим «Изменить».
+  // Если у записи уже назначен следующий приём - режим «Изменить».
   const isEdit = !!appointment.next_visit_date;
 
   const [doctorId, setDoctorId] = useState(appointment.doctor_id);
@@ -54,7 +54,7 @@ export default function ScheduleFollowUpModal({
         description: "",
         next_visit_date: "",
       });
-      // 2) отмечаем дату следующего приёма в текущей записи — тогда кнопка
+      // 2) отмечаем дату следующего приёма в текущей записи - тогда кнопка
       // превращается в «Изменить след. приём».
       await save.mutateAsync({
         id: appointment.id,
@@ -101,10 +101,10 @@ export default function ScheduleFollowUpModal({
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Дата">
-            <DateInput
+            <DateField
               value={date}
-              max={maxAppointmentInput().slice(0, 10)}
               onChange={setDate}
+              drawerTitle="Дата следующего приёма"
             />
           </Field>
           <Field label="Время">

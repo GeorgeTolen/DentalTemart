@@ -25,7 +25,7 @@ function actionBadge(action: string) {
 }
 
 /**
- * Журнал действий клиники — отвечает на вопрос «кто это сделал»: кто перенёс
+ * Журнал действий клиники - отвечает на вопрос «кто это сделал»: кто перенёс
  * запись, кто удалил пациента, кто поднял цену.
  *
  * Листается курсором: события пишутся непрерывно, и при пагинации по смещению
@@ -37,7 +37,7 @@ export default function Events() {
   const [loaded, setLoaded] = useState<ClinicEvent[]>([]);
   const { data, isLoading } = useEvents(before);
 
-  // Первая страница живёт в data, остальные — в loaded.
+  // Первая страница живёт в data, остальные - в loaded.
   const items = before === 0 ? (data?.items ?? []) : [...loaded, ...(data?.items ?? [])];
   const nextBefore = data?.next_before ?? 0;
 

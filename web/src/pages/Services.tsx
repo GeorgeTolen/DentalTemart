@@ -16,7 +16,7 @@ export default function Services() {
     if (
       !confirm(
         `Удалить услугу «${s.name}» из прайса?\n\n` +
-          `Уже пробитые приёмы не изменятся — в них сохранены название и цена ` +
+          `Уже пробитые приёмы не изменятся - в них сохранены название и цена ` +
           `на момент оказания. Чтобы просто убрать услугу из списка выбора, ` +
           `снимите отметку «Активна».`
       )
@@ -50,7 +50,7 @@ export default function Services() {
         <p className="text-sm text-slate-400">Загрузка…</p>
       ) : services.length === 0 ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-          Услуг пока нет — добавьте первую.
+          Услуг пока нет - добавьте первую.
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">

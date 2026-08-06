@@ -13,7 +13,7 @@ const variants: Record<Variant, string> = {
   secondary: "bg-white text-ink border border-slate-200 hover:bg-slate-50",
   danger: "bg-red-500 text-white hover:bg-red-600",
   ghost: "bg-transparent text-brand hover:bg-brand-bg",
-  // Завершение приёма, «оплачено» — позитивные необратимые действия.
+  // Завершение приёма, «оплачено» - позитивные необратимые действия.
   success: "bg-green-600 text-white hover:bg-green-700",
 };
 

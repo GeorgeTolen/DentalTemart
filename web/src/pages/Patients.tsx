@@ -11,7 +11,7 @@ import { useAuth } from "../auth/AuthContext";
 import { DateInput } from "../components/DateInputs";
 import { formatDate, validateBirthDate, minBirthDateInput, todayInput } from "../lib/datetime";
 
-// В таблице пол показываем одной буквой — колонка узкая, слово не нужно.
+// В таблице пол показываем одной буквой - колонка узкая, слово не нужно.
 const GENDER_SHORT: Record<"male" | "female", string> = { male: "М", female: "Ж" };
 
 export default function Patients() {
@@ -24,7 +24,7 @@ export default function Patients() {
   const total = data?.total ?? 0;
   const [editing, setEditing] = useState<Patient | "new" | null>(null);
 
-  // Новый поисковый запрос — снова с первой страницы, иначе можно оказаться на
+  // Новый поисковый запрос - снова с первой страницы, иначе можно оказаться на
   // пустой третьей странице узкой выборки.
   useEffect(() => {
     setPage(0);
@@ -77,16 +77,16 @@ export default function Patients() {
                     </Link>
                   </span>
                 </td>
-                <td className="px-5 py-3 text-slate-600">{p.iin || "—"}</td>
-                <td className="px-5 py-3 text-slate-600">{p.phone || "—"}</td>
+                <td className="px-5 py-3 text-slate-600">{p.iin || "-"}</td>
+                <td className="px-5 py-3 text-slate-600">{p.phone || "-"}</td>
                 <td className="px-5 py-3 text-slate-600">
                   {formatDate(p.birth_date)}
                 </td>
                 <td className="px-5 py-3 text-slate-600">
-                  {p.gender ? GENDER_SHORT[p.gender] : "—"}
+                  {p.gender ? GENDER_SHORT[p.gender] : "-"}
                 </td>
                 <td className="px-5 py-3 text-right">
-                  {/* Карточка общая, но правит её только заведшая клиника —
+                  {/* Карточка общая, но правит её только заведшая клиника -
                       сервер откажет остальным. */}
                   {!readOnly && p.is_own && (
                     <button
@@ -110,7 +110,7 @@ export default function Patients() {
         </table>
       </div>
 
-      {/* База общая и большая — листаем по 20, а не выгружаем целиком. */}
+      {/* База общая и большая - листаем по 20, а не выгружаем целиком. */}
       {total > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-sm text-slate-400">
@@ -213,7 +213,7 @@ function PatientForm({
           </Field>
           <Field label="Пол">
             <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
-              <option value="">— не указан —</option>
+              <option value="">- не указан -</option>
               <option value="male">{GENDER_LABELS.male}</option>
               <option value="female">{GENDER_LABELS.female}</option>
             </Select>

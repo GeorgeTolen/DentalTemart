@@ -30,7 +30,7 @@ func (h *Handlers) clinicID(ctx context.Context) (int64, error) {
 }
 
 // frozenMessage is what a clinic user sees when the paid/trial access expires.
-const frozenMessage = "Ваш пробный период истёк. Хотите продлить — напишите нам в WhatsApp: +7 777 910 99 65 или на почту tolenn.olzhas@gmail.com"
+const frozenMessage = "Ваш пробный период истёк. Хотите продлить? Напишите нам в WhatsApp: +7 777 910 99 65 или на почту tolenn.olzhas@gmail.com"
 
 // RequireClinicAccess blocks clinic users whose clinic access has expired
 // (пробный период кончился, оплата не поступила). Вход и /me остаются

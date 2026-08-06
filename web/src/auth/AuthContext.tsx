@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function enterSupport(clinic: SupportClinic) {
     setSupportClinic(clinic);
     setSupport(clinic);
-    qc.clear(); // сменилась клиника — прежние ответы больше не относятся к делу
+    qc.clear(); // сменилась клиника - прежние ответы больше не относятся к делу
   }
 
   function exitSupport() {

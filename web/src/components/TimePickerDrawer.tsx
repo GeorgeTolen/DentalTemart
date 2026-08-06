@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Button, Input } from "./ui";
+import { PickerField } from "./PickerDrawer";
 
-// Значение шторки — локальные datetime-local строки "YYYY-MM-DDTHH:MM",
+// Значение шторки - локальные datetime-local строки "YYYY-MM-DDTHH:MM",
 // как у прежних DateTimeInput, чтобы остальной код не менялся.
 export interface TimeRange {
   start: string;
@@ -39,7 +40,7 @@ function addHour(time: string): string {
  * Шторка выбора времени приёма: календарь месяца → время начала → время
  * окончания (само подставляется +1 час, но правится) → «ОК».
  *
- * Полей datetime-local в форме больше нет — дату с клавиатуры набирать
+ * Полей datetime-local в форме больше нет - дату с клавиатуры набирать
  * неудобно, а тут всё выбирается двумя-тремя касаниями.
  */
 export default function TimePickerDrawer({
@@ -64,8 +65,6 @@ export default function TimePickerDrawer({
   const [endTouched, setEndTouched] = useState(false);
   const [error, setError] = useState("");
 
-  const todayStr = dateStr(new Date());
-
   function pickDay(value: string) {
     setDay(value);
     setStep("time");
@@ -89,13 +88,6 @@ export default function TimePickerDrawer({
     if (end <= startTime) return setError("Окончание должно быть позже начала");
     onApply({ start: `${day}T${startTime}`, end: `${day}T${end}` });
   }
-
-  // --- календарь месяца ---
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  // getDay(): 0=Вс; сетка начинается с понедельника.
-  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
 
   const dayLabel = day
     ? `${Number(day.slice(8, 10))} ${MONTHS[Number(day.slice(5, 7)) - 1]}`
@@ -122,68 +114,12 @@ export default function TimePickerDrawer({
 
         <div className="flex-1 overflow-y-auto p-4">
           {step === "date" ? (
-            <>
-              <div className="mb-3 flex items-center justify-between">
-                <button
-                  onClick={() => setMonthDate(new Date(year, month - 1, 1))}
-                  className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
-                  aria-label="Предыдущий месяц"
-                >
-                  ←
-                </button>
-                <span className="text-sm font-semibold capitalize text-ink">
-                  {MONTHS[month]} {year}
-                </span>
-                <button
-                  onClick={() => setMonthDate(new Date(year, month + 1, 1))}
-                  className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
-                  aria-label="Следующий месяц"
-                >
-                  →
-                </button>
-              </div>
-
-              <div className="grid grid-cols-7 gap-1 text-center">
-                {WEEKDAYS.map((w, i) => (
-                  <span
-                    key={w}
-                    className={`py-1 text-xs font-medium ${
-                      i >= 5 ? "text-slate-400" : "text-slate-500"
-                    }`}
-                  >
-                    {w}
-                  </span>
-                ))}
-                {Array.from({ length: firstWeekday }).map((_, i) => (
-                  <span key={`pad-${i}`} />
-                ))}
-                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-                  const value = `${year}-${pad(month + 1)}-${pad(d)}`;
-                  const isPast = value < todayStr;
-                  const isToday = value === todayStr;
-                  const weekend = ((new Date(year, month, d).getDay() + 6) % 7) >= 5;
-                  return (
-                    <button
-                      key={d}
-                      onClick={() => pickDay(value)}
-                      className={`flex h-9 w-9 items-center justify-center rounded-full text-sm transition ${
-                        value === day
-                          ? "bg-brand font-semibold text-white"
-                          : isToday
-                            ? "bg-brand-light font-semibold text-brand-dark"
-                            : isPast
-                              ? "text-slate-300 hover:bg-slate-100"
-                              : weekend
-                                ? "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                                : "text-slate-700 hover:bg-slate-100"
-                      }`}
-                    >
-                      {d}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
+            <MonthGrid
+              monthDate={monthDate}
+              onMonthChange={setMonthDate}
+              selected={day}
+              onPick={pickDay}
+            />
           ) : (
             <div className="space-y-5">
               <button
@@ -222,6 +158,184 @@ export default function TimePickerDrawer({
       </div>
       <div className="flex-1 bg-ink/30" />
     </div>
+  );
+}
+
+/** Календарь месяца с навигацией: общий для выбора даты приёма и даты
+ * следующего визита. */
+function MonthGrid({
+  monthDate,
+  onMonthChange,
+  selected,
+  onPick,
+}: {
+  monthDate: Date;
+  onMonthChange: (d: Date) => void;
+  selected: string;
+  onPick: (value: string) => void;
+}) {
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // getDay(): 0=Вс; сетка начинается с понедельника.
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+  const todayStr = dateStr(new Date());
+
+  return (
+    <>
+      <div className="mb-3 flex items-center justify-between">
+        <button
+          onClick={() => onMonthChange(new Date(year, month - 1, 1))}
+          className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
+          aria-label="Предыдущий месяц"
+        >
+          ←
+        </button>
+        <span className="text-sm font-semibold capitalize text-ink">
+          {MONTHS[month]} {year}
+        </span>
+        <button
+          onClick={() => onMonthChange(new Date(year, month + 1, 1))}
+          className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
+          aria-label="Следующий месяц"
+        >
+          →
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {WEEKDAYS.map((w, i) => (
+          <span
+            key={w}
+            className={`py-1 text-xs font-medium ${
+              i >= 5 ? "text-slate-400" : "text-slate-500"
+            }`}
+          >
+            {w}
+          </span>
+        ))}
+        {Array.from({ length: firstWeekday }).map((_, i) => (
+          <span key={`pad-${i}`} />
+        ))}
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+          const value = `${year}-${pad(month + 1)}-${pad(d)}`;
+          const isPast = value < todayStr;
+          const isToday = value === todayStr;
+          const weekend = ((new Date(year, month, d).getDay() + 6) % 7) >= 5;
+          return (
+            <button
+              key={d}
+              onClick={() => onPick(value)}
+              className={`flex h-9 w-9 items-center justify-center rounded-full text-sm transition ${
+                value === selected
+                  ? "bg-brand font-semibold text-white"
+                  : isToday
+                    ? "bg-brand-light font-semibold text-brand-dark"
+                    : isPast
+                      ? "text-slate-300 hover:bg-slate-100"
+                      : weekend
+                        ? "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                        : "text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              {d}
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Шторка выбора одной даты (без времени) - например, даты следующего приёма.
+ * Тот же календарь, что и при назначении записи; клик по дню сразу применяет
+ * выбор.
+ */
+export function DatePickerDrawer({
+  title = "Дата",
+  value,
+  onApply,
+  onClose,
+}: {
+  title?: string;
+  value: string; // "YYYY-MM-DD" или ""
+  onApply: (date: string) => void;
+  onClose: () => void;
+}) {
+  const initial = value ? new Date(value + "T00:00:00") : new Date();
+  const [monthDate, setMonthDate] = useState(
+    () => new Date(initial.getFullYear(), initial.getMonth(), 1)
+  );
+
+  return (
+    <div className="fixed inset-0 z-[60] flex" onClick={onClose}>
+      <div
+        className="flex h-full w-80 max-w-[85vw] flex-col bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <h3 className="font-semibold text-ink">{title}</h3>
+          <button
+            onClick={onClose}
+            className="text-2xl leading-none text-slate-400 hover:text-slate-600"
+            aria-label="Закрыть"
+          >
+            ×
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <MonthGrid
+            monthDate={monthDate}
+            onMonthChange={setMonthDate}
+            selected={value}
+            onPick={onApply}
+          />
+        </div>
+      </div>
+      <div className="flex-1 bg-ink/30" />
+    </div>
+  );
+}
+
+/**
+ * Поле даты, открывающее DatePickerDrawer, - выглядит и работает так же, как
+ * выбор даты при назначении записи. Замена DateInput для «следующего приёма».
+ */
+export function DateField({
+  value,
+  onChange,
+  placeholder = "Выбрать дату",
+  drawerTitle = "Дата",
+}: {
+  value: string; // "YYYY-MM-DD" или ""
+  onChange: (date: string) => void;
+  placeholder?: string;
+  drawerTitle?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = value
+    ? `${Number(value.slice(8, 10))} ${MONTHS[Number(value.slice(5, 7)) - 1]} ${value.slice(0, 4)}`
+    : "";
+  return (
+    <>
+      <PickerField
+        value={label}
+        placeholder={placeholder}
+        onClick={() => setOpen(true)}
+      />
+      {open && (
+        <DatePickerDrawer
+          title={drawerTitle}
+          value={value}
+          onApply={(d) => {
+            onChange(d);
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 

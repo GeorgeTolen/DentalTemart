@@ -113,7 +113,7 @@ export default function DoctorModal({
         user_id: linkUserId === "" ? null : linkUserId,
         account_email: creatingAccount ? accountEmail.trim() : "",
         // Send a password only when creating a login or resetting the linked
-        // account's password — never a leftover value while linking an account.
+        // account's password - never a leftover value while linking an account.
         account_password: creatingAccount || hasLinkedAccount ? password : "",
       });
       // Only PUT the schedule once it has actually loaded for an existing doctor
@@ -182,7 +182,7 @@ export default function DoctorModal({
           {hasLinkedAccount ? (
             <>
               <div className="rounded-xl bg-white px-3 py-2 text-sm">
-                Логин: <strong className="text-ink">{doctor?.user_email || "—"}</strong>
+                Логин: <strong className="text-ink">{doctor?.user_email || "-"}</strong>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Новый пароль (не меняется, если пусто)">
@@ -218,7 +218,7 @@ export default function DoctorModal({
                     value={String(linkUserId)}
                     onChange={(e) => setLinkUserId(e.target.value ? Number(e.target.value) : "")}
                   >
-                    <option value="">— создать новый (поля выше) —</option>
+                    <option value="">- создать новый (поля выше) -</option>
                     {unlinkedUsers.map((u) => (
                       <option key={u.id} value={u.id}>{u.full_name} · {u.email}</option>
                     ))}

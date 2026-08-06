@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "temart:theme";
 
-// applyTheme вешает/снимает класс dark на <html> — на него завязаны все
+// applyTheme вешает/снимает класс dark на <html> - на него завязаны все
 // .dark-переопределения в index.css.
 function applyTheme(dark: boolean) {
   document.documentElement.classList.toggle("dark", dark);
