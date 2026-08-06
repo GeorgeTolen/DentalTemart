@@ -12,6 +12,7 @@ import {
   localInputToISO,
   formatDateTime,
   validateBirthDate,
+  validateAppointmentDate,
   minBirthDateInput,
   todayInput,
   maxAppointmentInput,
