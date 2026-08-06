@@ -27,5 +27,9 @@ UPDATE clinics SET name = $2, slug = $3, address = $4, phone = $5, is_active = $
 WHERE id = $1
 RETURNING *;
 
+-- name: SetClinicAccess :one
+-- Срок доступа: NULL — бессрочно, прошлое — заморожена.
+UPDATE clinics SET access_expires_at = $2 WHERE id = $1 RETURNING *;
+
 -- name: DeleteClinic :exec
 DELETE FROM clinics WHERE id = $1;

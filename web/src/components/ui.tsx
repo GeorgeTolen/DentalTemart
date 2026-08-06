@@ -6,13 +6,15 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 
-type Variant = "primary" | "secondary" | "danger" | "ghost";
+type Variant = "primary" | "secondary" | "danger" | "ghost" | "success";
 
 const variants: Record<Variant, string> = {
   primary: "bg-brand text-white hover:bg-brand-dark",
   secondary: "bg-white text-ink border border-slate-200 hover:bg-slate-50",
   danger: "bg-red-500 text-white hover:bg-red-600",
   ghost: "bg-transparent text-brand hover:bg-brand-bg",
+  // Завершение приёма, «оплачено» — позитивные необратимые действия.
+  success: "bg-green-600 text-white hover:bg-green-700",
 };
 
 export function Button({

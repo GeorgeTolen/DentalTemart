@@ -12,7 +12,6 @@ import {
   formatDateTime,
   isoToLocalInput,
   localInputToISO,
-  maxAppointmentInput,
   validateAppointmentDate,
   defaultAppointmentStart,
   addMinutesToLocalInput,
@@ -26,8 +25,9 @@ import {
   StatusBadge,
   Textarea,
 } from "./ui";
-import { DateInput, DateTimeInput } from "./DateInputs";
+import { DateInput } from "./DateInputs";
 import { PickerDrawer, PickerField, PickerRow, useDebounced } from "./PickerDrawer";
+import TimePickerDrawer from "./TimePickerDrawer";
 import { Avatar } from "./Avatar";
 import AppointmentBillModal from "./AppointmentBillModal";
 import { useAuth } from "../auth/AuthContext";
@@ -99,8 +99,9 @@ function EditCard({
   );
   const [pickingPatient, setPickingPatient] = useState(false);
   const [pickingDoctor, setPickingDoctor] = useState(false);
+  const [pickingTime, setPickingTime] = useState(false);
   // Новая запись по умолчанию начинается сегодня, в ближайшее рабочее время
-  // (8:00–20:00), длится час.
+  // (8:00–20:00), длится час. Правится через шторку с календарём.
   const [start, setStart] = useState(
     existing
       ? isoToLocalInput(existing.start_time)
@@ -110,11 +111,11 @@ function EditCard({
     existing
       ? isoToLocalInput(existing.end_time)
       : initialEnd ??
-          addMinutesToLocalInput(defaultAppointmentStart(), DEFAULT_DURATION_MIN)
+          addMinutesToLocalInput(
+            initialStart ?? defaultAppointmentStart(),
+            DEFAULT_DURATION_MIN
+          )
   );
-  // Пока окончание не трогали руками, оно едет за началом (+1 час). После
-  // ручной правки перестаём его переписывать — иначе затрём выбор человека.
-  const [endTouched, setEndTouched] = useState(Boolean(existing || initialEnd));
   const [status, setStatus] = useState<AppointmentStatus>(
     existing?.status ?? "scheduled"
   );
@@ -127,15 +128,10 @@ function EditCard({
   const busy = saveAppt.isPending || savePatient.isPending;
   const selectedDoctor = activeDoctors.find((d) => d.id === doctorId);
 
-  function changeStart(v: string) {
-    setStart(v);
-    if (!endTouched && v) setEnd(addMinutesToLocalInput(v, DEFAULT_DURATION_MIN));
-  }
-
-  function changeEnd(v: string) {
-    setEndTouched(true);
-    setEnd(v);
-  }
+  // «12 августа, 10:00 – 11:00» для шапки карточки.
+  const timeLabel = start
+    ? `${new Date(start).toLocaleDateString("ru", { day: "numeric", month: "long" })}, ${start.slice(11, 16)} – ${end.slice(11, 16)}`
+    : "";
 
   // «Завершить» прямо из карточки: администратору сразу открывается расчёт
   // стоимости, врачу — просто закрытие (деньги ему не показываем).
@@ -232,17 +228,14 @@ function EditCard({
         <>
           {existing && existing.status !== "cancelled" && (
             <Button variant="secondary" onClick={onCancel} className="mr-auto">
-              Отменить
+              Отменить запись
             </Button>
           )}
           {existing && existing.status !== "cancelled" && !readOnly && (
-            <Button onClick={complete} disabled={busy}>
+            <Button variant="success" onClick={complete} disabled={busy}>
               Завершить
             </Button>
           )}
-          <Button variant="secondary" onClick={onClose}>
-            Закрыть
-          </Button>
           <Button onClick={onSubmit} disabled={busy}>
             {busy ? "Сохранение…" : "Сохранить"}
           </Button>
@@ -250,6 +243,21 @@ function EditCard({
       }
     >
       <div className="space-y-4">
+        {/* Шапка: время приёма и статус — самое главное, всегда сверху. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-brand-bg px-3 py-2.5">
+          <button
+            type="button"
+            onClick={() => setPickingTime(true)}
+            title="Изменить дату и время"
+            className="text-sm font-semibold text-brand-dark hover:underline"
+          >
+            🕐 {timeLabel || "Выбрать дату и время"}
+          </button>
+          <span className="ml-auto">
+            <StatusBadge status={status} />
+          </span>
+        </div>
+
         <Field label="Пациент">
           <PickerField
             value={patientId === "new" ? "Новый пациент" : patientName}
@@ -302,35 +310,22 @@ function EditCard({
           />
         </Field>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Начало">
-            <DateTimeInput
-              value={start}
-              maxDate={maxAppointmentInput().slice(0, 10)}
-              onChange={changeStart}
-            />
+        {/* Статус выбирается только у существующей записи: новая всегда
+            «Запланирован», лишний селект при создании только путает. */}
+        {existing && (
+          <Field label="Статус">
+            <Select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as AppointmentStatus)}
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABELS[s]}
+                </option>
+              ))}
+            </Select>
           </Field>
-          <Field label={endTouched ? "Окончание" : "Окончание (+1 час)"}>
-            <DateTimeInput
-              value={end}
-              maxDate={maxAppointmentInput().slice(0, 10)}
-              onChange={changeEnd}
-            />
-          </Field>
-        </div>
-
-        <Field label="Статус">
-          <Select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as AppointmentStatus)}
-          >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        )}
 
         <Field label="Диагноз">
           <Input
@@ -387,6 +382,18 @@ function EditCard({
             setPickingDoctor(false);
           }}
           onClose={() => setPickingDoctor(false)}
+        />
+      )}
+
+      {pickingTime && (
+        <TimePickerDrawer
+          value={{ start, end }}
+          onApply={(range) => {
+            setStart(range.start);
+            setEnd(range.end);
+            setPickingTime(false);
+          }}
+          onClose={() => setPickingTime(false)}
         />
       )}
 

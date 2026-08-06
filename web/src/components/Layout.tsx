@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../lib/types";
+import ThemeToggle from "./ThemeToggle";
 
 interface NavItem {
   to: string;
@@ -85,11 +86,14 @@ export default function Layout() {
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         {/* ===== Мобильная шапка (телефон/планшет, < md) ===== */}
         <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 md:hidden">
-          <div className="min-w-0">
-            <div className="text-lg font-bold leading-none text-brand">Temart</div>
-            {clinicName && (
-              <div className="mt-0.5 truncate text-xs text-slate-400">{clinicName}</div>
-            )}
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="min-w-0">
+              <div className="text-lg font-bold leading-none text-brand">Temart</div>
+              {clinicName && (
+                <div className="mt-0.5 truncate text-xs text-slate-400">{clinicName}</div>
+              )}
+            </div>
+            <ThemeToggle />
           </div>
           <div className="flex min-w-0 items-center gap-2">
             {supportClinic ? (
@@ -134,13 +138,17 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* ===== Десктопный сайдбар (md+) ===== */}
-        <aside className="hidden shrink-0 flex-col gap-1 border-r border-slate-200 bg-white p-4 md:flex md:w-64">
-          <div className="mb-6 px-2">
-            <div className="text-2xl font-bold text-brand">Temart</div>
-            {clinicName && (
-              <div className="mt-0.5 truncate text-sm text-slate-400">{clinicName}</div>
-            )}
+        {/* ===== Десктопный сайдбар (md+): закреплён, чтобы «Личный кабинет»
+             и «Выйти» не уезжали вниз на длинных списках ===== */}
+        <aside className="hidden shrink-0 flex-col gap-1 border-r border-slate-200 bg-white p-4 md:sticky md:top-0 md:flex md:h-screen md:w-64 md:overflow-y-auto">
+          <div className="mb-6 flex items-start justify-between px-2">
+            <div className="min-w-0">
+              <div className="text-2xl font-bold text-brand">Temart</div>
+              {clinicName && (
+                <div className="mt-0.5 truncate text-sm text-slate-400">{clinicName}</div>
+              )}
+            </div>
+            <ThemeToggle className="mt-1" />
           </div>
 
           <nav className="flex flex-1 flex-col gap-1">
@@ -175,9 +183,13 @@ export default function Layout() {
                 {l.label}
               </NavLink>
             ))}
+          </nav>
 
+          {/* «Управление» живёт внизу, рядом с личной зоной, а личный кабинет
+              открывается кликом по имени — отдельный пункт меню не нужен. */}
+          <div className="mt-4 border-t border-slate-100 pt-4">
             {manageLinks.length > 0 && (
-              <div className="mt-2">
+              <div className="mb-2">
                 <button
                   onClick={() => setManageOpen((v) => !v)}
                   className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
@@ -206,28 +218,25 @@ export default function Layout() {
                 )}
               </div>
             )}
-          </nav>
 
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <div className="px-3 py-1.5">
-              <span className="block text-sm font-medium text-ink">{user?.full_name}</span>
-              <span className="block text-xs text-slate-400">
-                {user ? ROLE_LABELS[user.role] : ""}
-              </span>
-            </div>
-            {!supportClinic && (
-              <NavLink
-                to="/my-cabinet"
-                className={({ isActive }) =>
-                  `mt-2 block rounded-xl px-3 py-2 text-sm font-medium transition ${
-                    isActive
-                      ? "bg-brand-bg text-brand-dark"
-                      : "text-slate-600 hover:bg-slate-50"
-                  }`
-                }
+            {supportClinic ? (
+              <div className="px-3 py-1.5">
+                <span className="block text-sm font-medium text-ink">{user?.full_name}</span>
+                <span className="block text-xs text-slate-400">
+                  {user ? ROLE_LABELS[user.role] : ""}
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={() => navigate("/my-cabinet")}
+                title="Открыть личный кабинет"
+                className="block w-full rounded-xl px-3 py-1.5 text-left transition hover:bg-brand-bg"
               >
-                Личный кабинет
-              </NavLink>
+                <span className="block text-sm font-medium text-ink">{user?.full_name}</span>
+                <span className="block text-xs text-slate-400">
+                  {user ? ROLE_LABELS[user.role] : ""}
+                </span>
+              </button>
             )}
             <button
               onClick={onExit}

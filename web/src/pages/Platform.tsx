@@ -12,6 +12,7 @@ import {
   useResetClinicUserPassword,
   useSaveClinic,
   useSavePlatformAdmin,
+  useSetClinicAccess,
   type ClinicPayload,
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
@@ -31,6 +32,7 @@ export default function Platform() {
   const [editing, setEditing] = useState<Clinic | "new" | null>(null);
   const [addingOwner, setAddingOwner] = useState<Clinic | null>(null);
   const [managingUsers, setManagingUsers] = useState<Clinic | null>(null);
+  const [managingAccess, setManagingAccess] = useState<Clinic | null>(null);
   const [changingPassword, setChangingPassword] = useState(false);
   const del = useDeleteClinic();
   const [error, setError] = useState("");
@@ -173,15 +175,18 @@ export default function Platform() {
                         </code>
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            c.is_active
-                              ? "bg-green-100 text-green-700"
-                              : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {c.is_active ? "Активна" : "Отключена"}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                              c.is_active
+                                ? "bg-green-100 text-green-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {c.is_active ? "Активна" : "Отключена"}
+                          </span>
+                          <AccessBadge clinic={c} />
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{c.owner_count}</td>
                       <td className="px-4 py-3 text-slate-600">{c.patient_count}</td>
@@ -202,6 +207,13 @@ export default function Platform() {
                             onClick={() => setManagingUsers(c)}
                           >
                             Учётки
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            className="px-2 py-1 text-xs"
+                            onClick={() => setManagingAccess(c)}
+                          >
+                            Доступ
                           </Button>
                           <Button
                             variant="secondary"
@@ -251,10 +263,135 @@ export default function Platform() {
           onClose={() => setManagingUsers(null)}
         />
       )}
+      {managingAccess && (
+        <ClinicAccessModal
+          clinic={managingAccess}
+          onClose={() => setManagingAccess(null)}
+        />
+      )}
       {changingPassword && (
         <ChangePasswordModal onClose={() => setChangingPassword(false)} />
       )}
     </div>
+  );
+}
+
+// --- Доступ клиники (пробный период / оплата) --------------------------------
+
+function AccessBadge({ clinic }: { clinic: Clinic }) {
+  if (clinic.frozen) {
+    return (
+      <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
+        Заморожена
+      </span>
+    );
+  }
+  if (clinic.access_expires_at) {
+    return (
+      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+        до {new Date(clinic.access_expires_at).toLocaleDateString("ru")}
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-medium text-brand-dark">
+      Бессрочно
+    </span>
+  );
+}
+
+function ClinicAccessModal({
+  clinic,
+  onClose,
+}: {
+  clinic: Clinic;
+  onClose: () => void;
+}) {
+  const setAccess = useSetClinicAccess();
+  const [days, setDays] = useState("7");
+  const [error, setError] = useState("");
+
+  async function run(action: "unlimited" | "freeze" | "grant") {
+    setError("");
+    if (action === "freeze" && !confirm(`Заморозить «${clinic.name}» прямо сейчас? Сотрудники клиники не смогут работать, пока вы не продлите доступ.`))
+      return;
+    const n = Number(days) || 0;
+    if (action === "grant" && n < 1) return setError("Укажите срок в днях");
+    try {
+      await setAccess.mutateAsync({
+        clinicId: clinic.id,
+        action,
+        days: action === "grant" ? n : undefined,
+      });
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  return (
+    <Modal
+      title={`Доступ — ${clinic.name}`}
+      onClose={onClose}
+      footer={<Button variant="secondary" onClick={onClose}>Закрыть</Button>}
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-sm text-slate-600">
+          Сейчас: <AccessBadge clinic={clinic} />
+          {clinic.frozen && clinic.access_expires_at && (
+            <span className="text-xs text-slate-400">
+              (истёк {new Date(clinic.access_expires_at).toLocaleDateString("ru")})
+            </span>
+          )}
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-slate-100 p-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span>Выдать доступ на</span>
+            <div className="w-20">
+              <Input
+                inputMode="numeric"
+                value={days}
+                onChange={(e) => setDays(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              />
+            </div>
+            <span>дней</span>
+            <Button
+              className="px-3 py-1.5 text-xs"
+              onClick={() => run("grant")}
+              disabled={setAccess.isPending}
+            >
+              Выдать
+            </Button>
+          </div>
+          <p className="text-xs text-slate-400">
+            Срок отсчитывается от текущего момента — подходит и для продления, и
+            для разморозки.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="success"
+            onClick={() => run("unlimited")}
+            disabled={setAccess.isPending}
+          >
+            Оплачено — доступ навсегда
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => run("freeze")}
+            disabled={setAccess.isPending}
+          >
+            Заморозить сейчас
+          </Button>
+        </div>
+
+        {error && (
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -672,6 +809,9 @@ function ClinicModal({
   const [address, setAddress] = useState(clinic?.address ?? "");
   const [phone, setPhone] = useState(clinic?.phone ?? "");
   const [isActive, setIsActive] = useState(clinic?.is_active ?? true);
+  // Пробный период (только при создании): тумблер + число дней.
+  const [trial, setTrial] = useState(false);
+  const [trialDays, setTrialDays] = useState("7");
   // Only used when creating a new clinic — its first owner.
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
@@ -683,6 +823,9 @@ function ClinicModal({
     if (!name.trim()) return setError("Введите название клиники");
     if (ownerEmail && ownerPassword.length < 6)
       return setError("Пароль владельца должен быть не короче 6 символов");
+    const days = Number(trialDays) || 0;
+    if (!clinic && trial && days < 1)
+      return setError("Укажите срок пробного периода в днях");
     const payload: ClinicPayload = {
       id: clinic?.id,
       name: name.trim(),
@@ -691,6 +834,7 @@ function ClinicModal({
       phone: phone.trim(),
       is_active: isActive,
     };
+    if (!clinic && trial) payload.trial_days = days;
     if (!clinic && ownerEmail.trim()) {
       payload.owner_name = ownerName.trim();
       payload.owner_email = ownerEmail.trim();
@@ -751,6 +895,37 @@ function ClinicModal({
           />
           Активна (доступна для входа)
         </label>
+
+        {/* Пробный период задаётся при создании; дальше срок управляется
+            кнопкой «Доступ» у клиники. */}
+        {!clinic && (
+          <div className="space-y-2 rounded-xl border border-amber-100 bg-amber-50 p-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-amber-800">
+              <input
+                type="checkbox"
+                checked={trial}
+                onChange={(e) => setTrial(e.target.checked)}
+                className="h-4 w-4"
+              />
+              Пробный период (временный доступ)
+            </label>
+            {trial && (
+              <div className="flex items-center gap-2 text-sm text-amber-800">
+                <span>Срок:</span>
+                <div className="w-20">
+                  <Input
+                    inputMode="numeric"
+                    value={trialDays}
+                    onChange={(e) =>
+                      setTrialDays(e.target.value.replace(/\D/g, "").slice(0, 4))
+                    }
+                  />
+                </div>
+                <span>дней. Потом клиника заморозится до продления.</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {!clinic && (
           <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50 p-3">

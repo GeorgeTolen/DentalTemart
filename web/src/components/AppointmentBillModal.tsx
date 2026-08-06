@@ -171,7 +171,7 @@ export default function AppointmentBillModal({
                   >
                     <option value="">— выберите услугу —</option>
                     {activeServices.map((s) => (
-                      <option key={s.id} value={s.id}>
+                      <option key={s.id} value={s.id} title={s.description}>
                         {s.name} — {formatAmount(s.price)} ₸
                       </option>
                     ))}

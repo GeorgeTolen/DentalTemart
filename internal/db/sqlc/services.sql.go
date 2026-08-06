@@ -55,16 +55,17 @@ func (q *Queries) CreateAppointmentService(ctx context.Context, arg CreateAppoin
 }
 
 const createService = `-- name: CreateService :one
-INSERT INTO services (clinic_id, name, price, is_active)
-VALUES ($1, $2, $3, $4)
-RETURNING id, clinic_id, name, price, is_active, created_at
+INSERT INTO services (clinic_id, name, price, is_active, description)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, clinic_id, name, price, is_active, created_at, description
 `
 
 type CreateServiceParams struct {
-	ClinicID int64  `json:"clinic_id"`
-	Name     string `json:"name"`
-	Price    int64  `json:"price"`
-	IsActive bool   `json:"is_active"`
+	ClinicID    int64       `json:"clinic_id"`
+	Name        string      `json:"name"`
+	Price       int64       `json:"price"`
+	IsActive    bool        `json:"is_active"`
+	Description pgtype.Text `json:"description"`
 }
 
 func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) (Service, error) {
@@ -73,6 +74,7 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) (S
 		arg.Name,
 		arg.Price,
 		arg.IsActive,
+		arg.Description,
 	)
 	var i Service
 	err := row.Scan(
@@ -82,6 +84,7 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) (S
 		&i.Price,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.Description,
 	)
 	return i, err
 }
@@ -115,7 +118,7 @@ func (q *Queries) DeleteService(ctx context.Context, arg DeleteServiceParams) er
 }
 
 const getService = `-- name: GetService :one
-SELECT id, clinic_id, name, price, is_active, created_at FROM services WHERE id = $1 AND clinic_id = $2
+SELECT id, clinic_id, name, price, is_active, created_at, description FROM services WHERE id = $1 AND clinic_id = $2
 `
 
 type GetServiceParams struct {
@@ -133,6 +136,7 @@ func (q *Queries) GetService(ctx context.Context, arg GetServiceParams) (Service
 		&i.Price,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.Description,
 	)
 	return i, err
 }
@@ -198,7 +202,7 @@ func (q *Queries) ListAppointmentServices(ctx context.Context, arg ListAppointme
 
 const listServices = `-- name: ListServices :many
 
-SELECT id, clinic_id, name, price, is_active, created_at FROM services WHERE clinic_id = $1 ORDER BY is_active DESC, name
+SELECT id, clinic_id, name, price, is_active, created_at, description FROM services WHERE clinic_id = $1 ORDER BY is_active DESC, name
 `
 
 // Прайс услуг и оказанные услуги приёма. Всё строго внутри клиники: деньги —
@@ -220,6 +224,7 @@ func (q *Queries) ListServices(ctx context.Context, clinicID int64) ([]Service, 
 			&i.Price,
 			&i.IsActive,
 			&i.CreatedAt,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -449,17 +454,18 @@ func (q *Queries) SumRevenueInRange(ctx context.Context, arg SumRevenueInRangePa
 }
 
 const updateService = `-- name: UpdateService :one
-UPDATE services SET name = $2, price = $3, is_active = $4
-WHERE id = $1 AND clinic_id = $5
-RETURNING id, clinic_id, name, price, is_active, created_at
+UPDATE services SET name = $2, price = $3, is_active = $4, description = $5
+WHERE id = $1 AND clinic_id = $6
+RETURNING id, clinic_id, name, price, is_active, created_at, description
 `
 
 type UpdateServiceParams struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	Price    int64  `json:"price"`
-	IsActive bool   `json:"is_active"`
-	ClinicID int64  `json:"clinic_id"`
+	ID          int64       `json:"id"`
+	Name        string      `json:"name"`
+	Price       int64       `json:"price"`
+	IsActive    bool        `json:"is_active"`
+	Description pgtype.Text `json:"description"`
+	ClinicID    int64       `json:"clinic_id"`
 }
 
 func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) (Service, error) {
@@ -468,6 +474,7 @@ func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) (S
 		arg.Name,
 		arg.Price,
 		arg.IsActive,
+		arg.Description,
 		arg.ClinicID,
 	)
 	var i Service
@@ -478,6 +485,7 @@ func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) (S
 		&i.Price,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.Description,
 	)
 	return i, err
 }

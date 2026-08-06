@@ -172,7 +172,7 @@ export function useSaveSchedule() {
 // --- Patients ---
 
 // PATIENTS_PAGE_SIZE must match patientsPageSize on the server.
-export const PATIENTS_PAGE_SIZE = 20;
+export const PATIENTS_PAGE_SIZE = 10;
 
 // Отдаёт одну страницу общей базы пациентов. `page` — с нуля.
 export function usePatients(search: string, page = 0) {
@@ -345,6 +345,7 @@ export function useSaveService() {
       name: string;
       price: number;
       is_active: boolean;
+      description?: string;
     }) => {
       const { id, ...body } = s;
       if (id) return (await api.put<Service>(`/services/${id}`, body)).data;
@@ -564,10 +565,28 @@ export interface ClinicPayload {
   address: string;
   phone: string;
   is_active: boolean;
+  // Only on create: пробный период в днях (0 — бессрочный доступ).
+  trial_days?: number;
   // Only used on create: the clinic's first owner account.
   owner_name?: string;
   owner_email?: string;
   owner_password?: string;
+}
+
+// Управление доступом клиники: оплачено навсегда / заморозить / выдать N дней.
+export function useSetClinicAccess() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      clinicId: number;
+      action: "unlimited" | "freeze" | "grant";
+      days?: number;
+    }) => {
+      const { clinicId, ...body } = args;
+      return (await api.post<Clinic>(`/platform/clinics/${clinicId}/access`, body)).data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["clinics"] }),
+  });
 }
 
 export function useSaveClinic() {

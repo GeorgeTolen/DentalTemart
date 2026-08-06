@@ -3,7 +3,7 @@ import { useDeleteService, useSaveService, useServices } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import type { Service } from "../lib/types";
 import { formatAmount, formatMoney, parseMoneyInput } from "../lib/money";
-import { Button, Field, Input, Modal } from "../components/ui";
+import { Button, Field, Input, Modal, Textarea } from "../components/ui";
 
 // Прайс клиники. Ведут владелец и менеджер: из него набирается стоимость приёма.
 export default function Services() {
@@ -66,7 +66,14 @@ export default function Services() {
             <tbody className="divide-y divide-slate-100">
               {services.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50">
-                  <td className="px-5 py-3 font-medium text-ink">{s.name}</td>
+                  <td className="px-5 py-3">
+                    <div className="font-medium text-ink">{s.name}</div>
+                    {s.description && (
+                      <div className="mt-0.5 max-w-md text-xs text-slate-400">
+                        {s.description}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-5 py-3 tabular-nums text-slate-700">
                     {formatMoney(s.price)}
                   </td>
@@ -125,6 +132,7 @@ function ServiceModal({
   const [name, setName] = useState(service?.name ?? "");
   const [price, setPrice] = useState(service?.price ?? 0);
   const [isActive, setIsActive] = useState(service?.is_active ?? true);
+  const [description, setDescription] = useState(service?.description ?? "");
   const [error, setError] = useState("");
 
   async function submit() {
@@ -136,6 +144,7 @@ function ServiceModal({
         name: name.trim(),
         price,
         is_active: isActive,
+        description: description.trim(),
       });
       onClose();
     } catch (e) {
@@ -169,6 +178,13 @@ function ServiceModal({
             inputMode="numeric"
             value={formatAmount(price)}
             onChange={(e) => setPrice(parseMoneyInput(e.target.value))}
+          />
+        </Field>
+        <Field label="Описание">
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Что входит в услугу, для каких случаев (не обязательно)"
           />
         </Field>
         <label className="flex items-center gap-2 text-sm">

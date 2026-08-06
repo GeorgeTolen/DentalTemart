@@ -18,6 +18,7 @@ import Events from "./pages/Events";
 import AppointmentsPage from "./pages/Appointments";
 import DoctorCabinet from "./pages/DoctorCabinet";
 import OwnerCabinet from "./pages/OwnerCabinet";
+import Frozen from "./pages/Frozen";
 
 function FullScreen({ children }: { children: React.ReactNode }) {
   return (
@@ -52,6 +53,12 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
+  }
+
+  // Пробный период клиники истёк: вместо приложения — экран с контактами для
+  // продления. Суперадмина в режиме поддержки это не касается.
+  if (user.role !== "superadmin" && user.clinic_frozen) {
+    return <Frozen />;
   }
 
   // Clinic screens: a clinic user (owner / admin / doctor) or the superadmin

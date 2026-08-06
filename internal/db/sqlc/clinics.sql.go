@@ -15,7 +15,7 @@ import (
 const createClinic = `-- name: CreateClinic :one
 INSERT INTO clinics (name, slug, address, phone, is_active)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, slug, address, phone, is_active, created_at
+RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at
 `
 
 type CreateClinicParams struct {
@@ -43,6 +43,7 @@ func (q *Queries) CreateClinic(ctx context.Context, arg CreateClinicParams) (Cli
 		&i.Phone,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.AccessExpiresAt,
 	)
 	return i, err
 }
@@ -57,7 +58,7 @@ func (q *Queries) DeleteClinic(ctx context.Context, id int64) error {
 }
 
 const getClinic = `-- name: GetClinic :one
-SELECT id, name, slug, address, phone, is_active, created_at FROM clinics WHERE id = $1
+SELECT id, name, slug, address, phone, is_active, created_at, access_expires_at FROM clinics WHERE id = $1
 `
 
 func (q *Queries) GetClinic(ctx context.Context, id int64) (Clinic, error) {
@@ -71,12 +72,13 @@ func (q *Queries) GetClinic(ctx context.Context, id int64) (Clinic, error) {
 		&i.Phone,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.AccessExpiresAt,
 	)
 	return i, err
 }
 
 const getClinicBySlug = `-- name: GetClinicBySlug :one
-SELECT id, name, slug, address, phone, is_active, created_at FROM clinics WHERE lower(slug) = lower($1)
+SELECT id, name, slug, address, phone, is_active, created_at, access_expires_at FROM clinics WHERE lower(slug) = lower($1)
 `
 
 func (q *Queries) GetClinicBySlug(ctx context.Context, lower string) (Clinic, error) {
@@ -90,6 +92,7 @@ func (q *Queries) GetClinicBySlug(ctx context.Context, lower string) (Clinic, er
 		&i.Phone,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.AccessExpiresAt,
 	)
 	return i, err
 }
@@ -126,7 +129,7 @@ func (q *Queries) ListActiveClinics(ctx context.Context) ([]ListActiveClinicsRow
 }
 
 const listClinics = `-- name: ListClinics :many
-SELECT c.id, c.name, c.slug, c.address, c.phone, c.is_active, c.created_at,
+SELECT c.id, c.name, c.slug, c.address, c.phone, c.is_active, c.created_at, c.access_expires_at,
        (SELECT count(*) FROM users u    WHERE u.clinic_id = c.id AND u.role = 'owner')::bigint AS owner_count,
        (SELECT count(*) FROM patients p WHERE p.clinic_id = c.id)::bigint AS patient_count,
        (SELECT count(*) FROM doctors d  WHERE d.clinic_id = c.id)::bigint AS doctor_count
@@ -135,16 +138,17 @@ ORDER BY c.created_at DESC
 `
 
 type ListClinicsRow struct {
-	ID           int64       `json:"id"`
-	Name         string      `json:"name"`
-	Slug         string      `json:"slug"`
-	Address      pgtype.Text `json:"address"`
-	Phone        pgtype.Text `json:"phone"`
-	IsActive     bool        `json:"is_active"`
-	CreatedAt    time.Time   `json:"created_at"`
-	OwnerCount   int64       `json:"owner_count"`
-	PatientCount int64       `json:"patient_count"`
-	DoctorCount  int64       `json:"doctor_count"`
+	ID              int64       `json:"id"`
+	Name            string      `json:"name"`
+	Slug            string      `json:"slug"`
+	Address         pgtype.Text `json:"address"`
+	Phone           pgtype.Text `json:"phone"`
+	IsActive        bool        `json:"is_active"`
+	CreatedAt       time.Time   `json:"created_at"`
+	AccessExpiresAt *time.Time  `json:"access_expires_at"`
+	OwnerCount      int64       `json:"owner_count"`
+	PatientCount    int64       `json:"patient_count"`
+	DoctorCount     int64       `json:"doctor_count"`
 }
 
 // All clinics with quick aggregate counts, for the platform admin panel.
@@ -165,6 +169,7 @@ func (q *Queries) ListClinics(ctx context.Context) ([]ListClinicsRow, error) {
 			&i.Phone,
 			&i.IsActive,
 			&i.CreatedAt,
+			&i.AccessExpiresAt,
 			&i.OwnerCount,
 			&i.PatientCount,
 			&i.DoctorCount,
@@ -179,10 +184,36 @@ func (q *Queries) ListClinics(ctx context.Context) ([]ListClinicsRow, error) {
 	return items, nil
 }
 
+const setClinicAccess = `-- name: SetClinicAccess :one
+UPDATE clinics SET access_expires_at = $2 WHERE id = $1 RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at
+`
+
+type SetClinicAccessParams struct {
+	ID              int64      `json:"id"`
+	AccessExpiresAt *time.Time `json:"access_expires_at"`
+}
+
+// Срок доступа: NULL — бессрочно, прошлое — заморожена.
+func (q *Queries) SetClinicAccess(ctx context.Context, arg SetClinicAccessParams) (Clinic, error) {
+	row := q.db.QueryRow(ctx, setClinicAccess, arg.ID, arg.AccessExpiresAt)
+	var i Clinic
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Address,
+		&i.Phone,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.AccessExpiresAt,
+	)
+	return i, err
+}
+
 const updateClinic = `-- name: UpdateClinic :one
 UPDATE clinics SET name = $2, slug = $3, address = $4, phone = $5, is_active = $6
 WHERE id = $1
-RETURNING id, name, slug, address, phone, is_active, created_at
+RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at
 `
 
 type UpdateClinicParams struct {
@@ -212,6 +243,7 @@ func (q *Queries) UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Cli
 		&i.Phone,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.AccessExpiresAt,
 	)
 	return i, err
 }

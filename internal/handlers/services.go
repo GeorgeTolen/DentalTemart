@@ -20,9 +20,10 @@ import (
 // ---------------------------------------------------------------------------
 
 type serviceRequest struct {
-	Name     string `json:"name" validate:"required"`
-	Price    int64  `json:"price"`
-	IsActive *bool  `json:"is_active"`
+	Name        string `json:"name" validate:"required"`
+	Price       int64  `json:"price"`
+	IsActive    *bool  `json:"is_active"`
+	Description string `json:"description"`
 }
 
 func (req serviceRequest) active() bool {
@@ -87,10 +88,11 @@ func (h *Handlers) CreateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s, err := h.q.CreateService(r.Context(), sqlc.CreateServiceParams{
-		ClinicID: clinicID,
-		Name:     strings.TrimSpace(req.Name),
-		Price:    req.Price,
-		IsActive: req.active(),
+		ClinicID:    clinicID,
+		Name:        strings.TrimSpace(req.Name),
+		Price:       req.Price,
+		IsActive:    req.active(),
+		Description: optText(strings.TrimSpace(req.Description)),
 	})
 	if err != nil {
 		httpx.Fail(w, conflict(err, "услуга с таким названием уже есть в прайсе"))
@@ -131,11 +133,12 @@ func (h *Handlers) UpdateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s, err := h.q.UpdateService(r.Context(), sqlc.UpdateServiceParams{
-		ID:       id,
-		Name:     strings.TrimSpace(req.Name),
-		Price:    req.Price,
-		IsActive: req.active(),
-		ClinicID: clinicID,
+		ID:          id,
+		Name:        strings.TrimSpace(req.Name),
+		Price:       req.Price,
+		IsActive:    req.active(),
+		Description: optText(strings.TrimSpace(req.Description)),
+		ClinicID:    clinicID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

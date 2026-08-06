@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -24,16 +25,35 @@ type clinicDTO struct {
 	OwnerCount   int64  `json:"owner_count"`
 	PatientCount int64  `json:"patient_count"`
 	DoctorCount  int64  `json:"doctor_count"`
+	// Срок доступа: nil — бессрочный. Frozen — срок истёк, клиника заморожена.
+	AccessExpiresAt *string `json:"access_expires_at"`
+	Frozen          bool    `json:"frozen"`
+}
+
+// clinicFrozen reports whether the access period has ended.
+func clinicFrozen(expires *time.Time) bool {
+	return expires != nil && expires.Before(time.Now())
+}
+
+func accessDTO(expires *time.Time) (*string, bool) {
+	if expires == nil {
+		return nil, false
+	}
+	s := expires.Format(time.RFC3339)
+	return &s, clinicFrozen(expires)
 }
 
 func toClinicDTO(c sqlc.Clinic) clinicDTO {
+	expires, frozen := accessDTO(c.AccessExpiresAt)
 	return clinicDTO{
-		ID:       c.ID,
-		Name:     c.Name,
-		Slug:     c.Slug,
-		Address:  textVal(c.Address),
-		Phone:    textVal(c.Phone),
-		IsActive: c.IsActive,
+		ID:              c.ID,
+		Name:            c.Name,
+		Slug:            c.Slug,
+		Address:         textVal(c.Address),
+		Phone:           textVal(c.Phone),
+		IsActive:        c.IsActive,
+		AccessExpiresAt: expires,
+		Frozen:          frozen,
 	}
 }
 
@@ -72,16 +92,19 @@ func (h *Handlers) ListClinics(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]clinicDTO, 0, len(rows))
 	for _, c := range rows {
+		expires, frozen := accessDTO(c.AccessExpiresAt)
 		out = append(out, clinicDTO{
-			ID:           c.ID,
-			Name:         c.Name,
-			Slug:         c.Slug,
-			Address:      textVal(c.Address),
-			Phone:        textVal(c.Phone),
-			IsActive:     c.IsActive,
-			OwnerCount:   c.OwnerCount,
-			PatientCount: c.PatientCount,
-			DoctorCount:  c.DoctorCount,
+			ID:              c.ID,
+			Name:            c.Name,
+			Slug:            c.Slug,
+			Address:         textVal(c.Address),
+			Phone:           textVal(c.Phone),
+			IsActive:        c.IsActive,
+			OwnerCount:      c.OwnerCount,
+			PatientCount:    c.PatientCount,
+			DoctorCount:     c.DoctorCount,
+			AccessExpiresAt: expires,
+			Frozen:          frozen,
 		})
 	}
 	httpx.JSON(w, http.StatusOK, out)
@@ -93,6 +116,9 @@ type createClinicRequest struct {
 	Address  string `json:"address"`
 	Phone    string `json:"phone"`
 	IsActive *bool  `json:"is_active"`
+	// TrialDays > 0 ограничивает доступ клиники этим числом дней (пробный
+	// период); 0 — доступ бессрочный.
+	TrialDays int32 `json:"trial_days"`
 	// Optional first owner, created together with the clinic.
 	OwnerName     string `json:"owner_name"`
 	OwnerEmail    string `json:"owner_email"`
@@ -161,6 +187,22 @@ func (h *Handlers) CreateClinic(w http.ResponseWriter, r *http.Request) {
 	if err := qtx.SeedClinicServices(r.Context(), clinic.ID); err != nil {
 		httpx.Fail(w, err)
 		return
+	}
+
+	// Пробный период: доступ до now + N дней.
+	if req.TrialDays < 0 || req.TrialDays > 3650 {
+		httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "срок доступа должен быть от 0 до 3650 дней"))
+		return
+	}
+	if req.TrialDays > 0 {
+		expires := time.Now().Add(time.Duration(req.TrialDays) * 24 * time.Hour)
+		if clinic, err = qtx.SetClinicAccess(r.Context(), sqlc.SetClinicAccessParams{
+			ID:              clinic.ID,
+			AccessExpiresAt: &expires,
+		}); err != nil {
+			httpx.Fail(w, err)
+			return
+		}
 	}
 
 	if createOwner {
@@ -246,6 +288,66 @@ func (h *Handlers) UpdateClinic(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httpx.Fail(w, conflict(err, "клиника с таким идентификатором уже существует"))
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toClinicDTO(clinic))
+}
+
+type clinicAccessRequest struct {
+	// unlimited — оплачено, доступ навсегда; freeze — прервать немедленно;
+	// grant — выдать (или продлить) Days дней от текущего момента.
+	Action string `json:"action" validate:"required,oneof=unlimited freeze grant"`
+	Days   int32  `json:"days"`
+}
+
+// SetClinicAccess manages a clinic's paid/trial access (platform admin only):
+// сделать бессрочным, заморозить сейчас или выдать N дней.
+func (h *Handlers) SetClinicAccess(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireSuperadmin(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	id, err := idParam(r)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	var req clinicAccessRequest
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if err := h.validateStruct(req); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+
+	var expires *time.Time
+	switch req.Action {
+	case "unlimited":
+		expires = nil
+	case "freeze":
+		now := time.Now()
+		expires = &now
+	case "grant":
+		if req.Days < 1 || req.Days > 3650 {
+			httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "срок должен быть от 1 до 3650 дней"))
+			return
+		}
+		t := time.Now().Add(time.Duration(req.Days) * 24 * time.Hour)
+		expires = &t
+	}
+
+	clinic, err := h.q.SetClinicAccess(r.Context(), sqlc.SetClinicAccessParams{
+		ID:              id,
+		AccessExpiresAt: expires,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "клиника не найдена"))
+			return
+		}
+		httpx.Fail(w, err)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toClinicDTO(clinic))

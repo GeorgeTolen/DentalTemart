@@ -11,17 +11,26 @@ import type { Appointment, AppointmentStatus, Doctor } from "../lib/types";
 import { STATUS_LABELS } from "../lib/types";
 import { isoToLocalInput, localInputToISO, formatDate } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
-import { DateInput, DateTimeInput } from "../components/DateInputs";
+import { DateInput } from "../components/DateInputs";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import AppointmentBillModal from "../components/AppointmentBillModal";
-import { PatientPicker } from "../components/AppointmentModal";
+import AppointmentModal, { PatientPicker } from "../components/AppointmentModal";
 import { PickerField } from "../components/PickerDrawer";
+import TimePickerDrawer from "../components/TimePickerDrawer";
 import { formatMoney } from "../lib/money";
 import { useAuth } from "../auth/AuthContext";
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+// Локальная дата "YYYY-MM-DD" без UTC-сдвига (toISOString уехал бы на день
+// назад вечером в часовых поясах восточнее Гринвича).
+function localDateStr(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+const MONTH_LABELS = [
+  "январь", "февраль", "март", "апрель", "май", "июнь",
+  "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь",
+];
 
 export default function AppointmentsPage() {
   const { user, readOnly } = useAuth();
@@ -29,29 +38,49 @@ export default function AppointmentsPage() {
 
   const { data: doctors = [] } = useDoctors();
 
-  // По умолчанию показываем один день — сегодня. Выбор одной границы сразу
-  // подтягивает вторую, чтобы диапазон оставался корректным (период в 1 день).
-  const [dateFrom, setDateFrom] = useState(todayStr());
-  const [dateTo, setDateTo] = useState(todayStr());
+  // Вместо фильтра «с — по» — месяц и лента его дней: клик по числу показывает
+  // записи этого дня. По умолчанию — сегодня.
+  const today = new Date();
+  const [monthDate, setMonthDate] = useState(
+    () => new Date(today.getFullYear(), today.getMonth(), 1)
+  );
+  const [selectedDay, setSelectedDay] = useState(localDateStr(today));
   const [doctorFilter, setDoctorFilter] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | "">("");
   const [editing, setEditing] = useState<Appointment | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  function changeFrom(v: string) {
-    setDateFrom(v);
-    if (v && (!dateTo || dateTo < v)) setDateTo(v);
-  }
-  function changeTo(v: string) {
-    setDateTo(v);
-    if (v && (!dateFrom || v < dateFrom)) setDateFrom(v);
+  const daysInMonth = new Date(
+    monthDate.getFullYear(),
+    monthDate.getMonth() + 1,
+    0
+  ).getDate();
+  const todayStr = localDateStr(today);
+
+  function shiftMonth(delta: number) {
+    const next = new Date(monthDate.getFullYear(), monthDate.getMonth() + delta, 1);
+    setMonthDate(next);
+    // При смене месяца выбираем «сегодня», если оно в этом месяце, иначе 1-е.
+    const sameMonth =
+      next.getFullYear() === today.getFullYear() && next.getMonth() === today.getMonth();
+    setSelectedDay(sameMonth ? todayStr : localDateStr(next));
   }
 
-  const from = useMemo(() => new Date(dateFrom).toISOString(), [dateFrom]);
+  function dayStr(day: number): string {
+    return localDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
+  }
+
+  function isWeekend(day: number): boolean {
+    const wd = new Date(monthDate.getFullYear(), monthDate.getMonth(), day).getDay();
+    return wd === 0 || wd === 6;
+  }
+
+  const from = useMemo(() => new Date(selectedDay + "T00:00:00").toISOString(), [selectedDay]);
   const to = useMemo(() => {
-    const d = new Date(dateTo);
+    const d = new Date(selectedDay + "T00:00:00");
     d.setDate(d.getDate() + 1);
     return d.toISOString();
-  }, [dateTo]);
+  }, [selectedDay]);
 
   const { data: appointments = [], isLoading } = useAppointments(from, to, doctorFilter);
   const saveApptTop = useSaveAppointment();
@@ -100,18 +129,60 @@ export default function AppointmentsPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Записи</h1>
+        {!readOnly && (
+          <Button onClick={() => setCreating(true)}>Новая запись</Button>
+        )}
+      </div>
+
+      {/* Месяц и лента его дней: быстрее, чем два поля дат. */}
+      <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={() => shiftMonth(-1)}
+            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
+            aria-label="Предыдущий месяц"
+          >
+            ←
+          </button>
+          <span className="min-w-[10rem] text-center text-sm font-semibold capitalize text-ink">
+            {MONTH_LABELS[monthDate.getMonth()]} {monthDate.getFullYear()}
+          </span>
+          <button
+            onClick={() => shiftMonth(1)}
+            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
+            aria-label="Следующий месяц"
+          >
+            →
+          </button>
+        </div>
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+            const value = dayStr(day);
+            const selected = value === selectedDay;
+            const isToday = value === todayStr;
+            return (
+              <button
+                key={day}
+                onClick={() => setSelectedDay(value)}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-medium transition ${
+                  selected
+                    ? "bg-brand text-white"
+                    : isToday
+                      ? "bg-brand-light text-brand-dark"
+                      : isWeekend(day)
+                        ? "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                        : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Фильтры */}
       <div className="flex flex-wrap gap-3 rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">С</span>
-          <DateInput className="w-40" value={dateFrom} onChange={changeFrom} />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">По</span>
-          <DateInput className="w-40" value={dateTo} onChange={changeTo} />
-        </div>
         <select
           value={doctorFilter ?? ""}
           onChange={(e) => setDoctorFilter(e.target.value ? Number(e.target.value) : null)}
@@ -165,6 +236,14 @@ export default function AppointmentsPage() {
           appointment={editing}
           doctors={doctors}
           onClose={() => setEditing(null)}
+        />
+      )}
+      {creating && (
+        <AppointmentModal
+          doctors={doctors}
+          existing={null}
+          initialStart={`${selectedDay}T10:00`}
+          onClose={() => setCreating(false)}
         />
       )}
     </div>
@@ -338,6 +417,7 @@ function AppointmentEditModal({
   // в загруженном куске списка уже нельзя.
   const [patientName, setPatientName] = useState(appointment.patient_name);
   const [pickingPatient, setPickingPatient] = useState(false);
+  const [pickingTime, setPickingTime] = useState(false);
   const [newPatientName, setNewPatientName] = useState("");
   const [newPatientPhone, setNewPatientPhone] = useState("");
   const [newPatientIin, setNewPatientIin] = useState("");
@@ -420,10 +500,17 @@ function AppointmentEditModal({
             ))}
           </Select>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Начало"><DateTimeInput value={start} onChange={setStart} /></Field>
-          <Field label="Окончание"><DateTimeInput value={end} onChange={setEnd} /></Field>
-        </div>
+        <Field label="Дата и время">
+          <PickerField
+            value={
+              start
+                ? `${new Date(start).toLocaleDateString("ru", { day: "numeric", month: "long" })}, ${start.slice(11, 16)} – ${end.slice(11, 16)}`
+                : ""
+            }
+            placeholder="Выбрать дату и время"
+            onClick={() => setPickingTime(true)}
+          />
+        </Field>
         <Field label="Статус">
           <Select value={status} onChange={(e) => setStatus(e.target.value as AppointmentStatus)}>
             {(Object.entries(STATUS_LABELS) as [AppointmentStatus, string][]).map(([k, v]) => (
@@ -462,6 +549,17 @@ function AppointmentEditModal({
             setPickingPatient(false);
           }}
           onClose={() => setPickingPatient(false)}
+        />
+      )}
+      {pickingTime && (
+        <TimePickerDrawer
+          value={{ start, end }}
+          onApply={(range) => {
+            setStart(range.start);
+            setEnd(range.end);
+            setPickingTime(false);
+          }}
+          onClose={() => setPickingTime(false)}
         />
       )}
     </Modal>

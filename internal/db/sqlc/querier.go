@@ -121,6 +121,8 @@ type Querier interface {
 	RevenueByService(ctx context.Context, arg RevenueByServiceParams) ([]RevenueByServiceRow, error)
 	// Базовый прайс новой клиники — чтобы кассой можно было пользоваться сразу.
 	SeedClinicServices(ctx context.Context, clinicID int64) error
+	// Срок доступа: NULL — бессрочно, прошлое — заморожена.
+	SetClinicAccess(ctx context.Context, arg SetClinicAccessParams) (Clinic, error)
 	// Сводно по всем клиникам — для панели платформы.
 	SumPlatformRevenue(ctx context.Context) (int64, error)
 	// --- Статистика выручки ------------------------------------------------------

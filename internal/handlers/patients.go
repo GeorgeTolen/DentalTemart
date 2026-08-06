@@ -44,7 +44,7 @@ func optText(s string) pgtype.Text {
 
 // patientsPageSize is how many patients one page of the list holds. Список
 // общий для платформы и растёт, поэтому отдаём его страницами.
-const patientsPageSize = 20
+const patientsPageSize = 10
 
 type patientsResponse struct {
 	Items []patientDTO `json:"items"`

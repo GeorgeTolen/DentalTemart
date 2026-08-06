@@ -10,6 +10,9 @@ export interface User {
   clinic_id: number | null;
   clinic_name?: string;
   clinic_slug?: string;
+  // Срок доступа клиники истёк: показываем экран «пробный период истёк»,
+  // рабочие эндпоинты отвечают 403.
+  clinic_frozen?: boolean;
 }
 
 // Compact user shape returned by the clinic user-management endpoints.
@@ -39,6 +42,9 @@ export interface Clinic {
   owner_count: number;
   patient_count: number;
   doctor_count: number;
+  // Срок доступа: null — бессрочный (оплачено); frozen — срок истёк.
+  access_expires_at: string | null;
+  frozen: boolean;
 }
 
 // Администратор платформы (учётка уровня платформы, вне клиник).
@@ -131,6 +137,7 @@ export interface Service {
   name: string;
   price: number;
   is_active: boolean;
+  description: string;
 }
 
 // Позиция в чеке приёма.

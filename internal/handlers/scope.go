@@ -29,6 +29,37 @@ func (h *Handlers) clinicID(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
+// frozenMessage is what a clinic user sees when the paid/trial access expires.
+const frozenMessage = "Ваш пробный период истёк. Хотите продлить — напишите нам в WhatsApp: +7 777 910 99 65 или на почту tolenn.olzhas@gmail.com"
+
+// RequireClinicAccess blocks clinic users whose clinic access has expired
+// (пробный период кончился, оплата не поступила). Вход и /me остаются
+// доступными — фронт показывает экран «пробный период истёк»; все рабочие
+// эндпоинты отвечают 403. Суперадмина (в т.ч. режим поддержки) не трогаем.
+func (h *Handlers) RequireClinicAccess(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if middleware.Role(r.Context()) == "superadmin" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		clinicID, ok := middleware.ClinicID(r.Context())
+		if !ok {
+			next.ServeHTTP(w, r)
+			return
+		}
+		clinic, err := h.q.GetClinic(r.Context(), clinicID)
+		if err != nil {
+			httpx.Fail(w, err)
+			return
+		}
+		if clinicFrozen(clinic.AccessExpiresAt) {
+			httpx.Fail(w, httpx.NewError(http.StatusForbidden, frozenMessage))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // requireSuperadmin returns a 403 unless the caller is the platform superadmin.
 func (h *Handlers) requireSuperadmin(ctx context.Context) error {
 	if middleware.Role(ctx) != "superadmin" {

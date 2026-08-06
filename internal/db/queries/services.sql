@@ -9,13 +9,13 @@ SELECT * FROM services WHERE clinic_id = $1 ORDER BY is_active DESC, name;
 SELECT * FROM services WHERE id = $1 AND clinic_id = $2;
 
 -- name: CreateService :one
-INSERT INTO services (clinic_id, name, price, is_active)
-VALUES ($1, $2, $3, $4)
+INSERT INTO services (clinic_id, name, price, is_active, description)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: UpdateService :one
-UPDATE services SET name = $2, price = $3, is_active = $4
-WHERE id = $1 AND clinic_id = $5
+UPDATE services SET name = $2, price = $3, is_active = $4, description = $5
+WHERE id = $1 AND clinic_id = $6
 RETURNING *;
 
 -- name: DeleteService :exec

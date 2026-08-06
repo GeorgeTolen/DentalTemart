@@ -44,6 +44,9 @@ type meDTO struct {
 	ClinicID   *int64 `json:"clinic_id"`
 	ClinicName string `json:"clinic_name"`
 	ClinicSlug string `json:"clinic_slug"`
+	// ClinicFrozen — срок доступа клиники истёк: интерфейс показывает экран
+	// «пробный период истёк», рабочие эндпоинты отвечают 403.
+	ClinicFrozen bool `json:"clinic_frozen"`
 }
 
 func (h *Handlers) meFromUser(r *http.Request, u sqlc.User) meDTO {
@@ -54,6 +57,7 @@ func (h *Handlers) meFromUser(r *http.Request, u sqlc.User) meDTO {
 		if c, err := h.q.GetClinic(r.Context(), id); err == nil {
 			dto.ClinicName = c.Name
 			dto.ClinicSlug = c.Slug
+			dto.ClinicFrozen = clinicFrozen(c.AccessExpiresAt)
 		}
 	}
 	return dto

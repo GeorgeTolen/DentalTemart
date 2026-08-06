@@ -39,13 +39,14 @@ type AppointmentService struct {
 }
 
 type Clinic struct {
-	ID        int64       `json:"id"`
-	Name      string      `json:"name"`
-	Slug      string      `json:"slug"`
-	Address   pgtype.Text `json:"address"`
-	Phone     pgtype.Text `json:"phone"`
-	IsActive  bool        `json:"is_active"`
-	CreatedAt time.Time   `json:"created_at"`
+	ID              int64       `json:"id"`
+	Name            string      `json:"name"`
+	Slug            string      `json:"slug"`
+	Address         pgtype.Text `json:"address"`
+	Phone           pgtype.Text `json:"phone"`
+	IsActive        bool        `json:"is_active"`
+	CreatedAt       time.Time   `json:"created_at"`
+	AccessExpiresAt *time.Time  `json:"access_expires_at"`
 }
 
 type Doctor struct {
@@ -112,12 +113,13 @@ type PatientRecord struct {
 }
 
 type Service struct {
-	ID        int64     `json:"id"`
-	ClinicID  int64     `json:"clinic_id"`
-	Name      string    `json:"name"`
-	Price     int64     `json:"price"`
-	IsActive  bool      `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          int64       `json:"id"`
+	ClinicID    int64       `json:"clinic_id"`
+	Name        string      `json:"name"`
+	Price       int64       `json:"price"`
+	IsActive    bool        `json:"is_active"`
+	CreatedAt   time.Time   `json:"created_at"`
+	Description pgtype.Text `json:"description"`
 }
 
 type User struct {

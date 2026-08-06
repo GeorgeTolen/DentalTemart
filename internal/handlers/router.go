@@ -56,6 +56,7 @@ func (h *Handlers) Router() http.Handler {
 				r.Put("/clinics/{id}", h.UpdateClinic)
 				r.Delete("/clinics/{id}", h.DeleteClinic)
 				r.Post("/clinics/{id}/owner", h.AddClinicOwner)
+				r.Post("/clinics/{id}/access", h.SetClinicAccess)
 
 				// Staff accounts of a clinic, as seen from the platform.
 				r.Get("/clinics/{id}/users", h.ListClinicUsers)
@@ -72,9 +73,11 @@ func (h *Handlers) Router() http.Handler {
 
 			// Clinic data. The clinic normally comes from the caller's token;
 			// SupportScope additionally lets the platform superadmin read (never
-			// write) a single clinic named by the support header.
+			// write) a single clinic named by the support header. Замороженная
+			// клиника (пробный период истёк) сюда не проходит.
 			r.Group(func(r chi.Router) {
 				r.Use(mw.SupportScope)
+				r.Use(h.RequireClinicAccess)
 
 				r.Route("/appointments", func(r chi.Router) {
 					r.Get("/", h.ListAppointments)
@@ -137,6 +140,7 @@ func (h *Handlers) Router() http.Handler {
 			})
 
 			r.Route("/users", func(r chi.Router) {
+				r.Use(h.RequireClinicAccess)
 				r.Get("/", h.ListUsers)
 				r.Post("/", h.CreateUser)
 				r.Put("/{id}", h.UpdateUser)

@@ -325,14 +325,18 @@ func fromGetRow(r sqlc.GetAppointmentRow) appointmentDTO {
 // --- Услуга ---
 
 type serviceDTO struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	Price    int64  `json:"price"` // тенге
-	IsActive bool   `json:"is_active"`
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Price       int64  `json:"price"` // тенге
+	IsActive    bool   `json:"is_active"`
+	Description string `json:"description"`
 }
 
 func toServiceDTO(s sqlc.Service) serviceDTO {
-	return serviceDTO{ID: s.ID, Name: s.Name, Price: s.Price, IsActive: s.IsActive}
+	return serviceDTO{
+		ID: s.ID, Name: s.Name, Price: s.Price, IsActive: s.IsActive,
+		Description: textVal(s.Description),
+	}
 }
 
 // appointmentServiceDTO — позиция в чеке приёма.
