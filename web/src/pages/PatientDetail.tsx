@@ -33,8 +33,10 @@ import {
   useSavePatientRecord,
   useDeletePatientRecord,
 } from "../api/hooks";
+import { useAuth } from "../auth/AuthContext";
 
 export default function PatientDetail() {
+  const { readOnly } = useAuth();
   const { id } = useParams();
   const patientId = id ? Number(id) : null;
   const { data: patient, isLoading } = usePatient(patientId);
@@ -55,14 +57,16 @@ export default function PatientDetail() {
         <Link to="/patients" className="text-sm text-brand hover:underline">
           ← К списку пациентов
         </Link>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setEditingPatient(true)}>
-            Редактировать
-          </Button>
-          <Button onClick={() => setNewAppt(true)}>
-            + Новая запись
-          </Button>
-        </div>
+        {!readOnly && (
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setEditingPatient(true)}>
+              Редактировать
+            </Button>
+            <Button onClick={() => setNewAppt(true)}>
+              + Новая запись
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Карточка пациента */}
@@ -234,6 +238,7 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
 }
 
 function HistoryCard({ appointment: a }: { appointment: Appointment; index: number }) {
+  const { readOnly } = useAuth();
   const [open, setOpen] = useState(false);
   const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
   const saveAppt = useSaveAppointment();
@@ -317,16 +322,18 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
                 Следующий приём назначен на: <strong>{formatDate(a.next_visit_date)}</strong>
               </div>
             )}
-            <div className="flex flex-wrap gap-2">
-              {a.status !== "completed" && (
-                <Button onClick={markCompleted} disabled={saveAppt.isPending}>
-                  {saveAppt.isPending ? "Сохранение…" : "Отметить завершённым"}
+            {!readOnly && (
+              <div className="flex flex-wrap gap-2">
+                {a.status !== "completed" && (
+                  <Button onClick={markCompleted} disabled={saveAppt.isPending}>
+                    {saveAppt.isPending ? "Сохранение…" : "Отметить завершённым"}
+                  </Button>
+                )}
+                <Button variant="secondary" onClick={() => setSchedulingFollowUp(true)}>
+                  {a.next_visit_date ? "Изменить след. приём" : "Следующий приём"}
                 </Button>
-              )}
-              <Button variant="secondary" onClick={() => setSchedulingFollowUp(true)}>
-                {a.next_visit_date ? "Изменить след. приём" : "Следующий приём"}
-              </Button>
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -340,6 +347,7 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
 const RECORD_TABS: PatientRecordType[] = ["xray", "allergy", "scan3d"];
 
 function PatientRecordsSection({ patientId }: { patientId: number }) {
+  const { readOnly } = useAuth();
   const [tab, setTab] = useState<PatientRecordType>("xray");
   const [adding, setAdding] = useState(false);
   const { data: records = [], isLoading } = usePatientRecords(patientId, tab);
@@ -358,7 +366,9 @@ function PatientRecordsSection({ patientId }: { patientId: number }) {
     <div>
       <div className="mb-3 flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-lg font-semibold">Медицинские записи</h2>
-        <Button onClick={() => setAdding(true)}>+ Добавить запись</Button>
+        {!readOnly && (
+          <Button onClick={() => setAdding(true)}>+ Добавить запись</Button>
+        )}
       </div>
       <div className="mb-3 flex gap-1 rounded-2xl bg-slate-100 p-1 w-fit">
         {RECORD_TABS.map((t) => (
@@ -402,12 +412,14 @@ function PatientRecordsSection({ patientId }: { patientId: number }) {
                     </a>
                   )}
                 </div>
-                <button
-                  onClick={() => onDelete(r.id)}
-                  className="shrink-0 text-sm text-red-500 hover:underline"
-                >
-                  Удалить
-                </button>
+                {!readOnly && (
+                  <button
+                    onClick={() => onDelete(r.id)}
+                    className="shrink-0 text-sm text-red-500 hover:underline"
+                  >
+                    Удалить
+                  </button>
+                )}
               </div>
             </div>
           ))}

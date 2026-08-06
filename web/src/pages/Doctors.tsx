@@ -7,8 +7,8 @@ import DoctorModal from "../components/DoctorModal";
 import { useAuth } from "../auth/AuthContext";
 
 export default function Doctors() {
-  const { user } = useAuth();
-  const canManage = user?.role !== "doctor";
+  const { user, readOnly } = useAuth();
+  const canManage = user?.role !== "doctor" && !readOnly;
   const { data: doctors = [] } = useDoctors();
   const del = useDeleteDoctor();
   const [editing, setEditing] = useState<Doctor | "new" | null>(null);

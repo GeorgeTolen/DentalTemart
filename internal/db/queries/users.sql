@@ -12,10 +12,30 @@ SELECT * FROM users WHERE id = $1;
 -- name: CountSuperadmins :one
 SELECT count(*) FROM users WHERE role = 'superadmin';
 
+-- name: ListSuperadmins :many
+-- Platform administrators, for the platform panel's "Администраторы" section.
+SELECT id, clinic_id, full_name, email, role, created_at
+FROM users WHERE clinic_id IS NULL AND role = 'superadmin' ORDER BY created_at;
+
+-- name: UpdateSuperadmin :one
+-- Only name/email; the password goes through UpdateUserPassword.
+UPDATE users SET full_name = $2, email = $3
+WHERE id = $1 AND clinic_id IS NULL AND role = 'superadmin'
+RETURNING id, clinic_id, full_name, email, role, created_at;
+
+-- name: DeleteSuperadmin :exec
+DELETE FROM users WHERE id = $1 AND clinic_id IS NULL AND role = 'superadmin';
+
 -- name: CreateUser :one
 INSERT INTO users (clinic_id, full_name, email, password_hash, role)
 VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
+
+-- name: GetClinicUser :one
+-- A single clinic user, scoped to their clinic (used by the platform panel to
+-- reset a clinic account's password without leaving the clinic boundary).
+SELECT id, clinic_id, full_name, email, role, created_at
+FROM users WHERE id = $1 AND clinic_id = $2;
 
 -- name: ListUsersByClinic :many
 SELECT id, clinic_id, full_name, email, role, created_at
@@ -25,6 +45,10 @@ FROM users WHERE clinic_id = $1 ORDER BY created_at DESC;
 UPDATE users SET full_name = $2, email = $3, role = $4
 WHERE id = $1 AND clinic_id = $5
 RETURNING id, clinic_id, full_name, email, password_hash, role, created_at;
+
+-- name: CountClinicOwners :one
+-- Guards against removing a clinic's last owner (nobody could administer it).
+SELECT count(*) FROM users WHERE clinic_id = $1 AND role = 'owner';
 
 -- name: DeleteClinicUser :exec
 DELETE FROM users WHERE id = $1 AND clinic_id = $2;

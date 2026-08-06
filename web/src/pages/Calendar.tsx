@@ -12,6 +12,7 @@ import { useAppointments, useDoctors } from "../api/hooks";
 import type { Appointment } from "../lib/types";
 import AppointmentModal from "../components/AppointmentModal";
 import { Button, Select } from "../components/ui";
+import { useAuth } from "../auth/AuthContext";
 
 interface ModalState {
   existing: Appointment | null;
@@ -23,6 +24,9 @@ interface ModalState {
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
 export default function CalendarPage() {
+  // Режим поддержки: календарь показываем, но создавать и открывать записи на
+  // редактирование нельзя — подробности приёмов видны на вкладке «Записи».
+  const { readOnly } = useAuth();
   const [range, setRange] = useState<{ from: string; to: string }>({
     from: "",
     to: "",
@@ -51,11 +55,13 @@ export default function CalendarPage() {
   }
 
   function onEventClick(arg: EventClickArg) {
+    if (readOnly) return;
     const appt = arg.event.extendedProps.appointment as Appointment;
     setModal({ existing: appt });
   }
 
   function onSelect(arg: DateSelectArg) {
+    if (readOnly) return;
     setModal({
       existing: null,
       initialStart: toLocalInput(arg.start),
@@ -83,9 +89,11 @@ export default function CalendarPage() {
               ))}
             </Select>
           </div>
-          <Button onClick={() => setModal({ existing: null })}>
-            Новая запись
-          </Button>
+          {!readOnly && (
+            <Button onClick={() => setModal({ existing: null })}>
+              Новая запись
+            </Button>
+          )}
         </div>
       </div>
 
@@ -104,7 +112,7 @@ export default function CalendarPage() {
           slotMaxTime="20:00:00"
           allDaySlot={false}
           nowIndicator
-          selectable
+          selectable={!readOnly}
           selectMirror
           height="auto"
           expandRows

@@ -24,7 +24,7 @@ func (h *Handlers) Router() http.Handler {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   h.cfg.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type"},
+		AllowedHeaders:   []string{"Content-Type", mw.SupportClinicHeader},
 		AllowCredentials: true,
 	}))
 
@@ -54,41 +54,63 @@ func (h *Handlers) Router() http.Handler {
 				r.Put("/clinics/{id}", h.UpdateClinic)
 				r.Delete("/clinics/{id}", h.DeleteClinic)
 				r.Post("/clinics/{id}/owner", h.AddClinicOwner)
+
+				// Staff accounts of a clinic, as seen from the platform.
+				r.Get("/clinics/{id}/users", h.ListClinicUsers)
+				r.Post("/clinics/{id}/users/{userId}/password", h.ResetClinicUserPassword)
+				r.Delete("/clinics/{id}/users/{userId}", h.DeleteClinicUserByPlatform)
+
+				// Platform administrators themselves.
+				r.Get("/admins", h.ListPlatformAdmins)
+				r.Post("/admins", h.CreatePlatformAdmin)
+				r.Put("/admins/{id}", h.UpdatePlatformAdmin)
+				r.Delete("/admins/{id}", h.DeletePlatformAdmin)
+				r.Post("/password", h.ChangeOwnPassword)
 			})
 
-			r.Route("/appointments", func(r chi.Router) {
-				r.Get("/", h.ListAppointments)
-				r.Post("/", h.CreateAppointment)
-				r.Get("/archive", h.CountArchivedAppointments)
-				r.Delete("/archive", h.DeleteArchivedAppointments)
-				r.Get("/archive/list", h.ListArchivedAppointments)
-				r.Get("/{id}", h.GetAppointment)
-				r.Put("/{id}", h.UpdateAppointment)
-				r.Delete("/{id}", h.DeleteAppointment)
-			})
+			// Clinic data. The clinic normally comes from the caller's token;
+			// SupportScope additionally lets the platform superadmin read (never
+			// write) a single clinic named by the support header.
+			r.Group(func(r chi.Router) {
+				r.Use(mw.SupportScope)
 
-			r.Route("/patients", func(r chi.Router) {
-				r.Get("/", h.ListPatients)
-				r.Post("/", h.CreatePatient)
-				r.Get("/{id}", h.GetPatient)
-				r.Put("/{id}", h.UpdatePatient)
-				r.Delete("/{id}", h.DeletePatient)
-				r.Get("/{id}/appointments", h.GetPatientAppointments)
-				r.Get("/{id}/records", h.ListPatientRecords)
-				r.Post("/{id}/records", h.CreatePatientRecord)
-				r.Delete("/{id}/records/{recordId}", h.DeletePatientRecord)
-				r.Get("/{id}/records/{recordId}/file", h.GetPatientRecordFile)
-			})
+				r.Route("/appointments", func(r chi.Router) {
+					r.Get("/", h.ListAppointments)
+					r.Post("/", h.CreateAppointment)
+					r.Get("/archive", h.CountArchivedAppointments)
+					r.Delete("/archive", h.DeleteArchivedAppointments)
+					r.Get("/archive/list", h.ListArchivedAppointments)
+					r.Get("/{id}", h.GetAppointment)
+					r.Put("/{id}", h.UpdateAppointment)
+					r.Delete("/{id}", h.DeleteAppointment)
+				})
 
-			r.Route("/doctors", func(r chi.Router) {
-				r.Get("/", h.ListDoctors)
-				r.Post("/", h.CreateDoctor)
-				r.Get("/me", h.GetMyDoctorProfile)
-				r.Get("/unlinked-users", h.ListUnlinkedDoctorUsers)
-				r.Put("/{id}", h.UpdateDoctor)
-				r.Delete("/{id}", h.DeleteDoctor)
-				r.Get("/{id}/schedule", h.GetSchedule)
-				r.Put("/{id}/schedule", h.PutSchedule)
+				r.Route("/patients", func(r chi.Router) {
+					r.Get("/", h.ListPatients)
+					r.Post("/", h.CreatePatient)
+					r.Get("/{id}", h.GetPatient)
+					r.Put("/{id}", h.UpdatePatient)
+					r.Delete("/{id}", h.DeletePatient)
+					r.Get("/{id}/appointments", h.GetPatientAppointments)
+					r.Get("/{id}/records", h.ListPatientRecords)
+					r.Post("/{id}/records", h.CreatePatientRecord)
+					r.Delete("/{id}/records/{recordId}", h.DeletePatientRecord)
+					r.Get("/{id}/records/{recordId}/file", h.GetPatientRecordFile)
+				})
+
+				r.Route("/doctors", func(r chi.Router) {
+					r.Get("/", h.ListDoctors)
+					r.Post("/", h.CreateDoctor)
+					r.Get("/me", h.GetMyDoctorProfile)
+					r.Get("/unlinked-users", h.ListUnlinkedDoctorUsers)
+					r.Put("/{id}", h.UpdateDoctor)
+					r.Delete("/{id}", h.DeleteDoctor)
+					r.Get("/{id}/schedule", h.GetSchedule)
+					r.Put("/{id}/schedule", h.PutSchedule)
+				})
+
+				r.Get("/dashboard", h.Dashboard)
+				r.Get("/admin/stats", h.AdminStats)
 			})
 
 			r.Route("/users", func(r chi.Router) {
@@ -97,9 +119,6 @@ func (h *Handlers) Router() http.Handler {
 				r.Put("/{id}", h.UpdateUser)
 				r.Delete("/{id}", h.DeleteUser)
 			})
-
-			r.Get("/dashboard", h.Dashboard)
-			r.Get("/admin/stats", h.AdminStats)
 		})
 	})
 

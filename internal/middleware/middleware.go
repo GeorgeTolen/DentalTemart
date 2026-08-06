@@ -25,7 +25,12 @@ const (
 	userIDKey ctxKey = iota
 	roleKey
 	clinicIDKey
+	supportKey
 )
+
+// SupportClinicHeader carries the clinic the platform superadmin is currently
+// looking at ("режим поддержки"). It is honoured only for the superadmin role.
+const SupportClinicHeader = "X-Support-Clinic-Id"
 
 // Authenticator returns middleware that requires a valid access token cookie.
 func Authenticator(tm *auth.Manager) func(http.Handler) http.Handler {
@@ -52,6 +57,39 @@ func Authenticator(tm *auth.Manager) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// SupportScope gives the platform superadmin read-only access to one clinic's
+// data, so they can help a clinic without asking for its password. The clinic is
+// named by the SupportClinicHeader and the scope is honoured only for the
+// superadmin role — for everyone else the header is ignored and the clinic still
+// comes from their own token. Writes are refused: support looks, never edits.
+func SupportScope(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := r.Header.Get(SupportClinicHeader)
+		if raw == "" || Role(r.Context()) != "superadmin" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id <= 0 {
+			httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "некорректный идентификатор клиники"))
+			return
+		}
+		if r.Method != http.MethodGet {
+			httpx.Fail(w, httpx.NewError(http.StatusForbidden, "режим поддержки доступен только для просмотра"))
+			return
+		}
+		ctx := context.WithValue(r.Context(), clinicIDKey, id)
+		ctx = context.WithValue(ctx, supportKey, true)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// SupportMode reports whether the request is a superadmin viewing a clinic.
+func SupportMode(ctx context.Context) bool {
+	on, _ := ctx.Value(supportKey).(bool)
+	return on
 }
 
 // UserID returns the authenticated user's ID from the request context.

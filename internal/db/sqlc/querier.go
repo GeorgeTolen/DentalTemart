@@ -13,6 +13,8 @@ import (
 type Querier interface {
 	CountAppointmentsInRange(ctx context.Context, arg CountAppointmentsInRangeParams) (int64, error)
 	CountArchivedAppointments(ctx context.Context, clinicID int64) (int64, error)
+	// Guards against removing a clinic's last owner (nobody could administer it).
+	CountClinicOwners(ctx context.Context, clinicID pgtype.Int8) (int64, error)
 	CountOverlappingAppointments(ctx context.Context, arg CountOverlappingAppointmentsParams) (int64, error)
 	CountSuperadmins(ctx context.Context) (int64, error)
 	CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error)
@@ -30,6 +32,7 @@ type Querier interface {
 	DeleteDoctorSchedules(ctx context.Context, doctorID int64) error
 	DeletePatient(ctx context.Context, arg DeletePatientParams) error
 	DeletePatientRecord(ctx context.Context, arg DeletePatientRecordParams) error
+	DeleteSuperadmin(ctx context.Context, id int64) error
 	// Whether another doctor of the clinic already uses this calendar colour
 	// (colours are unique per clinic so doctors are distinguishable at a glance).
 	DoctorColorTaken(ctx context.Context, arg DoctorColorTakenParams) (bool, error)
@@ -39,6 +42,9 @@ type Querier interface {
 	GetAppointment(ctx context.Context, arg GetAppointmentParams) (GetAppointmentRow, error)
 	GetClinic(ctx context.Context, id int64) (Clinic, error)
 	GetClinicBySlug(ctx context.Context, lower string) (Clinic, error)
+	// A single clinic user, scoped to their clinic (used by the platform panel to
+	// reset a clinic account's password without leaving the clinic boundary).
+	GetClinicUser(ctx context.Context, arg GetClinicUserParams) (GetClinicUserRow, error)
 	// Login within a specific clinic: email is unique per clinic.
 	GetClinicUserByEmail(ctx context.Context, arg GetClinicUserByEmailParams) (User, error)
 	GetDoctor(ctx context.Context, arg GetDoctorParams) (Doctor, error)
@@ -70,6 +76,8 @@ type Querier interface {
 	// Same prefix-word search, restricted to patients that have at least one
 	// appointment with the given doctor (within the clinic).
 	ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]Patient, error)
+	// Platform administrators, for the platform panel's "Администраторы" section.
+	ListSuperadmins(ctx context.Context) ([]ListSuperadminsRow, error)
 	// Clinic users with the "doctor" role not yet linked to a doctor profile
 	// (or linked to the given doctor, so editing keeps showing its own link).
 	ListUnlinkedDoctorUsers(ctx context.Context, arg ListUnlinkedDoctorUsersParams) ([]ListUnlinkedDoctorUsersRow, error)
@@ -79,6 +87,8 @@ type Querier interface {
 	UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Clinic, error)
 	UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error)
 	UpdatePatient(ctx context.Context, arg UpdatePatientParams) (Patient, error)
+	// Only name/email; the password goes through UpdateUserPassword.
+	UpdateSuperadmin(ctx context.Context, arg UpdateSuperadminParams) (UpdateSuperadminRow, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error)
 	// Bumping token_version invalidates the user's existing access/refresh tokens.
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error

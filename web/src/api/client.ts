@@ -14,6 +14,58 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+// --- Режим поддержки -------------------------------------------------------
+// Администратор платформы может открыть данные конкретной клиники «на просмотр».
+// Клиника передаётся заголовком; сервер принимает его только у superadmin и
+// разрешает в этом режиме исключительно чтение (GET). Держим значение в
+// sessionStorage, чтобы обновление страницы не выбрасывало из режима.
+
+const SUPPORT_HEADER = "X-Support-Clinic-Id";
+const SUPPORT_STORAGE_KEY = "temart:support-clinic";
+
+export interface SupportClinic {
+  id: number;
+  name: string;
+}
+
+function readStoredSupportClinic(): SupportClinic | null {
+  try {
+    const raw = sessionStorage.getItem(SUPPORT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SupportClinic;
+    return typeof parsed?.id === "number" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+let supportClinic: SupportClinic | null = readStoredSupportClinic();
+
+export function getSupportClinic(): SupportClinic | null {
+  return supportClinic;
+}
+
+export function setSupportClinic(clinic: SupportClinic | null) {
+  supportClinic = clinic;
+  if (clinic) sessionStorage.setItem(SUPPORT_STORAGE_KEY, JSON.stringify(clinic));
+  else sessionStorage.removeItem(SUPPORT_STORAGE_KEY);
+}
+
+// Attach the support header to clinic-data calls only: /platform/* and /auth/*
+// are the platform's own endpoints and must stay unscoped.
+api.interceptors.request.use((config) => {
+  const path = (config.url ?? "").split("?")[0];
+  if (
+    supportClinic &&
+    !path.startsWith("/platform") &&
+    !path.startsWith("/auth/") &&
+    path !== "/me"
+  ) {
+    config.headers.set(SUPPORT_HEADER, String(supportClinic.id));
+  }
+  return config;
+});
+
 // Event fired when a request is rejected because the session is no longer valid.
 // AuthContext listens for it and clears the user, dropping back to the login
 // screen. We use an event (not a location redirect) because the login and the

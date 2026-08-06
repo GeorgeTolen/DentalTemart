@@ -14,6 +14,7 @@ import type {
   Patient,
   PatientRecord,
   PatientRecordType,
+  PlatformAdmin,
   PlatformStats,
   PublicClinic,
   ScheduleEntry,
@@ -400,6 +401,92 @@ export function useDeleteClinic() {
       qc.invalidateQueries({ queryKey: ["clinics"] });
       qc.invalidateQueries({ queryKey: ["platform-stats"] });
     },
+  });
+}
+
+// --- Platform: учётные записи клиники глазами платформы ---
+
+export function useClinicUsers(clinicId: number | null) {
+  return useQuery({
+    queryKey: ["clinic-users", clinicId],
+    enabled: clinicId != null,
+    queryFn: async () =>
+      (await api.get<ClinicUser[]>(`/platform/clinics/${clinicId}/users`)).data,
+  });
+}
+
+export function useResetClinicUserPassword() {
+  return useMutation({
+    mutationFn: async (args: {
+      clinicId: number;
+      userId: number;
+      password: string;
+    }) =>
+      (
+        await api.post(
+          `/platform/clinics/${args.clinicId}/users/${args.userId}/password`,
+          { password: args.password }
+        )
+      ).data,
+  });
+}
+
+export function useDeleteClinicUserByPlatform() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { clinicId: number; userId: number }) =>
+      api.delete(`/platform/clinics/${args.clinicId}/users/${args.userId}`),
+    onSuccess: (_d, args) => {
+      qc.invalidateQueries({ queryKey: ["clinic-users", args.clinicId] });
+      qc.invalidateQueries({ queryKey: ["clinics"] });
+      qc.invalidateQueries({ queryKey: ["platform-stats"] });
+    },
+  });
+}
+
+// --- Platform: администраторы платформы ---
+
+export function usePlatformAdmins() {
+  return useQuery({
+    queryKey: ["platform-admins"],
+    queryFn: async () =>
+      (await api.get<PlatformAdmin[]>("/platform/admins")).data,
+  });
+}
+
+export function useSavePlatformAdmin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (a: {
+      id?: number;
+      full_name: string;
+      email: string;
+      password: string;
+    }) => {
+      const { id, ...body } = a;
+      if (id)
+        return (await api.put<PlatformAdmin>(`/platform/admins/${id}`, body))
+          .data;
+      return (await api.post<PlatformAdmin>("/platform/admins", body)).data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["platform-admins"] }),
+  });
+}
+
+export function useDeletePlatformAdmin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => api.delete(`/platform/admins/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["platform-admins"] }),
+  });
+}
+
+export function useChangeOwnPassword() {
+  return useMutation({
+    mutationFn: async (args: {
+      current_password: string;
+      new_password: string;
+    }) => (await api.post("/platform/password", args)).data,
   });
 }
 

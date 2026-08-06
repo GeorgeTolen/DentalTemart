@@ -20,8 +20,8 @@ function todayStr() {
 }
 
 export default function AppointmentsPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "owner" || user?.role === "admin";
+  const { user, readOnly } = useAuth();
+  const isAdmin = (user?.role === "owner" || user?.role === "admin") && !readOnly;
 
   const { data: doctors = [] } = useDoctors();
 
@@ -128,6 +128,7 @@ export default function AppointmentsPage() {
               key={a.id}
               appointment={a}
               isAdmin={isAdmin}
+              readOnly={readOnly}
               onEdit={() => setEditing(a)}
               onCancel={() => cancel(a)}
             />
@@ -149,11 +150,14 @@ export default function AppointmentsPage() {
 function AppointmentRow({
   appointment: a,
   isAdmin,
+  readOnly,
   onEdit,
   onCancel,
 }: {
   appointment: Appointment;
   isAdmin: boolean;
+  // Режим поддержки: карточку можно раскрыть и прочитать, но не менять.
+  readOnly: boolean;
   onEdit: () => void;
   onCancel: () => void;
 }) {
@@ -218,24 +222,26 @@ function AppointmentRow({
             {a.description && <Info label="Описание" value={a.description} wide />}
             {a.next_visit_date && <Info label="Следующий приём" value={formatDate(a.next_visit_date)} wide />}
           </div>
-          <div className="flex gap-2 pt-1">
-            <Button variant="secondary" className="py-1 px-3 text-xs" onClick={onEdit}>
-              Редактировать
-            </Button>
-            {a.status !== "completed" && (
-              <Button className="py-1 px-3 text-xs" onClick={markCompleted} disabled={saveAppt.isPending}>
-                {saveAppt.isPending ? "Сохранение…" : "Завершить"}
+          {!readOnly && (
+            <div className="flex gap-2 pt-1">
+              <Button variant="secondary" className="py-1 px-3 text-xs" onClick={onEdit}>
+                Редактировать
               </Button>
-            )}
-            <Button variant="secondary" className="py-1 px-3 text-xs" onClick={() => setSchedulingFollowUp(true)}>
-              {a.next_visit_date ? "Изменить след. приём" : "Следующий приём"}
-            </Button>
-            {isAdmin && a.status !== "cancelled" && (
-              <Button variant="danger" className="py-1 px-3 text-xs" onClick={onCancel}>
-                Отменить
+              {a.status !== "completed" && (
+                <Button className="py-1 px-3 text-xs" onClick={markCompleted} disabled={saveAppt.isPending}>
+                  {saveAppt.isPending ? "Сохранение…" : "Завершить"}
+                </Button>
+              )}
+              <Button variant="secondary" className="py-1 px-3 text-xs" onClick={() => setSchedulingFollowUp(true)}>
+                {a.next_visit_date ? "Изменить след. приём" : "Следующий приём"}
               </Button>
-            )}
-          </div>
+              {isAdmin && a.status !== "cancelled" && (
+                <Button variant="danger" className="py-1 px-3 text-xs" onClick={onCancel}>
+                  Отменить
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
       {schedulingFollowUp && (

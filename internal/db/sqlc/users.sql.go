@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countClinicOwners = `-- name: CountClinicOwners :one
+SELECT count(*) FROM users WHERE clinic_id = $1 AND role = 'owner'
+`
+
+// Guards against removing a clinic's last owner (nobody could administer it).
+func (q *Queries) CountClinicOwners(ctx context.Context, clinicID pgtype.Int8) (int64, error) {
+	row := q.db.QueryRow(ctx, countClinicOwners, clinicID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSuperadmins = `-- name: CountSuperadmins :one
 SELECT count(*) FROM users WHERE role = 'superadmin'
 `
@@ -71,6 +83,50 @@ type DeleteClinicUserParams struct {
 func (q *Queries) DeleteClinicUser(ctx context.Context, arg DeleteClinicUserParams) error {
 	_, err := q.db.Exec(ctx, deleteClinicUser, arg.ID, arg.ClinicID)
 	return err
+}
+
+const deleteSuperadmin = `-- name: DeleteSuperadmin :exec
+DELETE FROM users WHERE id = $1 AND clinic_id IS NULL AND role = 'superadmin'
+`
+
+func (q *Queries) DeleteSuperadmin(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deleteSuperadmin, id)
+	return err
+}
+
+const getClinicUser = `-- name: GetClinicUser :one
+SELECT id, clinic_id, full_name, email, role, created_at
+FROM users WHERE id = $1 AND clinic_id = $2
+`
+
+type GetClinicUserParams struct {
+	ID       int64       `json:"id"`
+	ClinicID pgtype.Int8 `json:"clinic_id"`
+}
+
+type GetClinicUserRow struct {
+	ID        int64       `json:"id"`
+	ClinicID  pgtype.Int8 `json:"clinic_id"`
+	FullName  string      `json:"full_name"`
+	Email     string      `json:"email"`
+	Role      string      `json:"role"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
+// A single clinic user, scoped to their clinic (used by the platform panel to
+// reset a clinic account's password without leaving the clinic boundary).
+func (q *Queries) GetClinicUser(ctx context.Context, arg GetClinicUserParams) (GetClinicUserRow, error) {
+	row := q.db.QueryRow(ctx, getClinicUser, arg.ID, arg.ClinicID)
+	var i GetClinicUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.ClinicID,
+		&i.FullName,
+		&i.Email,
+		&i.Role,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getClinicUserByEmail = `-- name: GetClinicUserByEmail :one
@@ -140,6 +196,48 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 	return i, err
 }
 
+const listSuperadmins = `-- name: ListSuperadmins :many
+SELECT id, clinic_id, full_name, email, role, created_at
+FROM users WHERE clinic_id IS NULL AND role = 'superadmin' ORDER BY created_at
+`
+
+type ListSuperadminsRow struct {
+	ID        int64       `json:"id"`
+	ClinicID  pgtype.Int8 `json:"clinic_id"`
+	FullName  string      `json:"full_name"`
+	Email     string      `json:"email"`
+	Role      string      `json:"role"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
+// Platform administrators, for the platform panel's "Администраторы" section.
+func (q *Queries) ListSuperadmins(ctx context.Context) ([]ListSuperadminsRow, error) {
+	rows, err := q.db.Query(ctx, listSuperadmins)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSuperadminsRow{}
+	for rows.Next() {
+		var i ListSuperadminsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClinicID,
+			&i.FullName,
+			&i.Email,
+			&i.Role,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsersByClinic = `-- name: ListUsersByClinic :many
 SELECT id, clinic_id, full_name, email, role, created_at
 FROM users WHERE clinic_id = $1 ORDER BY created_at DESC
@@ -179,6 +277,42 @@ func (q *Queries) ListUsersByClinic(ctx context.Context, clinicID pgtype.Int8) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateSuperadmin = `-- name: UpdateSuperadmin :one
+UPDATE users SET full_name = $2, email = $3
+WHERE id = $1 AND clinic_id IS NULL AND role = 'superadmin'
+RETURNING id, clinic_id, full_name, email, role, created_at
+`
+
+type UpdateSuperadminParams struct {
+	ID       int64  `json:"id"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+}
+
+type UpdateSuperadminRow struct {
+	ID        int64       `json:"id"`
+	ClinicID  pgtype.Int8 `json:"clinic_id"`
+	FullName  string      `json:"full_name"`
+	Email     string      `json:"email"`
+	Role      string      `json:"role"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
+// Only name/email; the password goes through UpdateUserPassword.
+func (q *Queries) UpdateSuperadmin(ctx context.Context, arg UpdateSuperadminParams) (UpdateSuperadminRow, error) {
+	row := q.db.QueryRow(ctx, updateSuperadmin, arg.ID, arg.FullName, arg.Email)
+	var i UpdateSuperadminRow
+	err := row.Scan(
+		&i.ID,
+		&i.ClinicID,
+		&i.FullName,
+		&i.Email,
+		&i.Role,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const updateUser = `-- name: UpdateUser :one

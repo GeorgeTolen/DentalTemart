@@ -5,10 +5,12 @@ import { errorMessage } from "../api/client";
 import type { Gender, Patient } from "../lib/types";
 import { GENDER_LABELS } from "../lib/types";
 import { Button, Field, Input, Modal, Select, Textarea } from "../components/ui";
+import { useAuth } from "../auth/AuthContext";
 import { DateInput } from "../components/DateInputs";
 import { formatDate, validateBirthDate, minBirthDateInput, todayInput, ageCategory } from "../lib/datetime";
 
 export default function Patients() {
+  const { readOnly } = useAuth();
   const [search, setSearch] = useState("");
   const { data: patients = [], isLoading } = usePatients(search);
   const [editing, setEditing] = useState<Patient | "new" | null>(null);
@@ -17,7 +19,9 @@ export default function Patients() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Пациенты</h1>
-        <Button onClick={() => setEditing("new")}>Новый пациент</Button>
+        {!readOnly && (
+          <Button onClick={() => setEditing("new")}>Новый пациент</Button>
+        )}
       </div>
 
       <div className="max-w-md">
@@ -69,12 +73,14 @@ export default function Patients() {
                   )}
                 </td>
                 <td className="px-5 py-3 text-right">
-                  <button
-                    onClick={() => setEditing(p)}
-                    className="text-brand hover:underline"
-                  >
-                    Изменить
-                  </button>
+                  {!readOnly && (
+                    <button
+                      onClick={() => setEditing(p)}
+                      className="text-brand hover:underline"
+                    >
+                      Изменить
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

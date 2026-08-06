@@ -1,23 +1,36 @@
 import { useState } from "react";
 import {
   useAddClinicOwner,
+  useChangeOwnPassword,
+  useClinicUsers,
   useClinics,
   useDeleteClinic,
+  useDeleteClinicUserByPlatform,
+  useDeletePlatformAdmin,
+  usePlatformAdmins,
   usePlatformStats,
+  useResetClinicUserPassword,
   useSaveClinic,
+  useSavePlatformAdmin,
   type ClinicPayload,
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import type { Clinic } from "../lib/types";
+import type { Clinic, ClinicUser, PlatformAdmin } from "../lib/types";
+import { ROLE_LABELS } from "../lib/types";
 import { Button, Field, Input, Modal } from "../components/ui";
 
+type PlatformTab = "clinics" | "admins";
+
 export default function Platform() {
-  const { user, logout } = useAuth();
+  const { user, logout, enterSupport } = useAuth();
   const { data: stats } = usePlatformStats();
   const { data: clinics = [], isLoading } = useClinics();
+  const [tab, setTab] = useState<PlatformTab>("clinics");
   const [editing, setEditing] = useState<Clinic | "new" | null>(null);
   const [addingOwner, setAddingOwner] = useState<Clinic | null>(null);
+  const [managingUsers, setManagingUsers] = useState<Clinic | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
   const del = useDeleteClinic();
   const [error, setError] = useState("");
 
@@ -61,6 +74,12 @@ export default function Platform() {
             <div className="text-xs text-slate-400">{user?.email}</div>
           </div>
           <button
+            onClick={() => setChangingPassword(true)}
+            className="text-sm text-slate-500 hover:text-brand"
+          >
+            Сменить пароль
+          </button>
+          <button
             onClick={() => logout()}
             className="text-sm text-slate-500 hover:text-brand"
           >
@@ -85,89 +104,131 @@ export default function Platform() {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-ink">Клиники</h1>
-          <Button onClick={() => setEditing("new")}>+ Новая клиника</Button>
+        <div className="flex gap-2">
+          {(
+            [
+              { key: "clinics", label: "Клиники" },
+              { key: "admins", label: "Администраторы платформы" },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                tab === t.key
+                  ? "bg-brand text-white"
+                  : "bg-white text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {isLoading ? (
-          <p className="text-sm text-slate-400">Загрузка…</p>
-        ) : clinics.length === 0 ? (
-          <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-            Клиник пока нет. Создайте первую клинику и её владельца.
+        {tab === "admins" && <PlatformAdmins />}
+
+        {tab === "clinics" && (
+          <>
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-ink">Клиники</h1>
+            <Button onClick={() => setEditing("new")}>+ Новая клиника</Button>
           </div>
-        ) : (
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Клиника</th>
-                  <th className="px-4 py-3 font-medium">Идентификатор</th>
-                  <th className="px-4 py-3 font-medium">Статус</th>
-                  <th className="px-4 py-3 font-medium">Владельцы</th>
-                  <th className="px-4 py-3 font-medium">Пациенты</th>
-                  <th className="px-4 py-3 font-medium">Врачи</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {clinics.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-ink">{c.name}</div>
-                      {c.address && (
-                        <div className="text-xs text-slate-400">{c.address}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
-                        {c.slug}
-                      </code>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          c.is_active
-                            ? "bg-green-100 text-green-700"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {c.is_active ? "Активна" : "Отключена"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{c.owner_count}</td>
-                    <td className="px-4 py-3 text-slate-600">{c.patient_count}</td>
-                    <td className="px-4 py-3 text-slate-600">{c.doctor_count}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="secondary"
-                          className="px-2 py-1 text-xs"
-                          onClick={() => setAddingOwner(c)}
-                        >
-                          + Владелец
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          className="px-2 py-1 text-xs"
-                          onClick={() => setEditing(c)}
-                        >
-                          Изменить
-                        </Button>
-                        <Button
-                          variant="danger"
-                          className="px-2 py-1 text-xs"
-                          onClick={() => onDelete(c)}
-                        >
-                          Удалить
-                        </Button>
-                      </div>
-                    </td>
+
+          {isLoading ? (
+            <p className="text-sm text-slate-400">Загрузка…</p>
+          ) : clinics.length === 0 ? (
+            <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
+              Клиник пока нет. Создайте первую клинику и её владельца.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Клиника</th>
+                    <th className="px-4 py-3 font-medium">Идентификатор</th>
+                    <th className="px-4 py-3 font-medium">Статус</th>
+                    <th className="px-4 py-3 font-medium">Владельцы</th>
+                    <th className="px-4 py-3 font-medium">Пациенты</th>
+                    <th className="px-4 py-3 font-medium">Врачи</th>
+                    <th className="px-4 py-3" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {clinics.map((c) => (
+                    <tr key={c.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-ink">{c.name}</div>
+                        {c.address && (
+                          <div className="text-xs text-slate-400">{c.address}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                          {c.slug}
+                        </code>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            c.is_active
+                              ? "bg-green-100 text-green-700"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {c.is_active ? "Активна" : "Отключена"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{c.owner_count}</td>
+                      <td className="px-4 py-3 text-slate-600">{c.patient_count}</td>
+                      <td className="px-4 py-3 text-slate-600">{c.doctor_count}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            variant="secondary"
+                            className="px-2 py-1 text-xs"
+                            onClick={() => enterSupport({ id: c.id, name: c.name })}
+                            title="Открыть данные клиники только для просмотра"
+                          >
+                            Открыть
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            className="px-2 py-1 text-xs"
+                            onClick={() => setManagingUsers(c)}
+                          >
+                            Учётки
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            className="px-2 py-1 text-xs"
+                            onClick={() => setAddingOwner(c)}
+                          >
+                            + Владелец
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            className="px-2 py-1 text-xs"
+                            onClick={() => setEditing(c)}
+                          >
+                            Изменить
+                          </Button>
+                          <Button
+                            variant="danger"
+                            className="px-2 py-1 text-xs"
+                            onClick={() => onDelete(c)}
+                          >
+                            Удалить
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          </>
         )}
       </main>
 
@@ -180,7 +241,417 @@ export default function Platform() {
       {addingOwner && (
         <AddOwnerModal clinic={addingOwner} onClose={() => setAddingOwner(null)} />
       )}
+      {managingUsers && (
+        <ClinicUsersModal
+          clinic={managingUsers}
+          onClose={() => setManagingUsers(null)}
+        />
+      )}
+      {changingPassword && (
+        <ChangePasswordModal onClose={() => setChangingPassword(false)} />
+      )}
     </div>
+  );
+}
+
+// --- Администраторы платформы ---------------------------------------------
+
+function PlatformAdmins() {
+  const { data: admins = [], isLoading } = usePlatformAdmins();
+  const del = useDeletePlatformAdmin();
+  const [editing, setEditing] = useState<PlatformAdmin | "new" | null>(null);
+  const [error, setError] = useState("");
+
+  async function onDelete(a: PlatformAdmin) {
+    if (!confirm(`Удалить администратора платформы «${a.full_name}»?`)) return;
+    setError("");
+    try {
+      await del.mutateAsync(a.id);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-ink">Администраторы платформы</h1>
+          <p className="mt-1 text-sm text-slate-400">
+            Учётные записи с полным доступом ко всем клиникам. Вход — на странице
+            «Вход для администратора платформы».
+          </p>
+        </div>
+        <Button onClick={() => setEditing("new")}>+ Администратор</Button>
+      </div>
+
+      {error && (
+        <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
+          {error}
+        </div>
+      )}
+
+      {isLoading ? (
+        <p className="text-sm text-slate-400">Загрузка…</p>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-slate-500">
+              <tr>
+                <th className="px-4 py-3 font-medium">ФИО</th>
+                <th className="px-4 py-3 font-medium">Email</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {admins.map((a) => (
+                <tr key={a.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3">
+                    <span className="font-medium text-ink">{a.full_name}</span>
+                    {a.is_self && (
+                      <span className="ml-2 rounded-full bg-brand-bg px-2 py-0.5 text-xs text-brand-dark">
+                        это вы
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{a.email}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="secondary"
+                        className="px-2 py-1 text-xs"
+                        onClick={() => setEditing(a)}
+                      >
+                        Изменить
+                      </Button>
+                      {!a.is_self && (
+                        <Button
+                          variant="danger"
+                          className="px-2 py-1 text-xs"
+                          onClick={() => onDelete(a)}
+                        >
+                          Удалить
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {editing && (
+        <PlatformAdminModal
+          admin={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function PlatformAdminModal({
+  admin,
+  onClose,
+}: {
+  admin: PlatformAdmin | null;
+  onClose: () => void;
+}) {
+  const save = useSavePlatformAdmin();
+  const [fullName, setFullName] = useState(admin?.full_name ?? "");
+  const [email, setEmail] = useState(admin?.email ?? "");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  async function submit() {
+    setError("");
+    if (!fullName.trim()) return setError("Введите ФИО");
+    if (!email.trim()) return setError("Введите email");
+    // При создании пароль обязателен, при изменении — только если его меняют.
+    if ((!admin || password) && password.length < 6)
+      return setError("Пароль должен быть не короче 6 символов");
+    try {
+      await save.mutateAsync({
+        id: admin?.id,
+        full_name: fullName.trim(),
+        email: email.trim(),
+        password,
+      });
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  return (
+    <Modal
+      title={admin ? "Изменить администратора" : "Новый администратор платформы"}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Отмена
+          </Button>
+          <Button onClick={submit} disabled={save.isPending}>
+            {save.isPending ? "Сохранение…" : "Сохранить"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="ФИО *">
+          <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        </Field>
+        <Field label="Email *">
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="admin@temart.kz"
+          />
+        </Field>
+        <Field
+          label={
+            admin
+              ? "Новый пароль (оставьте пустым, чтобы не менять; минимум 6 символов)"
+              : "Пароль * (минимум 6 символов)"
+          }
+        >
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </Field>
+        {admin?.is_self && password && (
+          <p className="text-xs text-slate-400">
+            Вы меняете пароль собственной учётной записи — сессия сохранится, но
+            на других устройствах придётся войти заново.
+          </p>
+        )}
+        {error && (
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const change = useChangeOwnPassword();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  async function submit() {
+    setError("");
+    if (next.length < 6) return setError("Новый пароль должен быть не короче 6 символов");
+    if (next !== repeat) return setError("Пароли не совпадают");
+    try {
+      await change.mutateAsync({ current_password: current, new_password: next });
+      setDone(true);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  return (
+    <Modal
+      title="Смена пароля"
+      onClose={onClose}
+      footer={
+        done ? (
+          <Button onClick={onClose}>Готово</Button>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              Отмена
+            </Button>
+            <Button onClick={submit} disabled={change.isPending}>
+              {change.isPending ? "Сохранение…" : "Сменить"}
+            </Button>
+          </>
+        )
+      }
+    >
+      {done ? (
+        <p className="text-sm text-slate-600">
+          Пароль изменён. Сессии на других устройствах завершены.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          <Field label="Текущий пароль *">
+            <Input
+              type="password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+            />
+          </Field>
+          <Field label="Новый пароль * (минимум 6 символов)">
+            <Input
+              type="password"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+            />
+          </Field>
+          <Field label="Повторите новый пароль *">
+            <Input
+              type="password"
+              value={repeat}
+              onChange={(e) => setRepeat(e.target.value)}
+            />
+          </Field>
+          {error && (
+            <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// --- Учётные записи клиники ------------------------------------------------
+
+function ClinicUsersModal({
+  clinic,
+  onClose,
+}: {
+  clinic: Clinic;
+  onClose: () => void;
+}) {
+  const { data: users = [], isLoading } = useClinicUsers(clinic.id);
+  const reset = useResetClinicUserPassword();
+  const del = useDeleteClinicUserByPlatform();
+  const [resetting, setResetting] = useState<ClinicUser | null>(null);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function submitReset() {
+    if (!resetting) return;
+    setError("");
+    if (password.length < 6)
+      return setError("Пароль должен быть не короче 6 символов");
+    try {
+      await reset.mutateAsync({
+        clinicId: clinic.id,
+        userId: resetting.id,
+        password,
+      });
+      setNotice(`Пароль для ${resetting.email} изменён. Передайте его владельцу.`);
+      setResetting(null);
+      setPassword("");
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  async function onDelete(u: ClinicUser) {
+    if (!confirm(`Удалить учётную запись «${u.full_name}» (${u.email})?`)) return;
+    setError("");
+    setNotice("");
+    try {
+      await del.mutateAsync({ clinicId: clinic.id, userId: u.id });
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  return (
+    <Modal
+      title={`Учётные записи — ${clinic.name}`}
+      onClose={onClose}
+      footer={<Button onClick={onClose}>Закрыть</Button>}
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-slate-500">
+          Сброс пароля нужен, когда владелец клиники не может войти сам. После
+          сброса его открытые сессии завершаются.
+        </p>
+
+        {notice && (
+          <div className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-700">
+            {notice}
+          </div>
+        )}
+        {error && (
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+
+        {isLoading ? (
+          <p className="text-sm text-slate-400">Загрузка…</p>
+        ) : users.length === 0 ? (
+          <p className="text-sm text-slate-400">
+            В клинике нет ни одной учётной записи — добавьте владельца.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+            {users.map((u) => (
+              <li key={u.id} className="p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-ink">
+                      {u.full_name}
+                    </div>
+                    <div className="truncate text-xs text-slate-400">
+                      {u.email} · {ROLE_LABELS[u.role]}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      className="px-2 py-1 text-xs"
+                      onClick={() => {
+                        setResetting(resetting?.id === u.id ? null : u);
+                        setPassword("");
+                        setError("");
+                      }}
+                    >
+                      Сбросить пароль
+                    </Button>
+                    <Button
+                      variant="danger"
+                      className="px-2 py-1 text-xs"
+                      onClick={() => onDelete(u)}
+                    >
+                      Удалить
+                    </Button>
+                  </div>
+                </div>
+
+                {resetting?.id === u.id && (
+                  <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl bg-slate-50 p-3">
+                    <div className="min-w-[12rem] flex-1">
+                      <Field label="Новый пароль (минимум 6 символов)">
+                        <Input
+                          type="text"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="например, Temart2026!"
+                        />
+                      </Field>
+                    </div>
+                    <Button onClick={submitReset} disabled={reset.isPending}>
+                      {reset.isPending ? "Сохранение…" : "Сохранить"}
+                    </Button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Modal>
   );
 }
 

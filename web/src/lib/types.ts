@@ -41,6 +41,16 @@ export interface Clinic {
   doctor_count: number;
 }
 
+// Администратор платформы (учётка уровня платформы, вне клиник).
+export interface PlatformAdmin {
+  id: number;
+  full_name: string;
+  email: string;
+  created_at: string;
+  // Отмечает текущего пользователя: себя нельзя удалить.
+  is_self: boolean;
+}
+
 export interface PlatformStats {
   total_clinics: number;
   active_clinics: number;

@@ -21,7 +21,7 @@ function FullScreen({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, supportClinic } = useAuth();
 
   if (loading) return <FullScreen>Загрузка…</FullScreen>;
 
@@ -35,8 +35,10 @@ export default function App() {
     );
   }
 
-  // Platform superadmin: dedicated single-page panel, no clinic UI.
-  if (user.role === "superadmin") {
+  // Platform superadmin: dedicated single-page panel, no clinic UI — unless
+  // they opened a clinic in support mode, where they get the clinic screens
+  // read-only (the server refuses any write in that mode).
+  if (user.role === "superadmin" && !supportClinic) {
     return (
       <Routes>
         <Route path="/" element={<Platform />} />
@@ -45,7 +47,8 @@ export default function App() {
     );
   }
 
-  // Clinic user (owner / admin / doctor).
+  // Clinic screens: a clinic user (owner / admin / doctor) or the superadmin
+  // in support mode.
   const isManager = user.role === "owner" || user.role === "admin";
   return (
     <Routes>
