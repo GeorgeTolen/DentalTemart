@@ -18,20 +18,25 @@ type Querier interface {
 	CountOverlappingAppointments(ctx context.Context, arg CountOverlappingAppointmentsParams) (int64, error)
 	CountSuperadmins(ctx context.Context) (int64, error)
 	CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error)
+	CreateAppointmentService(ctx context.Context, arg CreateAppointmentServiceParams) (AppointmentService, error)
 	CreateClinic(ctx context.Context, arg CreateClinicParams) (Clinic, error)
 	CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doctor, error)
 	CreateDoctorSchedule(ctx context.Context, arg CreateDoctorScheduleParams) (DoctorSchedule, error)
 	CreatePatient(ctx context.Context, arg CreatePatientParams) (Patient, error)
 	CreatePatientRecord(ctx context.Context, arg CreatePatientRecordParams) (PatientRecord, error)
+	CreateService(ctx context.Context, arg CreateServiceParams) (Service, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteAppointment(ctx context.Context, arg DeleteAppointmentParams) error
+	DeleteAppointmentServices(ctx context.Context, arg DeleteAppointmentServicesParams) error
 	DeleteArchivedAppointments(ctx context.Context, clinicID int64) error
 	DeleteClinic(ctx context.Context, id int64) error
 	DeleteClinicUser(ctx context.Context, arg DeleteClinicUserParams) error
 	DeleteDoctor(ctx context.Context, arg DeleteDoctorParams) error
 	DeleteDoctorSchedules(ctx context.Context, doctorID int64) error
+	// Только клиника, заведшая карточку: удаление каскадом уносит приёмы всех клиник.
 	DeletePatient(ctx context.Context, arg DeletePatientParams) error
 	DeletePatientRecord(ctx context.Context, arg DeletePatientRecordParams) error
+	DeleteService(ctx context.Context, arg DeleteServiceParams) error
 	DeleteSuperadmin(ctx context.Context, id int64) error
 	// Whether another doctor of the clinic already uses this calendar colour
 	// (colours are unique per clinic so doctors are distinguishable at a glance).
@@ -51,31 +56,50 @@ type Querier interface {
 	// Clinic-scoped so a user can only ever resolve to a doctor profile in their
 	// own clinic (prevents cross-clinic linkage from leaking a foreign profile).
 	GetDoctorByUserID(ctx context.Context, arg GetDoctorByUserIDParams) (Doctor, error)
-	GetPatient(ctx context.Context, arg GetPatientParams) (Patient, error)
-	// Used to de-duplicate patients by ИИН: creating a patient with an existing
-	// ИИН returns the existing record instead of inserting a duplicate.
-	GetPatientByIIN(ctx context.Context, arg GetPatientByIINParams) (Patient, error)
-	GetPatientRecord(ctx context.Context, arg GetPatientRecordParams) (PatientRecord, error)
+	GetPatient(ctx context.Context, id int64) (GetPatientRow, error)
+	// Дедупликация по ИИН в масштабах платформы: одна и та же карточка не должна
+	// заводиться в каждой клинике заново.
+	GetPatientByIIN(ctx context.Context, iin pgtype.Text) (GetPatientByIINRow, error)
+	// Файл отдаём любой клинике платформы (медкарта общая).
+	GetPatientRecord(ctx context.Context, id int64) (PatientRecord, error)
+	GetService(ctx context.Context, arg GetServiceParams) (Service, error)
 	// Platform admin login: superadmins are not attached to any clinic.
 	GetSuperadminByEmail(ctx context.Context, lower string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	// Public list used by the login clinic picker (only non-sensitive fields).
 	ListActiveClinics(ctx context.Context) ([]ListActiveClinicsRow, error)
+	// --- Услуги, оказанные в приёме ---------------------------------------------
+	ListAppointmentServices(ctx context.Context, arg ListAppointmentServicesParams) ([]ListAppointmentServicesRow, error)
+	// Вся история пациента по всем клиникам платформы. Суммы — только по приёмам
+	// клиники-читателя: деньги чужой клиники не показываем.
 	ListAppointmentsByPatient(ctx context.Context, arg ListAppointmentsByPatientParams) ([]ListAppointmentsByPatientRow, error)
 	ListAppointmentsByStatus(ctx context.Context, arg ListAppointmentsByStatusParams) ([]ListAppointmentsByStatusRow, error)
+	// Пациенты общие для платформы, поэтому приём и карточка пациента могут
+	// принадлежать разным клиникам — join по patient_id без сверки clinic_id.
+	// Врач же всегда из клиники приёма.
 	ListAppointmentsInRange(ctx context.Context, arg ListAppointmentsInRangeParams) ([]ListAppointmentsInRangeRow, error)
 	// All clinics with quick aggregate counts, for the platform admin panel.
 	ListClinics(ctx context.Context) ([]ListClinicsRow, error)
 	ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedulesParams) ([]DoctorSchedule, error)
 	// Includes the linked account's login (email) so the admin panel can show it.
 	ListDoctors(ctx context.Context, clinicID int64) ([]ListDoctorsRow, error)
+	// Медкарта пациента общая для платформы: снимки и аллергии, заведённые одной
+	// клиникой, видит и лечащий врач другой. Название клиники показываем, чтобы
+	// было понятно, кто запись сделал; удалять и править можно только свои.
 	ListPatientRecords(ctx context.Context, arg ListPatientRecordsParams) ([]ListPatientRecordsRow, error)
+	// Пациенты — общие для всей платформы: карточку, заведённую одной клиникой,
+	// видят и могут дополнять остальные. patients.clinic_id — это клиника, которая
+	// завела карточку; она же единственная, кому разрешено её удалить.
 	// Matches when the search term is a prefix of any word in the name, a prefix
-	// of the phone number, or a prefix of the IIN. Scoped to a single clinic.
-	ListPatients(ctx context.Context, arg ListPatientsParams) ([]Patient, error)
+	// of the phone number, or a prefix of the IIN. Ищет по всей платформе.
+	ListPatients(ctx context.Context, search pgtype.Text) ([]ListPatientsRow, error)
 	// Same prefix-word search, restricted to patients that have at least one
-	// appointment with the given doctor (within the clinic).
-	ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]Patient, error)
+	// appointment with the given doctor.
+	ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]ListPatientsForDoctorRow, error)
+	// Прайс услуг и оказанные услуги приёма. Всё строго внутри клиники: деньги —
+	// единственное, что общая база пациентов не делает публичным.
+	// Весь прайс клиники; неактивные тоже, чтобы владелец видел их в справочнике.
+	ListServices(ctx context.Context, clinicID int64) ([]Service, error)
 	// Platform administrators, for the platform panel's "Администраторы" section.
 	ListSuperadmins(ctx context.Context) ([]ListSuperadminsRow, error)
 	// Clinic users with the "doctor" role not yet linked to a doctor profile
@@ -83,10 +107,26 @@ type Querier interface {
 	ListUnlinkedDoctorUsers(ctx context.Context, arg ListUnlinkedDoctorUsersParams) ([]ListUnlinkedDoctorUsersRow, error)
 	ListUsersByClinic(ctx context.Context, clinicID pgtype.Int8) ([]ListUsersByClinicRow, error)
 	PatientBelongsToDoctor(ctx context.Context, arg PatientBelongsToDoctorParams) (bool, error)
+	// Выработка врачей. Исполнитель берётся из позиции, а если он не указан — из
+	// врача приёма, иначе выработка «потерялась бы».
+	RevenueByDoctor(ctx context.Context, arg RevenueByDoctorParams) ([]RevenueByDoctorRow, error)
+	// Помесячно за период — для графика «заработок по месяцам».
+	RevenueByMonth(ctx context.Context, arg RevenueByMonthParams) ([]RevenueByMonthRow, error)
+	// Какие услуги приносят деньги. Группируем по названию-снимку: услуга могла
+	// быть переименована или удалена из прайса, а выручка по ней осталась.
+	RevenueByService(ctx context.Context, arg RevenueByServiceParams) ([]RevenueByServiceRow, error)
+	// Базовый прайс новой клиники — чтобы кассой можно было пользоваться сразу.
+	SeedClinicServices(ctx context.Context, clinicID int64) error
+	// Сводно по всем клиникам — для панели платформы.
+	SumPlatformRevenue(ctx context.Context) (int64, error)
+	// --- Статистика выручки ------------------------------------------------------
+	// Начислено за период: сумма позиций приёмов, кроме отменённых.
+	SumRevenueInRange(ctx context.Context, arg SumRevenueInRangeParams) (SumRevenueInRangeRow, error)
 	UpdateAppointment(ctx context.Context, arg UpdateAppointmentParams) (Appointment, error)
 	UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Clinic, error)
 	UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error)
 	UpdatePatient(ctx context.Context, arg UpdatePatientParams) (Patient, error)
+	UpdateService(ctx context.Context, arg UpdateServiceParams) (Service, error)
 	// Only name/email; the password goes through UpdateUserPassword.
 	UpdateSuperadmin(ctx context.Context, arg UpdateSuperadminParams) (UpdateSuperadminRow, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error)

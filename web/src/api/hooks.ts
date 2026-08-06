@@ -7,6 +7,7 @@ import { api } from "./client";
 import type {
   AdminStats,
   Appointment,
+  AppointmentServices,
   Clinic,
   ClinicUser,
   Dashboard,
@@ -17,7 +18,9 @@ import type {
   PlatformAdmin,
   PlatformStats,
   PublicClinic,
+  RevenueStats,
   ScheduleEntry,
+  Service,
 } from "../lib/types";
 
 // --- Doctors ---
@@ -247,6 +250,91 @@ export function useDeleteAppointment() {
   return useMutation({
     mutationFn: async (id: number) => api.delete(`/appointments/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["appointments"] }),
+  });
+}
+
+// --- Услуги: прайс клиники ---
+
+export function useServices() {
+  return useQuery({
+    queryKey: ["services"],
+    queryFn: async () => (await api.get<Service[]>("/services")).data,
+  });
+}
+
+export function useSaveService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (s: {
+      id?: number;
+      name: string;
+      price: number;
+      is_active: boolean;
+    }) => {
+      const { id, ...body } = s;
+      if (id) return (await api.put<Service>(`/services/${id}`, body)).data;
+      return (await api.post<Service>("/services", body)).data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["services"] }),
+  });
+}
+
+export function useDeleteService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => api.delete(`/services/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["services"] }),
+  });
+}
+
+// --- Услуги приёма (чек) ---
+
+export function useAppointmentServices(appointmentId: number | null) {
+  return useQuery({
+    queryKey: ["appointment-services", appointmentId],
+    enabled: appointmentId != null,
+    queryFn: async () =>
+      (await api.get<AppointmentServices>(`/appointments/${appointmentId}/services`))
+        .data,
+  });
+}
+
+export interface AppointmentServiceInput {
+  service_id: number;
+  name: string;
+  price: number;
+  quantity: number;
+  doctor_id: number;
+}
+
+export function useSaveAppointmentServices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      appointmentId: number;
+      items: AppointmentServiceInput[];
+    }) =>
+      (
+        await api.put<{ total: number }>(
+          `/appointments/${args.appointmentId}/services`,
+          { items: args.items }
+        )
+      ).data,
+    onSuccess: (_d, args) => {
+      qc.invalidateQueries({ queryKey: ["appointment-services", args.appointmentId] });
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["patient-appointments"] });
+      qc.invalidateQueries({ queryKey: ["revenue"] });
+    },
+  });
+}
+
+// --- Финансы ---
+
+export function useRevenueStats() {
+  return useQuery({
+    queryKey: ["revenue"],
+    queryFn: async () => (await api.get<RevenueStats>("/stats/revenue")).data,
   });
 }
 

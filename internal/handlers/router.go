@@ -83,7 +83,19 @@ func (h *Handlers) Router() http.Handler {
 					r.Get("/{id}", h.GetAppointment)
 					r.Put("/{id}", h.UpdateAppointment)
 					r.Delete("/{id}", h.DeleteAppointment)
+					r.Get("/{id}/services", h.ListAppointmentServices)
+					r.Put("/{id}/services", h.PutAppointmentServices)
 				})
+
+				// Прайс клиники и финансы (владелец и менеджер).
+				r.Route("/services", func(r chi.Router) {
+					r.Get("/", h.ListServices)
+					r.Post("/", h.CreateService)
+					r.Put("/{id}", h.UpdateService)
+					r.Delete("/{id}", h.DeleteService)
+				})
+
+				r.Get("/stats/revenue", h.RevenueStats)
 
 				r.Route("/patients", func(r chi.Router) {
 					r.Get("/", h.ListPatients)

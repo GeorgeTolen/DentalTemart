@@ -26,6 +26,8 @@ import {
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
 import { DateInput, DateTimeInput } from "../components/DateInputs";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
+import AppointmentBillModal from "../components/AppointmentBillModal";
+import { formatMoney } from "../lib/money";
 import type { Appointment, AppointmentStatus, Gender, PatientRecordType } from "../lib/types";
 import { STATUS_LABELS, RECORD_TYPE_LABELS, GENDER_LABELS } from "../lib/types";
 import {
@@ -238,9 +240,11 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
 }
 
 function HistoryCard({ appointment: a }: { appointment: Appointment; index: number }) {
-  const { readOnly } = useAuth();
+  const { user, readOnly } = useAuth();
+  const canBill = user?.role === "owner" || user?.role === "admin";
   const [open, setOpen] = useState(false);
   const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
+  const [billing, setBilling] = useState(false);
   const saveAppt = useSaveAppointment();
   const date = new Date(a.start_time);
 
@@ -264,6 +268,8 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
         description: a.description,
         next_visit_date: a.next_visit_date ?? "",
       });
+      // Сразу считаем стоимость — пока приём свежий в памяти.
+      if (canBill) setBilling(true);
     } catch (e) {
       alert(errorMessage(e));
     }
@@ -288,12 +294,25 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
                 {date.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}
               </span>
               <StatusBadge status={a.status} />
+              {!a.is_own && a.clinic_name && (
+                <span
+                  className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500"
+                  title="Приём в другой клинике платформы"
+                >
+                  {a.clinic_name}
+                </span>
+              )}
             </div>
             <div className="mt-0.5 text-sm text-slate-500">
               Врач: {a.doctor_name}
               {a.diagnosis && <span className="ml-3 text-slate-600">· {a.diagnosis}</span>}
             </div>
           </div>
+          {a.total != null && a.total > 0 && (
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-green-700">
+              {formatMoney(a.total)}
+            </span>
+          )}
           <span className="text-slate-300 text-xs shrink-0">{open ? "▲" : "▼"}</span>
         </button>
 
@@ -322,11 +341,18 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
                 Следующий приём назначен на: <strong>{formatDate(a.next_visit_date)}</strong>
               </div>
             )}
-            {!readOnly && (
+            {/* Чужой приём можно только читать: менять его вправе лишь та
+                клиника, которая его провела. */}
+            {!readOnly && a.is_own && (
               <div className="flex flex-wrap gap-2">
                 {a.status !== "completed" && (
                   <Button onClick={markCompleted} disabled={saveAppt.isPending}>
                     {saveAppt.isPending ? "Сохранение…" : "Отметить завершённым"}
+                  </Button>
+                )}
+                {canBill && (
+                  <Button variant="secondary" onClick={() => setBilling(true)}>
+                    Услуги и стоимость
                   </Button>
                 )}
                 <Button variant="secondary" onClick={() => setSchedulingFollowUp(true)}>
@@ -339,6 +365,9 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
       </div>
       {schedulingFollowUp && (
         <ScheduleFollowUpModal appointment={a} onClose={() => setSchedulingFollowUp(false)} />
+      )}
+      {billing && (
+        <AppointmentBillModal appointment={a} onClose={() => setBilling(false)} />
       )}
     </div>
   );
@@ -400,6 +429,14 @@ function PatientRecordsSection({ patientId }: { patientId: number }) {
                   {r.note && <div className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{r.note}</div>}
                   <div className="mt-2 text-xs text-slate-400">
                     {formatDateTime(r.created_at)}{r.created_by_name && ` · ${r.created_by_name}`}
+                    {!r.is_own && r.clinic_name && (
+                      <span
+                        className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-slate-500"
+                        title="Запись сделала другая клиника платформы"
+                      >
+                        {r.clinic_name}
+                      </span>
+                    )}
                   </div>
                   {r.file_url && (
                     <a
@@ -412,7 +449,9 @@ function PatientRecordsSection({ patientId }: { patientId: number }) {
                     </a>
                   )}
                 </div>
-                {!readOnly && (
+                {/* Удалять можно только записи своей клиники — медкарта общая,
+                    но хозяин у каждой записи один. */}
+                {!readOnly && r.is_own && (
                   <button
                     onClick={() => onDelete(r.id)}
                     className="shrink-0 text-sm text-red-500 hover:underline"

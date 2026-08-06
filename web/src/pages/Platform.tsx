@@ -18,6 +18,7 @@ import { errorMessage } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { Clinic, ClinicUser, PlatformAdmin } from "../lib/types";
 import { ROLE_LABELS } from "../lib/types";
+import { formatMoney } from "../lib/money";
 import { Button, Field, Input, Modal } from "../components/ui";
 
 type PlatformTab = "clinics" | "admins";
@@ -51,12 +52,13 @@ export default function Platform() {
   }
 
   const statCards = [
-    { label: "Клиник", value: stats?.total_clinics ?? 0 },
-    { label: "Активных", value: stats?.active_clinics ?? 0 },
-    { label: "Сотрудников", value: stats?.total_users ?? 0 },
-    { label: "Пациентов", value: stats?.total_patients ?? 0 },
-    { label: "Врачей", value: stats?.total_doctors ?? 0 },
-    { label: "Приёмов", value: stats?.total_appointments ?? 0 },
+    { label: "Клиник", value: String(stats?.total_clinics ?? 0) },
+    { label: "Активных", value: String(stats?.active_clinics ?? 0) },
+    { label: "Сотрудников", value: String(stats?.total_users ?? 0) },
+    { label: "Пациентов", value: String(stats?.total_patients ?? 0) },
+    { label: "Врачей", value: String(stats?.total_doctors ?? 0) },
+    { label: "Приёмов", value: String(stats?.total_appointments ?? 0) },
+    { label: "Выручка всех клиник", value: formatMoney(stats?.total_revenue ?? 0) },
   ];
 
   return (
@@ -89,10 +91,12 @@ export default function Platform() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-6 p-6">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {statCards.map((c) => (
             <div key={c.label} className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="text-2xl font-bold text-ink">{c.value}</div>
+              <div className="truncate text-2xl font-bold text-ink" title={c.value}>
+                {c.value}
+              </div>
               <div className="mt-0.5 text-xs text-slate-400">{c.label}</div>
             </div>
           ))}

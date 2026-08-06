@@ -71,9 +71,9 @@ func (h *Handlers) ListPatientRecords(w http.ResponseWriter, r *http.Request) {
 		typeArg = pgtype.Text{String: t, Valid: true}
 	}
 	rows, err := h.q.ListPatientRecords(r.Context(), sqlc.ListPatientRecordsParams{
-		PatientID: patientID,
-		ClinicID:  clinicID,
-		Type:      typeArg,
+		PatientID:      patientID,
+		ViewerClinicID: clinicID,
+		Type:           typeArg,
 	})
 	if err != nil {
 		httpx.Fail(w, err)
@@ -154,7 +154,7 @@ func (h *Handlers) CreatePatientRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Re-fetch through the list query so the response includes created_by_name.
-	rows, err := h.q.ListPatientRecords(r.Context(), sqlc.ListPatientRecordsParams{PatientID: patientID, ClinicID: clinicID})
+	rows, err := h.q.ListPatientRecords(r.Context(), sqlc.ListPatientRecordsParams{PatientID: patientID, ViewerClinicID: clinicID})
 	if err != nil {
 		httpx.Fail(w, err)
 		return
@@ -180,7 +180,7 @@ func (h *Handlers) DeletePatientRecord(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	rec, err := h.q.GetPatientRecord(r.Context(), sqlc.GetPatientRecordParams{ID: recordID, ClinicID: clinicID})
+	rec, err := h.q.GetPatientRecord(r.Context(), recordID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
@@ -203,10 +203,11 @@ func (h *Handlers) DeletePatientRecord(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// GetPatientRecordFile streams the stored file for a record.
+// GetPatientRecordFile streams the stored file for a record. Медкарта общая для
+// платформы, поэтому файл доступен любой клинике — доступ к самому пациенту
+// проверяется ниже (checkPatientAccess).
 func (h *Handlers) GetPatientRecordFile(w http.ResponseWriter, r *http.Request) {
-	clinicID, err := h.clinicID(r.Context())
-	if err != nil {
+	if _, err := h.clinicID(r.Context()); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -215,7 +216,7 @@ func (h *Handlers) GetPatientRecordFile(w http.ResponseWriter, r *http.Request) 
 		httpx.Fail(w, err)
 		return
 	}
-	rec, err := h.q.GetPatientRecord(r.Context(), sqlc.GetPatientRecordParams{ID: recordID, ClinicID: clinicID})
+	rec, err := h.q.GetPatientRecord(r.Context(), recordID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))

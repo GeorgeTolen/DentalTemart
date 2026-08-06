@@ -58,6 +58,7 @@ export interface PlatformStats {
   total_patients: number;
   total_doctors: number;
   total_appointments: number;
+  total_revenue: number;
 }
 
 export interface Doctor {
@@ -84,6 +85,9 @@ export interface PatientRecord {
   file_name: string;
   created_by_name: string;
   created_at: string;
+  // Медкарта общая: clinic_name — кто сделал запись, is_own — можно ли удалить.
+  clinic_name: string;
+  is_own: boolean;
 }
 
 export const RECORD_TYPE_LABELS: Record<PatientRecordType, string> = {
@@ -107,6 +111,51 @@ export interface Patient {
   notes: string;
   iin: string;
   gender: Gender;
+  // База пациентов общая для платформы: clinic_name — клиника, заведшая
+  // карточку; is_own — она же ваша (только ей можно удалить пациента).
+  clinic_name: string;
+  is_own: boolean;
+}
+
+// Услуга из прайса клиники. Цена — целое число тенге.
+export interface Service {
+  id: number;
+  name: string;
+  price: number;
+  is_active: boolean;
+}
+
+// Позиция в чеке приёма.
+export interface AppointmentService {
+  id: number;
+  service_id: number | null;
+  name: string;
+  price: number;
+  quantity: number;
+  doctor_id: number | null;
+  doctor_name: string;
+  sum: number;
+}
+
+export interface AppointmentServices {
+  items: AppointmentService[];
+  total: number;
+}
+
+export interface RevenueBucket {
+  revenue: number;
+  services_count: number;
+  appointments_count: number;
+}
+
+export interface RevenueStats {
+  today: RevenueBucket;
+  month: RevenueBucket;
+  year: RevenueBucket;
+  all_time: RevenueBucket;
+  by_month: { month: string; revenue: number; services_count: number }[];
+  by_service: { name: string; revenue: number; services_count: number }[];
+  by_doctor: { name: string; revenue: number; services_count: number }[];
 }
 
 export type AppointmentStatus =
@@ -129,6 +178,11 @@ export interface Appointment {
   diagnosis: string;
   description: string;
   next_visit_date: string | null;
+  // Стоимость оказанных услуг, тенге. null — приём чужой клиники: история
+  // пациента общая, деньги нет.
+  total: number | null;
+  clinic_name: string;
+  is_own: boolean;
 }
 
 export interface ScheduleEntry {

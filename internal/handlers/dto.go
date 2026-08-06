@@ -81,6 +81,11 @@ type patientDTO struct {
 	Notes     string  `json:"notes"`
 	IIN       string  `json:"iin"`
 	Gender    string  `json:"gender"` // male | female | ""
+	// Карточки пациентов общие для платформы: ClinicName — клиника, которая
+	// завела карточку, IsOwn — она же и есть клиника читателя (только ей можно
+	// удалить пациента).
+	ClinicName string `json:"clinic_name"`
+	IsOwn      bool   `json:"is_own"`
 }
 
 func toPatientDTO(p sqlc.Patient) patientDTO {
@@ -92,6 +97,64 @@ func toPatientDTO(p sqlc.Patient) patientDTO {
 		Notes:     textVal(p.Notes),
 		IIN:       textVal(p.Iin),
 		Gender:    textVal(p.Gender),
+	}
+}
+
+// patientJoin captures a patient row joined with its owning clinic, so the
+// list/get/dedupe queries share one conversion.
+type patientJoin struct {
+	Patient    sqlc.Patient
+	ClinicID   int64
+	ClinicName pgtype.Text
+}
+
+func (j patientJoin) dto(viewerClinicID int64) patientDTO {
+	dto := toPatientDTO(j.Patient)
+	dto.ClinicName = textVal(j.ClinicName)
+	dto.IsOwn = j.ClinicID == viewerClinicID
+	return dto
+}
+
+// The four patient queries return structurally identical rows; sqlc generates a
+// distinct type for each, so each gets a one-line adapter.
+
+func fromPatientListRow(r sqlc.ListPatientsRow) patientJoin {
+	return patientJoin{
+		Patient: sqlc.Patient{
+			ID: r.ID, FullName: r.FullName, Phone: r.Phone, BirthDate: r.BirthDate,
+			Notes: r.Notes, ClinicID: r.ClinicID, Iin: r.Iin, Gender: r.Gender,
+		},
+		ClinicID: r.ClinicID, ClinicName: r.ClinicName,
+	}
+}
+
+func fromDoctorPatientRow(r sqlc.ListPatientsForDoctorRow) patientJoin {
+	return patientJoin{
+		Patient: sqlc.Patient{
+			ID: r.ID, FullName: r.FullName, Phone: r.Phone, BirthDate: r.BirthDate,
+			Notes: r.Notes, ClinicID: r.ClinicID, Iin: r.Iin, Gender: r.Gender,
+		},
+		ClinicID: r.ClinicID, ClinicName: r.ClinicName,
+	}
+}
+
+func fromPatientGetRow(r sqlc.GetPatientRow) patientJoin {
+	return patientJoin{
+		Patient: sqlc.Patient{
+			ID: r.ID, FullName: r.FullName, Phone: r.Phone, BirthDate: r.BirthDate,
+			Notes: r.Notes, ClinicID: r.ClinicID, Iin: r.Iin, Gender: r.Gender,
+		},
+		ClinicID: r.ClinicID, ClinicName: r.ClinicName,
+	}
+}
+
+func fromPatientIINRow(r sqlc.GetPatientByIINRow) patientJoin {
+	return patientJoin{
+		Patient: sqlc.Patient{
+			ID: r.ID, FullName: r.FullName, Phone: r.Phone, BirthDate: r.BirthDate,
+			Notes: r.Notes, ClinicID: r.ClinicID, Iin: r.Iin, Gender: r.Gender,
+		},
+		ClinicID: r.ClinicID, ClinicName: r.ClinicName,
 	}
 }
 
@@ -107,6 +170,10 @@ type patientRecordDTO struct {
 	FileName      string  `json:"file_name"`
 	CreatedByName string  `json:"created_by_name"`
 	CreatedAt     string  `json:"created_at"`
+	// Медкарта общая для платформы: ClinicName — кто сделал запись, IsOwn — своя
+	// ли она (удалять можно только свои).
+	ClinicName string `json:"clinic_name"`
+	IsOwn      bool   `json:"is_own"`
 }
 
 func toPatientRecordDTO(r sqlc.ListPatientRecordsRow) patientRecordDTO {
@@ -125,6 +192,8 @@ func toPatientRecordDTO(r sqlc.ListPatientRecordsRow) patientRecordDTO {
 		FileName:      textVal(r.FileName),
 		CreatedByName: r.CreatedByName,
 		CreatedAt:     r.CreatedAt.Format(time.RFC3339),
+		ClinicName:    r.ClinicName,
+		IsOwn:         r.IsOwn,
 	}
 }
 
@@ -144,6 +213,13 @@ type appointmentDTO struct {
 	Diagnosis     string    `json:"diagnosis"`
 	Description   string    `json:"description"`
 	NextVisitDate *string   `json:"next_visit_date"`
+	// Total — стоимость оказанных услуг в тенге. nil означает «не ваша клиника»:
+	// история пациента общая, а деньги — нет.
+	Total *int64 `json:"total"`
+	// ClinicName заполняется только в общей истории пациента, чтобы было видно,
+	// в какой клинике был приём. IsOwn — приём клиники читателя.
+	ClinicName string `json:"clinic_name"`
+	IsOwn      bool   `json:"is_own"`
 }
 
 // appointmentJoin captures the fields shared by all joined appointment rows so
@@ -162,10 +238,13 @@ type appointmentJoin struct {
 	PatientPhone  pgtype.Text
 	DoctorName    string
 	DoctorColor   string
+	Total         int64
+	ClinicName    pgtype.Text
+	IsOwn         bool
 }
 
 func (j appointmentJoin) dto() appointmentDTO {
-	return appointmentDTO{
+	dto := appointmentDTO{
 		ID:            j.ID,
 		PatientID:     j.PatientID,
 		PatientName:   j.PatientName,
@@ -179,7 +258,14 @@ func (j appointmentJoin) dto() appointmentDTO {
 		Diagnosis:     textVal(j.Diagnosis),
 		Description:   textVal(j.Description),
 		NextVisitDate: dateStr(j.NextVisitDate),
+		ClinicName:    textVal(j.ClinicName),
+		IsOwn:         j.IsOwn,
 	}
+	if j.IsOwn {
+		total := j.Total
+		dto.Total = &total
+	}
+	return dto
 }
 
 func fromRangeRow(r sqlc.ListAppointmentsInRangeRow) appointmentDTO {
@@ -189,6 +275,7 @@ func fromRangeRow(r sqlc.ListAppointmentsInRangeRow) appointmentDTO {
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
+		Total: r.Total, IsOwn: true,
 	}.dto()
 }
 
@@ -199,6 +286,7 @@ func fromPatientRow(r sqlc.ListAppointmentsByPatientRow) appointmentDTO {
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
+		Total: r.Total, ClinicName: r.ClinicName, IsOwn: r.IsOwn,
 	}.dto()
 }
 
@@ -209,6 +297,7 @@ func fromStatusRow(r sqlc.ListAppointmentsByStatusRow) appointmentDTO {
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
+		Total: r.Total, IsOwn: true,
 	}.dto()
 }
 
@@ -219,5 +308,49 @@ func fromGetRow(r sqlc.GetAppointmentRow) appointmentDTO {
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
+		Total: r.Total, IsOwn: true,
 	}.dto()
+}
+
+// --- Услуга ---
+
+type serviceDTO struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Price    int64  `json:"price"` // тенге
+	IsActive bool   `json:"is_active"`
+}
+
+func toServiceDTO(s sqlc.Service) serviceDTO {
+	return serviceDTO{ID: s.ID, Name: s.Name, Price: s.Price, IsActive: s.IsActive}
+}
+
+// appointmentServiceDTO — позиция в чеке приёма.
+type appointmentServiceDTO struct {
+	ID         int64  `json:"id"`
+	ServiceID  *int64 `json:"service_id"`
+	Name       string `json:"name"`
+	Price      int64  `json:"price"`
+	Quantity   int32  `json:"quantity"`
+	DoctorID   *int64 `json:"doctor_id"`
+	DoctorName string `json:"doctor_name"`
+	Sum        int64  `json:"sum"`
+}
+
+func toAppointmentServiceDTO(r sqlc.ListAppointmentServicesRow) appointmentServiceDTO {
+	dto := appointmentServiceDTO{
+		ID:         r.ID,
+		Name:       r.Name,
+		Price:      r.Price,
+		Quantity:   r.Quantity,
+		DoctorName: textVal(r.DoctorName),
+		Sum:        r.Price * int64(r.Quantity),
+	}
+	if r.ServiceID.Valid {
+		dto.ServiceID = &r.ServiceID.Int64
+	}
+	if r.DoctorID.Valid {
+		dto.DoctorID = &r.DoctorID.Int64
+	}
+	return dto
 }

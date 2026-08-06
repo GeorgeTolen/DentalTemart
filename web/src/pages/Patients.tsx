@@ -26,10 +26,13 @@ export default function Patients() {
 
       <div className="max-w-md">
         <Input
-          placeholder="Поиск по ФИО или телефону…"
+          placeholder="Поиск по ФИО, телефону или ИИН…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <p className="mt-1.5 text-xs text-slate-400">
+          База пациентов общая для всех клиник платформы.
+        </p>
       </div>
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
@@ -51,6 +54,14 @@ export default function Patients() {
                   <Link to={`/patients/${p.id}`} className="hover:text-brand">
                     {p.full_name}
                   </Link>
+                  {!p.is_own && p.clinic_name && (
+                    <span
+                      className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"
+                      title="Карточку завела другая клиника"
+                    >
+                      {p.clinic_name}
+                    </span>
+                  )}
                 </td>
                 <td className="px-5 py-3 text-slate-600">{p.iin || "—"}</td>
                 <td className="px-5 py-3 text-slate-600">{p.phone || "—"}</td>

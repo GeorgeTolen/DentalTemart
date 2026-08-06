@@ -71,16 +71,12 @@ func (q *Queries) DeletePatientRecord(ctx context.Context, arg DeletePatientReco
 }
 
 const getPatientRecord = `-- name: GetPatientRecord :one
-SELECT id, patient_id, type, title, note, file_path, file_name, created_by, created_at, clinic_id FROM patient_records WHERE id = $1 AND clinic_id = $2
+SELECT id, patient_id, type, title, note, file_path, file_name, created_by, created_at, clinic_id FROM patient_records WHERE id = $1
 `
 
-type GetPatientRecordParams struct {
-	ID       int64 `json:"id"`
-	ClinicID int64 `json:"clinic_id"`
-}
-
-func (q *Queries) GetPatientRecord(ctx context.Context, arg GetPatientRecordParams) (PatientRecord, error) {
-	row := q.db.QueryRow(ctx, getPatientRecord, arg.ID, arg.ClinicID)
+// Файл отдаём любой клинике платформы (медкарта общая).
+func (q *Queries) GetPatientRecord(ctx context.Context, id int64) (PatientRecord, error) {
+	row := q.db.QueryRow(ctx, getPatientRecord, id)
 	var i PatientRecord
 	err := row.Scan(
 		&i.ID,
@@ -99,19 +95,21 @@ func (q *Queries) GetPatientRecord(ctx context.Context, arg GetPatientRecordPara
 
 const listPatientRecords = `-- name: ListPatientRecords :many
 SELECT r.id, r.clinic_id, r.patient_id, r.type, r.title, r.note, r.file_path, r.file_name,
-       r.created_by, r.created_at, COALESCE(u.full_name, '') AS created_by_name
+       r.created_by, r.created_at, COALESCE(u.full_name, '') AS created_by_name,
+       COALESCE(c.name, '') AS clinic_name,
+       (r.clinic_id = $1) AS is_own
 FROM patient_records r
 LEFT JOIN users u ON u.id = r.created_by
-WHERE r.patient_id = $1
-  AND r.clinic_id = $2
+LEFT JOIN clinics c ON c.id = r.clinic_id
+WHERE r.patient_id = $2
   AND ($3::text IS NULL OR r.type = $3::text)
 ORDER BY r.created_at DESC
 `
 
 type ListPatientRecordsParams struct {
-	PatientID int64       `json:"patient_id"`
-	ClinicID  int64       `json:"clinic_id"`
-	Type      pgtype.Text `json:"type"`
+	ViewerClinicID int64       `json:"viewer_clinic_id"`
+	PatientID      int64       `json:"patient_id"`
+	Type           pgtype.Text `json:"type"`
 }
 
 type ListPatientRecordsRow struct {
@@ -126,10 +124,15 @@ type ListPatientRecordsRow struct {
 	CreatedBy     pgtype.Int8 `json:"created_by"`
 	CreatedAt     time.Time   `json:"created_at"`
 	CreatedByName string      `json:"created_by_name"`
+	ClinicName    string      `json:"clinic_name"`
+	IsOwn         bool        `json:"is_own"`
 }
 
+// Медкарта пациента общая для платформы: снимки и аллергии, заведённые одной
+// клиникой, видит и лечащий врач другой. Название клиники показываем, чтобы
+// было понятно, кто запись сделал; удалять и править можно только свои.
 func (q *Queries) ListPatientRecords(ctx context.Context, arg ListPatientRecordsParams) ([]ListPatientRecordsRow, error) {
-	rows, err := q.db.Query(ctx, listPatientRecords, arg.PatientID, arg.ClinicID, arg.Type)
+	rows, err := q.db.Query(ctx, listPatientRecords, arg.ViewerClinicID, arg.PatientID, arg.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -149,6 +152,8 @@ func (q *Queries) ListPatientRecords(ctx context.Context, arg ListPatientRecords
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.CreatedByName,
+			&i.ClinicName,
+			&i.IsOwn,
 		); err != nil {
 			return nil, err
 		}

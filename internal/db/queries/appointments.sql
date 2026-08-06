@@ -1,13 +1,19 @@
+-- Пациенты общие для платформы, поэтому приём и карточка пациента могут
+-- принадлежать разным клиникам — join по patient_id без сверки clinic_id.
+-- Врач же всегда из клиники приёма.
+
 -- name: ListAppointmentsInRange :many
 SELECT
     a.*,
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
-    d.color     AS doctor_color
+    d.color     AS doctor_color,
+    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
-JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+JOIN patients p ON p.id = a.patient_id
+JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
 WHERE a.clinic_id = sqlc.arg('clinic_id')
   AND a.start_time >= sqlc.arg('from')
   AND a.start_time <  sqlc.arg('to')
@@ -15,16 +21,25 @@ WHERE a.clinic_id = sqlc.arg('clinic_id')
 ORDER BY a.start_time;
 
 -- name: ListAppointmentsByPatient :many
+-- Вся история пациента по всем клиникам платформы. Суммы — только по приёмам
+-- клиники-читателя: деньги чужой клиники не показываем.
 SELECT
     a.*,
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
-    d.color     AS doctor_color
+    d.color     AS doctor_color,
+    cl.name     AS clinic_name,
+    (a.clinic_id = sqlc.arg('viewer_clinic_id')) AS is_own,
+    CASE WHEN a.clinic_id = sqlc.arg('viewer_clinic_id') THEN (
+        SELECT COALESCE(SUM(s.price * s.quantity), 0)
+          FROM appointment_services s WHERE s.appointment_id = a.id
+    ) ELSE 0 END::bigint AS total
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
-JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
-WHERE a.patient_id = $1 AND a.clinic_id = $2
+JOIN patients p  ON p.id = a.patient_id
+JOIN doctors  d  ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
+LEFT JOIN clinics cl ON cl.id = a.clinic_id
+WHERE a.patient_id = sqlc.arg('patient_id')
 ORDER BY a.start_time DESC;
 
 -- name: GetAppointment :one
@@ -33,10 +48,12 @@ SELECT
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
-    d.color     AS doctor_color
+    d.color     AS doctor_color,
+    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
-JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+JOIN patients p ON p.id = a.patient_id
+JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
 WHERE a.id = $1 AND a.clinic_id = $2;
 
 -- name: CountOverlappingAppointments :one
@@ -90,10 +107,12 @@ SELECT
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
-    d.color     AS doctor_color
+    d.color     AS doctor_color,
+    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
-JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+JOIN patients p ON p.id = a.patient_id
+JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
 WHERE a.clinic_id = sqlc.arg('clinic_id') AND a.status = sqlc.arg('status')
 ORDER BY a.start_time DESC
 LIMIT 500;

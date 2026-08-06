@@ -62,23 +62,34 @@ type DeletePatientParams struct {
 	ClinicID int64 `json:"clinic_id"`
 }
 
+// Только клиника, заведшая карточку: удаление каскадом уносит приёмы всех клиник.
 func (q *Queries) DeletePatient(ctx context.Context, arg DeletePatientParams) error {
 	_, err := q.db.Exec(ctx, deletePatient, arg.ID, arg.ClinicID)
 	return err
 }
 
 const getPatient = `-- name: GetPatient :one
-SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender FROM patients WHERE id = $1 AND clinic_id = $2
+SELECT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, c.name AS clinic_name FROM patients p
+LEFT JOIN clinics c ON c.id = p.clinic_id
+WHERE p.id = $1
 `
 
-type GetPatientParams struct {
-	ID       int64 `json:"id"`
-	ClinicID int64 `json:"clinic_id"`
+type GetPatientRow struct {
+	ID         int64       `json:"id"`
+	FullName   string      `json:"full_name"`
+	Phone      pgtype.Text `json:"phone"`
+	BirthDate  *time.Time  `json:"birth_date"`
+	Notes      pgtype.Text `json:"notes"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ClinicID   int64       `json:"clinic_id"`
+	Iin        pgtype.Text `json:"iin"`
+	Gender     pgtype.Text `json:"gender"`
+	ClinicName pgtype.Text `json:"clinic_name"`
 }
 
-func (q *Queries) GetPatient(ctx context.Context, arg GetPatientParams) (Patient, error) {
-	row := q.db.QueryRow(ctx, getPatient, arg.ID, arg.ClinicID)
-	var i Patient
+func (q *Queries) GetPatient(ctx context.Context, id int64) (GetPatientRow, error) {
+	row := q.db.QueryRow(ctx, getPatient, id)
+	var i GetPatientRow
 	err := row.Scan(
 		&i.ID,
 		&i.FullName,
@@ -89,24 +100,35 @@ func (q *Queries) GetPatient(ctx context.Context, arg GetPatientParams) (Patient
 		&i.ClinicID,
 		&i.Iin,
 		&i.Gender,
+		&i.ClinicName,
 	)
 	return i, err
 }
 
 const getPatientByIIN = `-- name: GetPatientByIIN :one
-SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender FROM patients WHERE clinic_id = $1 AND iin = $2
+SELECT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, c.name AS clinic_name FROM patients p
+LEFT JOIN clinics c ON c.id = p.clinic_id
+WHERE p.iin = $1
 `
 
-type GetPatientByIINParams struct {
-	ClinicID int64       `json:"clinic_id"`
-	Iin      pgtype.Text `json:"iin"`
+type GetPatientByIINRow struct {
+	ID         int64       `json:"id"`
+	FullName   string      `json:"full_name"`
+	Phone      pgtype.Text `json:"phone"`
+	BirthDate  *time.Time  `json:"birth_date"`
+	Notes      pgtype.Text `json:"notes"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ClinicID   int64       `json:"clinic_id"`
+	Iin        pgtype.Text `json:"iin"`
+	Gender     pgtype.Text `json:"gender"`
+	ClinicName pgtype.Text `json:"clinic_name"`
 }
 
-// Used to de-duplicate patients by ИИН: creating a patient with an existing
-// ИИН returns the existing record instead of inserting a duplicate.
-func (q *Queries) GetPatientByIIN(ctx context.Context, arg GetPatientByIINParams) (Patient, error) {
-	row := q.db.QueryRow(ctx, getPatientByIIN, arg.ClinicID, arg.Iin)
-	var i Patient
+// Дедупликация по ИИН в масштабах платформы: одна и та же карточка не должна
+// заводиться в каждой клинике заново.
+func (q *Queries) GetPatientByIIN(ctx context.Context, iin pgtype.Text) (GetPatientByIINRow, error) {
+	row := q.db.QueryRow(ctx, getPatientByIIN, iin)
+	var i GetPatientByIINRow
 	err := row.Scan(
 		&i.ID,
 		&i.FullName,
@@ -117,39 +139,52 @@ func (q *Queries) GetPatientByIIN(ctx context.Context, arg GetPatientByIINParams
 		&i.ClinicID,
 		&i.Iin,
 		&i.Gender,
+		&i.ClinicName,
 	)
 	return i, err
 }
 
 const listPatients = `-- name: ListPatients :many
-SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender FROM patients
-WHERE clinic_id = $1
-  AND (
-    $2::text IS NULL
-    OR (' ' || full_name) ILIKE '% ' || $2::text || '%'
-    OR phone ILIKE $2::text || '%'
-    OR iin LIKE $2::text || '%'
+
+SELECT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, c.name AS clinic_name FROM patients p
+LEFT JOIN clinics c ON c.id = p.clinic_id
+WHERE (
+    $1::text IS NULL
+    OR (' ' || p.full_name) ILIKE '% ' || $1::text || '%'
+    OR p.phone ILIKE $1::text || '%'
+    OR p.iin LIKE $1::text || '%'
   )
-ORDER BY full_name
+ORDER BY p.full_name
 LIMIT 200
 `
 
-type ListPatientsParams struct {
-	ClinicID int64       `json:"clinic_id"`
-	Search   pgtype.Text `json:"search"`
+type ListPatientsRow struct {
+	ID         int64       `json:"id"`
+	FullName   string      `json:"full_name"`
+	Phone      pgtype.Text `json:"phone"`
+	BirthDate  *time.Time  `json:"birth_date"`
+	Notes      pgtype.Text `json:"notes"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ClinicID   int64       `json:"clinic_id"`
+	Iin        pgtype.Text `json:"iin"`
+	Gender     pgtype.Text `json:"gender"`
+	ClinicName pgtype.Text `json:"clinic_name"`
 }
 
+// Пациенты — общие для всей платформы: карточку, заведённую одной клиникой,
+// видят и могут дополнять остальные. patients.clinic_id — это клиника, которая
+// завела карточку; она же единственная, кому разрешено её удалить.
 // Matches when the search term is a prefix of any word in the name, a prefix
-// of the phone number, or a prefix of the IIN. Scoped to a single clinic.
-func (q *Queries) ListPatients(ctx context.Context, arg ListPatientsParams) ([]Patient, error) {
-	rows, err := q.db.Query(ctx, listPatients, arg.ClinicID, arg.Search)
+// of the phone number, or a prefix of the IIN. Ищет по всей платформе.
+func (q *Queries) ListPatients(ctx context.Context, search pgtype.Text) ([]ListPatientsRow, error) {
+	rows, err := q.db.Query(ctx, listPatients, search)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Patient{}
+	items := []ListPatientsRow{}
 	for rows.Next() {
-		var i Patient
+		var i ListPatientsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.FullName,
@@ -160,6 +195,7 @@ func (q *Queries) ListPatients(ctx context.Context, arg ListPatientsParams) ([]P
 			&i.ClinicID,
 			&i.Iin,
 			&i.Gender,
+			&i.ClinicName,
 		); err != nil {
 			return nil, err
 		}
@@ -172,15 +208,15 @@ func (q *Queries) ListPatients(ctx context.Context, arg ListPatientsParams) ([]P
 }
 
 const listPatientsForDoctor = `-- name: ListPatientsForDoctor :many
-SELECT DISTINCT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender FROM patients p
+SELECT DISTINCT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, c.name AS clinic_name FROM patients p
 JOIN appointments a ON a.patient_id = p.id
+LEFT JOIN clinics c ON c.id = p.clinic_id
 WHERE a.doctor_id = $1
-  AND p.clinic_id = $2
   AND (
-    $3::text IS NULL
-    OR (' ' || p.full_name) ILIKE '% ' || $3::text || '%'
-    OR p.phone ILIKE $3::text || '%'
-    OR p.iin LIKE $3::text || '%'
+    $2::text IS NULL
+    OR (' ' || p.full_name) ILIKE '% ' || $2::text || '%'
+    OR p.phone ILIKE $2::text || '%'
+    OR p.iin LIKE $2::text || '%'
   )
 ORDER BY p.full_name
 LIMIT 200
@@ -188,21 +224,33 @@ LIMIT 200
 
 type ListPatientsForDoctorParams struct {
 	DoctorID int64       `json:"doctor_id"`
-	ClinicID int64       `json:"clinic_id"`
 	Search   pgtype.Text `json:"search"`
 }
 
+type ListPatientsForDoctorRow struct {
+	ID         int64       `json:"id"`
+	FullName   string      `json:"full_name"`
+	Phone      pgtype.Text `json:"phone"`
+	BirthDate  *time.Time  `json:"birth_date"`
+	Notes      pgtype.Text `json:"notes"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ClinicID   int64       `json:"clinic_id"`
+	Iin        pgtype.Text `json:"iin"`
+	Gender     pgtype.Text `json:"gender"`
+	ClinicName pgtype.Text `json:"clinic_name"`
+}
+
 // Same prefix-word search, restricted to patients that have at least one
-// appointment with the given doctor (within the clinic).
-func (q *Queries) ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]Patient, error) {
-	rows, err := q.db.Query(ctx, listPatientsForDoctor, arg.DoctorID, arg.ClinicID, arg.Search)
+// appointment with the given doctor.
+func (q *Queries) ListPatientsForDoctor(ctx context.Context, arg ListPatientsForDoctorParams) ([]ListPatientsForDoctorRow, error) {
+	rows, err := q.db.Query(ctx, listPatientsForDoctor, arg.DoctorID, arg.Search)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Patient{}
+	items := []ListPatientsForDoctorRow{}
 	for rows.Next() {
-		var i Patient
+		var i ListPatientsForDoctorRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.FullName,
@@ -213,6 +261,7 @@ func (q *Queries) ListPatientsForDoctor(ctx context.Context, arg ListPatientsFor
 			&i.ClinicID,
 			&i.Iin,
 			&i.Gender,
+			&i.ClinicName,
 		); err != nil {
 			return nil, err
 		}
@@ -245,7 +294,7 @@ func (q *Queries) PatientBelongsToDoctor(ctx context.Context, arg PatientBelongs
 const updatePatient = `-- name: UpdatePatient :one
 UPDATE patients
 SET full_name = $2, phone = $3, birth_date = $4, notes = $5, iin = $6, gender = $7
-WHERE id = $1 AND clinic_id = $8
+WHERE id = $1
 RETURNING id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender
 `
 
@@ -257,7 +306,6 @@ type UpdatePatientParams struct {
 	Notes     pgtype.Text `json:"notes"`
 	Iin       pgtype.Text `json:"iin"`
 	Gender    pgtype.Text `json:"gender"`
-	ClinicID  int64       `json:"clinic_id"`
 }
 
 func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (Patient, error) {
@@ -269,7 +317,6 @@ func (q *Queries) UpdatePatient(ctx context.Context, arg UpdatePatientParams) (P
 		arg.Notes,
 		arg.Iin,
 		arg.Gender,
-		arg.ClinicID,
 	)
 	var i Patient
 	err := row.Scan(

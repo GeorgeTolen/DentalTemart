@@ -157,6 +157,12 @@ func (h *Handlers) CreateClinic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Базовый прайс, чтобы кассой можно было пользоваться с первого дня.
+	if err := qtx.SeedClinicServices(r.Context(), clinic.ID); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+
 	if createOwner {
 		hash, err := auth.HashPassword(req.OwnerPassword)
 		if err != nil {
@@ -331,6 +337,8 @@ type platformStatsDTO struct {
 	TotalPatients     int64 `json:"total_patients"`
 	TotalDoctors      int64 `json:"total_doctors"`
 	TotalAppointments int64 `json:"total_appointments"`
+	// Выручка всех клиник вместе, тенге.
+	TotalRevenue int64 `json:"total_revenue"`
 }
 
 // PlatformStats returns global cross-clinic statistics (platform admin only).
@@ -353,6 +361,12 @@ func (h *Handlers) PlatformStats(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	revenue, err := h.q.SumPlatformRevenue(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	s.TotalRevenue = revenue
 	httpx.JSON(w, http.StatusOK, s)
 }
 

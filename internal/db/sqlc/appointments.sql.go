@@ -162,10 +162,12 @@ SELECT
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
-    d.color     AS doctor_color
+    d.color     AS doctor_color,
+    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
-JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+JOIN patients p ON p.id = a.patient_id
+JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
 WHERE a.id = $1 AND a.clinic_id = $2
 `
 
@@ -192,6 +194,7 @@ type GetAppointmentRow struct {
 	PatientPhone  pgtype.Text `json:"patient_phone"`
 	DoctorName    string      `json:"doctor_name"`
 	DoctorColor   string      `json:"doctor_color"`
+	Total         int64       `json:"total"`
 }
 
 func (q *Queries) GetAppointment(ctx context.Context, arg GetAppointmentParams) (GetAppointmentRow, error) {
@@ -215,6 +218,7 @@ func (q *Queries) GetAppointment(ctx context.Context, arg GetAppointmentParams) 
 		&i.PatientPhone,
 		&i.DoctorName,
 		&i.DoctorColor,
+		&i.Total,
 	)
 	return i, err
 }
@@ -225,17 +229,24 @@ SELECT
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
-    d.color     AS doctor_color
+    d.color     AS doctor_color,
+    cl.name     AS clinic_name,
+    (a.clinic_id = $1) AS is_own,
+    CASE WHEN a.clinic_id = $1 THEN (
+        SELECT COALESCE(SUM(s.price * s.quantity), 0)
+          FROM appointment_services s WHERE s.appointment_id = a.id
+    ) ELSE 0 END::bigint AS total
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
-JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
-WHERE a.patient_id = $1 AND a.clinic_id = $2
+JOIN patients p  ON p.id = a.patient_id
+JOIN doctors  d  ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
+LEFT JOIN clinics cl ON cl.id = a.clinic_id
+WHERE a.patient_id = $2
 ORDER BY a.start_time DESC
 `
 
 type ListAppointmentsByPatientParams struct {
-	PatientID int64 `json:"patient_id"`
-	ClinicID  int64 `json:"clinic_id"`
+	ViewerClinicID int64 `json:"viewer_clinic_id"`
+	PatientID      int64 `json:"patient_id"`
 }
 
 type ListAppointmentsByPatientRow struct {
@@ -256,10 +267,15 @@ type ListAppointmentsByPatientRow struct {
 	PatientPhone  pgtype.Text `json:"patient_phone"`
 	DoctorName    string      `json:"doctor_name"`
 	DoctorColor   string      `json:"doctor_color"`
+	ClinicName    pgtype.Text `json:"clinic_name"`
+	IsOwn         bool        `json:"is_own"`
+	Total         int64       `json:"total"`
 }
 
+// Вся история пациента по всем клиникам платформы. Суммы — только по приёмам
+// клиники-читателя: деньги чужой клиники не показываем.
 func (q *Queries) ListAppointmentsByPatient(ctx context.Context, arg ListAppointmentsByPatientParams) ([]ListAppointmentsByPatientRow, error) {
-	rows, err := q.db.Query(ctx, listAppointmentsByPatient, arg.PatientID, arg.ClinicID)
+	rows, err := q.db.Query(ctx, listAppointmentsByPatient, arg.ViewerClinicID, arg.PatientID)
 	if err != nil {
 		return nil, err
 	}
@@ -285,6 +301,9 @@ func (q *Queries) ListAppointmentsByPatient(ctx context.Context, arg ListAppoint
 			&i.PatientPhone,
 			&i.DoctorName,
 			&i.DoctorColor,
+			&i.ClinicName,
+			&i.IsOwn,
+			&i.Total,
 		); err != nil {
 			return nil, err
 		}
@@ -302,10 +321,12 @@ SELECT
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
-    d.color     AS doctor_color
+    d.color     AS doctor_color,
+    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
-JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+JOIN patients p ON p.id = a.patient_id
+JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
 WHERE a.clinic_id = $1 AND a.status = $2
 ORDER BY a.start_time DESC
 LIMIT 500
@@ -334,6 +355,7 @@ type ListAppointmentsByStatusRow struct {
 	PatientPhone  pgtype.Text `json:"patient_phone"`
 	DoctorName    string      `json:"doctor_name"`
 	DoctorColor   string      `json:"doctor_color"`
+	Total         int64       `json:"total"`
 }
 
 func (q *Queries) ListAppointmentsByStatus(ctx context.Context, arg ListAppointmentsByStatusParams) ([]ListAppointmentsByStatusRow, error) {
@@ -363,6 +385,7 @@ func (q *Queries) ListAppointmentsByStatus(ctx context.Context, arg ListAppointm
 			&i.PatientPhone,
 			&i.DoctorName,
 			&i.DoctorColor,
+			&i.Total,
 		); err != nil {
 			return nil, err
 		}
@@ -375,15 +398,18 @@ func (q *Queries) ListAppointmentsByStatus(ctx context.Context, arg ListAppointm
 }
 
 const listAppointmentsInRange = `-- name: ListAppointmentsInRange :many
+
 SELECT
     a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id,
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
-    d.color     AS doctor_color
+    d.color     AS doctor_color,
+    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
 FROM appointments a
-JOIN patients p ON p.id = a.patient_id AND p.clinic_id = a.clinic_id
-JOIN doctors  d ON d.id = a.doctor_id  AND d.clinic_id = a.clinic_id
+JOIN patients p ON p.id = a.patient_id
+JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
 WHERE a.clinic_id = $1
   AND a.start_time >= $2
   AND a.start_time <  $3
@@ -416,8 +442,12 @@ type ListAppointmentsInRangeRow struct {
 	PatientPhone  pgtype.Text `json:"patient_phone"`
 	DoctorName    string      `json:"doctor_name"`
 	DoctorColor   string      `json:"doctor_color"`
+	Total         int64       `json:"total"`
 }
 
+// Пациенты общие для платформы, поэтому приём и карточка пациента могут
+// принадлежать разным клиникам — join по patient_id без сверки clinic_id.
+// Врач же всегда из клиники приёма.
 func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointmentsInRangeParams) ([]ListAppointmentsInRangeRow, error) {
 	rows, err := q.db.Query(ctx, listAppointmentsInRange,
 		arg.ClinicID,
@@ -450,6 +480,7 @@ func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointme
 			&i.PatientPhone,
 			&i.DoctorName,
 			&i.DoctorColor,
+			&i.Total,
 		); err != nil {
 			return nil, err
 		}

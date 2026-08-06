@@ -13,6 +13,8 @@ import { isoToLocalInput, localInputToISO, formatDate } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
 import { DateInput, DateTimeInput } from "../components/DateInputs";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
+import AppointmentBillModal from "../components/AppointmentBillModal";
+import { formatMoney } from "../lib/money";
 import { useAuth } from "../auth/AuthContext";
 
 function todayStr() {
@@ -163,11 +165,14 @@ function AppointmentRow({
 }) {
   const [open, setOpen] = useState(false);
   const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
+  const [billing, setBilling] = useState(false);
   const saveAppt = useSaveAppointment();
 
   const startDate = new Date(a.start_time);
   const endDate = new Date(a.end_time);
 
+  // Завершение приёма сразу ведёт к расчёту стоимости: услуги проще пробить,
+  // пока пациент ещё в кресле, чем вспоминать их вечером.
   async function markCompleted() {
     try {
       await saveAppt.mutateAsync({
@@ -181,6 +186,8 @@ function AppointmentRow({
         description: a.description,
         next_visit_date: a.next_visit_date ?? "",
       });
+      // Врачу деньги не показываем — окно расчёта только для владельца и менеджера.
+      if (isAdmin) setBilling(true);
     } catch (e) {
       alert(errorMessage(e));
     }
@@ -204,6 +211,11 @@ function AppointmentRow({
         <span className="font-medium">{a.patient_name}</span>
         <span className="text-sm text-slate-400">{a.doctor_name}</span>
         <span className="ml-auto flex items-center gap-2">
+          {a.total != null && a.total > 0 && (
+            <span className="text-sm font-semibold tabular-nums text-green-700">
+              {formatMoney(a.total)}
+            </span>
+          )}
           <StatusBadge status={a.status} />
           <span className="text-slate-300 text-xs">{open ? "▲" : "▼"}</span>
         </span>
@@ -223,13 +235,18 @@ function AppointmentRow({
             {a.next_visit_date && <Info label="Следующий приём" value={formatDate(a.next_visit_date)} wide />}
           </div>
           {!readOnly && (
-            <div className="flex gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 pt-1">
               <Button variant="secondary" className="py-1 px-3 text-xs" onClick={onEdit}>
                 Редактировать
               </Button>
               {a.status !== "completed" && (
                 <Button className="py-1 px-3 text-xs" onClick={markCompleted} disabled={saveAppt.isPending}>
                   {saveAppt.isPending ? "Сохранение…" : "Завершить"}
+                </Button>
+              )}
+              {isAdmin && (
+                <Button variant="secondary" className="py-1 px-3 text-xs" onClick={() => setBilling(true)}>
+                  Услуги и стоимость
                 </Button>
               )}
               <Button variant="secondary" className="py-1 px-3 text-xs" onClick={() => setSchedulingFollowUp(true)}>
@@ -246,6 +263,9 @@ function AppointmentRow({
       )}
       {schedulingFollowUp && (
         <ScheduleFollowUpModal appointment={a} onClose={() => setSchedulingFollowUp(false)} />
+      )}
+      {billing && (
+        <AppointmentBillModal appointment={a} onClose={() => setBilling(false)} />
       )}
     </div>
   );

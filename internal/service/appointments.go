@@ -66,13 +66,15 @@ func (s *AppointmentService) ensureNoOverlap(ctx context.Context, in Appointment
 	return nil
 }
 
-// ensureRefsInClinic verifies that the referenced patient and doctor both
-// belong to the appointment's clinic. Without this, a clinic user could attach
-// another clinic's patient/doctor to an appointment and read their data back.
+// ensureRefsInClinic verifies that the referenced doctor belongs to the
+// appointment's clinic; without this a clinic user could attach another
+// clinic's doctor to an appointment and read their data back. The patient only
+// has to exist: карточки пациентов общие для платформы, и записать к себе
+// пациента, заведённого другой клиникой, — это штатный сценарий.
 func (s *AppointmentService) ensureRefsInClinic(ctx context.Context, in AppointmentInput) error {
-	if _, err := s.q.GetPatient(ctx, sqlc.GetPatientParams{ID: in.PatientID, ClinicID: in.ClinicID}); err != nil {
+	if _, err := s.q.GetPatient(ctx, in.PatientID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return httpx.NewError(http.StatusBadRequest, "пациент не найден в вашей клинике")
+			return httpx.NewError(http.StatusBadRequest, "пациент не найден")
 		}
 		return err
 	}

@@ -26,6 +26,18 @@ type Appointment struct {
 	ClinicID      int64       `json:"clinic_id"`
 }
 
+type AppointmentService struct {
+	ID            int64       `json:"id"`
+	AppointmentID int64       `json:"appointment_id"`
+	ClinicID      int64       `json:"clinic_id"`
+	ServiceID     pgtype.Int8 `json:"service_id"`
+	DoctorID      pgtype.Int8 `json:"doctor_id"`
+	Name          string      `json:"name"`
+	Price         int64       `json:"price"`
+	Quantity      int32       `json:"quantity"`
+	CreatedAt     time.Time   `json:"created_at"`
+}
+
 type Clinic struct {
 	ID        int64       `json:"id"`
 	Name      string      `json:"name"`
@@ -63,9 +75,10 @@ type Patient struct {
 	BirthDate *time.Time  `json:"birth_date"`
 	Notes     pgtype.Text `json:"notes"`
 	CreatedAt time.Time   `json:"created_at"`
-	ClinicID  int64       `json:"clinic_id"`
-	Iin       pgtype.Text `json:"iin"`
-	Gender    pgtype.Text `json:"gender"`
+	// клиника, заведшая карточку; сама карточка общая для платформы
+	ClinicID int64       `json:"clinic_id"`
+	Iin      pgtype.Text `json:"iin"`
+	Gender   pgtype.Text `json:"gender"`
 }
 
 type PatientRecord struct {
@@ -79,6 +92,15 @@ type PatientRecord struct {
 	CreatedBy pgtype.Int8 `json:"created_by"`
 	CreatedAt time.Time   `json:"created_at"`
 	ClinicID  int64       `json:"clinic_id"`
+}
+
+type Service struct {
+	ID        int64     `json:"id"`
+	ClinicID  int64     `json:"clinic_id"`
+	Name      string    `json:"name"`
+	Price     int64     `json:"price"`
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type User struct {

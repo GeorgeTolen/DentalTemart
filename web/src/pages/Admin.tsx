@@ -14,10 +14,15 @@ import {
   useUsers,
   useDeleteDoctor,
   useAppointments,
+  useServices,
+  useSaveService,
+  useDeleteService,
+  useRevenueStats,
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
-import type { Appointment, ClinicUser, Doctor, Gender, Patient, Role } from "../lib/types";
+import type { Appointment, ClinicUser, Doctor, Gender, Patient, Role, Service } from "../lib/types";
 import { STATUS_LABELS, ROLE_LABELS, GENDER_LABELS } from "../lib/types";
+import { formatMoney, formatAmount, parseMoneyInput, monthLabel } from "../lib/money";
 import {
   localInputToISO,
   isoToLocalInput,
@@ -481,7 +486,13 @@ function FlowStep5({ appointment, onFinish, setError }: {
 
 // ========== MANAGEMENT ==========
 
-type ManageTab = "users" | "patients" | "doctors" | "appointments";
+type ManageTab =
+  | "users"
+  | "patients"
+  | "doctors"
+  | "appointments"
+  | "services"
+  | "finance";
 
 function AdminManagement() {
   const { user } = useAuth();
@@ -493,19 +504,21 @@ function AdminManagement() {
     { key: "patients", label: "Пациенты" },
     { key: "doctors", label: "Врачи" },
     { key: "appointments", label: "Записи" },
+    { key: "services", label: "Услуги" },
+    { key: "finance", label: "Финансы" },
   ];
   // Only the owner ("Администратор") manages system user accounts; the
-  // manager role doesn't get this tab.
+  // manager role doesn't get this tab. Прайс и финансы ведут оба.
   const manageLinks = isOwner ? allLinks : allLinks.filter((l) => l.key !== "users");
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 border-b border-slate-200">
+      <div className="flex gap-2 overflow-x-auto border-b border-slate-200">
         {manageLinks.map((l) => (
           <button
             key={l.key}
             onClick={() => setTab(l.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition -mb-px ${
+            className={`shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 transition -mb-px ${
               tab === l.key ? "border-brand text-brand" : "border-transparent text-slate-500 hover:text-ink"
             }`}
           >
@@ -517,6 +530,312 @@ function AdminManagement() {
       {tab === "patients" && <PatientsPanel />}
       {tab === "doctors" && <DoctorsPanel />}
       {tab === "appointments" && <AppointmentsPanel />}
+      {tab === "services" && <ServicesPanel />}
+      {tab === "finance" && <FinancePanel />}
+    </div>
+  );
+}
+
+// --- Services panel (прайс клиники) ---
+
+function ServicesPanel() {
+  const { data: services = [], isLoading } = useServices();
+  const del = useDeleteService();
+  const [editing, setEditing] = useState<Service | "new" | null>(null);
+  const [error, setError] = useState("");
+
+  async function onDelete(s: Service) {
+    if (
+      !confirm(
+        `Удалить услугу «${s.name}» из прайса?\n\n` +
+          `Уже пробитые приёмы не изменятся — в них сохранены название и цена ` +
+          `на момент оказания. Чтобы просто убрать услугу из списка выбора, ` +
+          `снимите отметку «Активна».`
+      )
+    )
+      return;
+    setError("");
+    try {
+      await del.mutateAsync(s.id);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  if (isLoading) return <p className="text-sm text-slate-400">Загрузка…</p>;
+
+  return (
+    <div className="space-y-3">
+      {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">
+          Прайс вашей клиники. Из него набирается стоимость приёма.
+        </p>
+        <Button onClick={() => setEditing("new")}>+ Услуга</Button>
+      </div>
+
+      {services.length === 0 ? (
+        <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
+          Услуг пока нет — добавьте первую.
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-slate-500">
+              <tr>
+                <th className="px-5 py-3 font-medium">Услуга</th>
+                <th className="px-5 py-3 font-medium">Цена</th>
+                <th className="px-5 py-3 font-medium">Статус</th>
+                <th className="px-5 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {services.map((s) => (
+                <tr key={s.id} className="hover:bg-slate-50">
+                  <td className="px-5 py-3 font-medium text-ink">{s.name}</td>
+                  <td className="px-5 py-3 tabular-nums text-slate-700">
+                    {formatMoney(s.price)}
+                  </td>
+                  <td className="px-5 py-3">
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        s.is_active
+                          ? "bg-green-100 text-green-700"
+                          : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {s.is_active ? "Активна" : "Скрыта"}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => setEditing(s)}
+                        className="text-brand hover:underline"
+                      >
+                        Изменить
+                      </button>
+                      <button
+                        onClick={() => onDelete(s)}
+                        className="text-red-500 hover:underline"
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {editing && (
+        <ServiceModal
+          service={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ServiceModal({
+  service,
+  onClose,
+}: {
+  service: Service | null;
+  onClose: () => void;
+}) {
+  const save = useSaveService();
+  const [name, setName] = useState(service?.name ?? "");
+  const [price, setPrice] = useState(service?.price ?? 0);
+  const [isActive, setIsActive] = useState(service?.is_active ?? true);
+  const [error, setError] = useState("");
+
+  async function submit() {
+    setError("");
+    if (!name.trim()) return setError("Введите название услуги");
+    try {
+      await save.mutateAsync({
+        id: service?.id,
+        name: name.trim(),
+        price,
+        is_active: isActive,
+      });
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  return (
+    <Modal
+      title={service ? "Изменить услугу" : "Новая услуга"}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Отмена</Button>
+          <Button onClick={submit} disabled={save.isPending}>
+            {save.isPending ? "Сохранение…" : "Сохранить"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Название *">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Удаление зуба"
+          />
+        </Field>
+        <Field label="Цена, ₸">
+          <Input
+            inputMode="numeric"
+            value={formatAmount(price)}
+            onChange={(e) => setPrice(parseMoneyInput(e.target.value))}
+          />
+        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(e) => setIsActive(e.target.checked)}
+            className="h-4 w-4"
+          />
+          Активна (доступна при расчёте стоимости)
+        </label>
+        {service && (
+          <p className="text-xs text-slate-400">
+            Изменение цены действует только на будущие приёмы: в уже пробитых
+            сохранена цена на момент оказания.
+          </p>
+        )}
+        {error && (
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// --- Finance panel (выручка клиники) ---
+
+function FinancePanel() {
+  const { data: stats, isLoading } = useRevenueStats();
+
+  if (isLoading) return <p className="text-sm text-slate-400">Загрузка…</p>;
+  if (!stats) return <p className="text-sm text-slate-400">Нет данных</p>;
+
+  const cards = [
+    { label: "Сегодня", bucket: stats.today },
+    { label: "Этот месяц", bucket: stats.month },
+    { label: "Этот год", bucket: stats.year },
+    { label: "За всё время", bucket: stats.all_time },
+  ];
+  // Масштаб столбиков — от лучшего месяца, иначе разница между месяцами не видна.
+  const maxMonth = Math.max(1, ...stats.by_month.map((m) => m.revenue));
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {cards.map((c) => (
+          <div key={c.label} className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="text-xs text-slate-400">{c.label}</div>
+            <div className="mt-1 text-2xl font-bold text-ink">
+              {formatMoney(c.bucket.revenue)}
+            </div>
+            <div className="mt-1 text-xs text-slate-400">
+              {c.bucket.services_count} услуг · {c.bucket.appointments_count} приёмов
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-lg font-semibold">Заработок по месяцам</h2>
+        {stats.by_month.length === 0 ? (
+          <div className="rounded-2xl bg-white p-8 text-center text-slate-400 shadow-sm">
+            Пока нет пробитых услуг
+          </div>
+        ) : (
+          <div className="space-y-2 rounded-2xl bg-white p-4 shadow-sm">
+            {stats.by_month.map((m) => (
+              <div key={m.month} className="flex items-center gap-3">
+                <span className="w-32 shrink-0 text-sm text-slate-500">
+                  {monthLabel(m.month)}
+                </span>
+                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-brand"
+                    style={{ width: `${(m.revenue / maxMonth) * 100}%` }}
+                  />
+                </div>
+                <span className="w-32 shrink-0 text-right text-sm font-medium tabular-nums text-ink">
+                  {formatMoney(m.revenue)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <RevenueBreakdown
+          title="Услуги за год"
+          emptyLabel="Услуги ещё не пробивались"
+          rows={stats.by_service}
+          countLabel="раз"
+        />
+        <RevenueBreakdown
+          title="Врачи за год"
+          emptyLabel="Нет данных по врачам"
+          rows={stats.by_doctor}
+          countLabel="услуг"
+        />
+      </div>
+    </div>
+  );
+}
+
+function RevenueBreakdown({
+  title,
+  emptyLabel,
+  rows,
+  countLabel,
+}: {
+  title: string;
+  emptyLabel: string;
+  rows: { name: string; revenue: number; services_count: number }[];
+  countLabel: string;
+}) {
+  return (
+    <div>
+      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
+      {rows.length === 0 ? (
+        <div className="rounded-2xl bg-white p-8 text-center text-slate-400 shadow-sm">
+          {emptyLabel}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((r) => (
+                <tr key={r.name}>
+                  <td className="px-5 py-3 font-medium text-ink">{r.name || "—"}</td>
+                  <td className="px-5 py-3 text-right text-slate-400">
+                    {r.services_count} {countLabel}
+                  </td>
+                  <td className="px-5 py-3 text-right font-semibold tabular-nums text-ink">
+                    {formatMoney(r.revenue)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -672,14 +991,28 @@ function PatientsPanel() {
             <tbody className="divide-y divide-slate-100">
               {patients.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium">{p.full_name}</td>
+                  <td className="px-4 py-3 font-medium">
+                    {p.full_name}
+                    {!p.is_own && p.clinic_name && (
+                      <span
+                        className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"
+                        title="Карточку завела другая клиника"
+                      >
+                        {p.clinic_name}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-500">{p.iin || "—"}</td>
                   <td className="px-4 py-3 text-slate-500">{p.phone || "—"}</td>
                   <td className="px-4 py-3 text-slate-500">{formatDate(p.birth_date)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 justify-end">
                       <Button variant="secondary" className="py-1 px-2 text-xs" onClick={() => setEditing(p)}>Изменить</Button>
-                      <Button variant="danger" className="py-1 px-2 text-xs" onClick={() => del(p)}>Удалить</Button>
+                      {/* Удаление уносит приёмы всех клиник, поэтому доступно
+                          только той, которая завела карточку. */}
+                      {p.is_own && (
+                        <Button variant="danger" className="py-1 px-2 text-xs" onClick={() => del(p)}>Удалить</Button>
+                      )}
                     </div>
                   </td>
                 </tr>

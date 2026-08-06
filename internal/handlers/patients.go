@@ -41,9 +41,10 @@ func optText(s string) pgtype.Text {
 	return pgtype.Text{String: s, Valid: s != ""}
 }
 
-// ListPatients returns the clinic's patients, optionally filtered by a
-// name/phone search. A "doctor" role user only sees patients who have an
-// appointment with them.
+// ListPatients returns patients, optionally filtered by a name/phone/IIN
+// search. The patient directory is shared platform-wide — a card created by one
+// clinic is visible to the others. A "doctor" role user still only sees
+// patients who have an appointment with them.
 func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
 	clinicID, err := h.clinicID(r.Context())
 	if err != nil {
@@ -56,15 +57,22 @@ func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
 		arg = pgtype.Text{String: search, Valid: true}
 	}
 
-	var patients []sqlc.Patient
+	var patients []patientJoin
 	if scope, scoped := h.doctorScope(r.Context()); scoped {
-		patients, err = h.q.ListPatientsForDoctor(r.Context(), sqlc.ListPatientsForDoctorParams{
+		rows, derr := h.q.ListPatientsForDoctor(r.Context(), sqlc.ListPatientsForDoctorParams{
 			DoctorID: scope.Int64,
-			ClinicID: clinicID,
 			Search:   arg,
 		})
+		err = derr
+		for _, p := range rows {
+			patients = append(patients, fromDoctorPatientRow(p))
+		}
 	} else {
-		patients, err = h.q.ListPatients(r.Context(), sqlc.ListPatientsParams{ClinicID: clinicID, Search: arg})
+		rows, lerr := h.q.ListPatients(r.Context(), arg)
+		err = lerr
+		for _, p := range rows {
+			patients = append(patients, fromPatientListRow(p))
+		}
 	}
 	if err != nil {
 		httpx.Fail(w, err)
@@ -72,7 +80,7 @@ func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]patientDTO, 0, len(patients))
 	for _, p := range patients {
-		out = append(out, toPatientDTO(p))
+		out = append(out, p.dto(clinicID))
 	}
 	httpx.JSON(w, http.StatusOK, out)
 }
@@ -94,7 +102,7 @@ func (h *Handlers) GetPatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	p, err := h.q.GetPatient(r.Context(), sqlc.GetPatientParams{ID: id, ClinicID: clinicID})
+	p, err := h.q.GetPatient(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "пациент не найден"))
@@ -103,10 +111,12 @@ func (h *Handlers) GetPatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toPatientDTO(p))
+	httpx.JSON(w, http.StatusOK, fromPatientGetRow(p).dto(clinicID))
 }
 
-// GetPatientAppointments returns the full appointment history of a patient.
+// GetPatientAppointments returns the full appointment history of a patient
+// across every clinic of the platform. Amounts are filled in only for the
+// caller's own appointments — the history is shared, the money is not.
 func (h *Handlers) GetPatientAppointments(w http.ResponseWriter, r *http.Request) {
 	clinicID, err := h.clinicID(r.Context())
 	if err != nil {
@@ -122,7 +132,10 @@ func (h *Handlers) GetPatientAppointments(w http.ResponseWriter, r *http.Request
 		httpx.Fail(w, err)
 		return
 	}
-	rows, err := h.q.ListAppointmentsByPatient(r.Context(), sqlc.ListAppointmentsByPatientParams{PatientID: id, ClinicID: clinicID})
+	rows, err := h.q.ListAppointmentsByPatient(r.Context(), sqlc.ListAppointmentsByPatientParams{
+		PatientID:      id,
+		ViewerClinicID: clinicID,
+	})
 	if err != nil {
 		httpx.Fail(w, err)
 		return
@@ -164,13 +177,11 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ИИН-дедупликация: если пациент с таким ИИН уже есть в клинике — не
-	// создаём дубликат, а возвращаем существующего (он «подставляется»).
+	// ИИН-дедупликация в масштабах платформы: если пациент с таким ИИН уже есть
+	// в общей базе — не создаём дубликат, а возвращаем существующего (он
+	// «подставляется»), даже если карточку заводила другая клиника.
 	if req.IIN != "" {
-		existing, err := h.q.GetPatientByIIN(r.Context(), sqlc.GetPatientByIINParams{
-			ClinicID: clinicID,
-			Iin:      optText(req.IIN),
-		})
+		existing, err := h.q.GetPatientByIIN(r.Context(), optText(req.IIN))
 		if err == nil {
 			// A doctor-role user must only see patients they treat: don't leak
 			// another doctor's patient PII through the dedupe response. Return a
@@ -189,7 +200,7 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
-			httpx.JSON(w, http.StatusOK, toPatientDTO(existing))
+			httpx.JSON(w, http.StatusOK, fromPatientIINRow(existing).dto(clinicID))
 			return
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -211,11 +222,14 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, conflict(err, "пациент с таким ИИН уже существует"))
 		return
 	}
-	httpx.JSON(w, http.StatusCreated, toPatientDTO(p))
+	dto := toPatientDTO(p)
+	dto.IsOwn = true
+	httpx.JSON(w, http.StatusCreated, dto)
 }
 
 // DeletePatient removes a patient together with their appointments and records
-// (cascade). The confirmation warning lives in the UI.
+// (cascade) — including those of other clinics, which is why only the clinic
+// that created the card may delete it. The confirmation warning lives in the UI.
 func (h *Handlers) DeletePatient(w http.ResponseWriter, r *http.Request) {
 	clinicID, err := h.clinicID(r.Context())
 	if err != nil {
@@ -280,7 +294,6 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 		Notes:     pgtype.Text{String: req.Notes, Valid: true},
 		Iin:       optText(req.IIN),
 		Gender:    optText(req.Gender),
-		ClinicID:  clinicID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -290,5 +303,7 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, conflict(err, "пациент с таким ИИН уже существует"))
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toPatientDTO(p))
+	dto := toPatientDTO(p)
+	dto.IsOwn = p.ClinicID == clinicID
+	httpx.JSON(w, http.StatusOK, dto)
 }
