@@ -5,10 +5,9 @@ import interactionPlugin from "@fullcalendar/interaction";
 import type {
   DateSelectArg,
   DatesSetArg,
+  EventApi,
   EventClickArg,
-  EventDropArg,
 } from "@fullcalendar/core";
-import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import ruLocale from "@fullcalendar/core/locales/ru";
 import {
   useAppointments,
@@ -100,7 +99,7 @@ export default function CalendarPage() {
    * следующего приёма. При отказе (например, 409 — врач уже занят) возвращаем
    * карточку на место.
    */
-  async function onEventMoved(info: EventDropArg | EventResizeDoneArg) {
+  async function onEventMoved(info: { event: EventApi; revert: () => void }) {
     const a = info.event.extendedProps.appointment as Appointment;
     const start = info.event.start;
     const end = info.event.end;
@@ -193,8 +192,8 @@ export default function CalendarPage() {
           datesSet={onDatesSet}
           eventClick={onEventClick}
           select={onSelect}
-          eventDrop={onEventMoved}
-          eventResize={onEventMoved}
+          eventDrop={(info) => void onEventMoved(info)}
+          eventResize={(info) => void onEventMoved(info)}
         />
       </div>
 
