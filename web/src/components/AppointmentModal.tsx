@@ -7,8 +7,10 @@ import {
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import type { Appointment, AppointmentStatus, Doctor, Patient } from "../lib/types";
-import { STATUS_LABELS } from "../lib/types";
+import { STATUS_LABELS, GENDER_LABELS } from "../lib/types";
 import {
+  ageCategory,
+  formatDate,
   formatDateTime,
   isoToLocalInput,
   localInputToISO,
@@ -16,6 +18,7 @@ import {
   defaultAppointmentStart,
   addMinutesToLocalInput,
 } from "../lib/datetime";
+import { parseIIN } from "../lib/iin";
 import {
   Button,
   Field,
@@ -127,6 +130,9 @@ function EditCard({
 
   const busy = saveAppt.isPending || savePatient.isPending;
   const selectedDoctor = activeDoctors.find((d) => d.id === doctorId);
+  // В мини-форме нет полей даты рождения и пола - берём их из ИИН и молча
+  // отправляем вместе с новым пациентом.
+  const newPatientInfo = parseIIN(newPatientIin);
 
   // «12 августа, 10:00 – 11:00» для шапки карточки.
   const timeLabel = start
@@ -176,6 +182,12 @@ function EditCard({
           full_name: newPatientName.trim(),
           phone: newPatientPhone.trim(),
           iin: newPatientIin,
+          ...(newPatientInfo
+            ? {
+                birth_date: newPatientInfo.birthDate,
+                gender: newPatientInfo.gender,
+              }
+            : {}),
         });
         resolvedPatientId = created.id;
       }
@@ -286,6 +298,13 @@ function EditCard({
                 }
                 placeholder="Если уже есть - подставится пациент"
               />
+              {newPatientInfo && (
+                <p className="mt-1 text-xs text-slate-400">
+                  Дата рождения: {formatDate(newPatientInfo.birthDate)} ·{" "}
+                  {ageCategory(newPatientInfo.birthDate)} ·{" "}
+                  {GENDER_LABELS[newPatientInfo.gender]}
+                </p>
+              )}
             </Field>
             <Field label="Телефон">
               <Input

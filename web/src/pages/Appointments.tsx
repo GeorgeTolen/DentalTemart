@@ -8,8 +8,9 @@ import {
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import type { Appointment, AppointmentStatus, Doctor } from "../lib/types";
-import { STATUS_LABELS } from "../lib/types";
-import { isoToLocalInput, localInputToISO, formatDate } from "../lib/datetime";
+import { STATUS_LABELS, GENDER_LABELS } from "../lib/types";
+import { ageCategory, isoToLocalInput, localInputToISO, formatDate } from "../lib/datetime";
+import { parseIIN } from "../lib/iin";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import AppointmentBillModal from "../components/AppointmentBillModal";
@@ -474,6 +475,8 @@ function AppointmentEditModal({
   const [newPatientPhone, setNewPatientPhone] = useState("");
   const [newPatientIin, setNewPatientIin] = useState("");
   const [error, setError] = useState("");
+  // В мини-форме нет полей даты рождения и пола - берём их из ИИН.
+  const newPatientInfo = parseIIN(newPatientIin);
 
   async function submit() {
     setError("");
@@ -486,6 +489,9 @@ function AppointmentEditModal({
           full_name: newPatientName.trim(),
           phone: newPatientPhone.trim(),
           iin: newPatientIin,
+          ...(newPatientInfo
+            ? { birth_date: newPatientInfo.birthDate, gender: newPatientInfo.gender }
+            : {}),
         });
         resolvedPatientId = created.id;
       }
@@ -540,6 +546,13 @@ function AppointmentEditModal({
                 maxLength={12}
                 onChange={(e) => setNewPatientIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
               />
+              {newPatientInfo && (
+                <p className="mt-1 text-xs text-slate-400">
+                  Дата рождения: {formatDate(newPatientInfo.birthDate)} ·{" "}
+                  {ageCategory(newPatientInfo.birthDate)} ·{" "}
+                  {GENDER_LABELS[newPatientInfo.gender]}
+                </p>
+              )}
             </Field>
             <Field label="Телефон"><Input value={newPatientPhone} onChange={(e) => setNewPatientPhone(e.target.value)} placeholder="+7…" /></Field>
           </div>

@@ -9,7 +9,9 @@ import { Avatar } from "../components/Avatar";
 import { useDebounced } from "../components/PickerDrawer";
 import { useAuth } from "../auth/AuthContext";
 import { DateInput } from "../components/DateInputs";
+import { AgeCategoryBadge } from "../components/AgeCategoryBadge";
 import { formatDate, validateBirthDate, minBirthDateInput, todayInput } from "../lib/datetime";
+import { parseIIN } from "../lib/iin";
 
 // В таблице пол показываем одной буквой - колонка узкая, слово не нужно.
 const GENDER_SHORT: Record<"male" | "female", string> = { male: "М", female: "Ж" };
@@ -161,6 +163,17 @@ function PatientForm({
   const [notes, setNotes] = useState(patient?.notes ?? "");
   const [error, setError] = useState("");
 
+  // ИИН кодирует дату рождения и пол - как только введены все 12 цифр,
+  // подставляем их в пустые поля. Ручной ввод никогда не перетираем.
+  function onIinChange(raw: string) {
+    const next = raw.replace(/\D/g, "").slice(0, 12);
+    setIin(next);
+    const info = parseIIN(next);
+    if (!info) return;
+    if (!birthDate) setBirthDate(info.birthDate);
+    if (!gender) setGender(info.gender);
+  }
+
   async function onSubmit() {
     setError("");
     if (!fullName.trim()) return setError("Введите ФИО");
@@ -208,7 +221,7 @@ function PatientForm({
               value={iin}
               inputMode="numeric"
               maxLength={12}
-              onChange={(e) => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+              onChange={(e) => onIinChange(e.target.value)}
             />
           </Field>
           <Field label="Пол">
@@ -223,12 +236,15 @@ function PatientForm({
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
         </Field>
         <Field label="Дата рождения">
-          <DateInput
-            value={birthDate ?? ""}
-            min={minBirthDateInput()}
-            max={todayInput()}
-            onChange={setBirthDate}
-          />
+          <div className="flex items-center gap-2">
+            <DateInput
+              value={birthDate ?? ""}
+              min={minBirthDateInput()}
+              max={todayInput()}
+              onChange={setBirthDate}
+            />
+            <AgeCategoryBadge birthDate={birthDate} />
+          </div>
         </Field>
         <Field label="Заметки">
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />

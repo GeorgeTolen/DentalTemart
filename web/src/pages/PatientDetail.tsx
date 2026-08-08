@@ -25,6 +25,8 @@ import {
 } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select, StatusBadge, Textarea } from "../components/ui";
 import { DateInput, DateTimeInput } from "../components/DateInputs";
+import { AgeCategoryBadge } from "../components/AgeCategoryBadge";
+import { parseIIN } from "../lib/iin";
 import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import AppointmentBillModal from "../components/AppointmentBillModal";
 import { Avatar, AvatarUpload } from "../components/Avatar";
@@ -579,6 +581,16 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
   const [notes, setNotes] = useState(patient.notes ?? "");
   const [error, setError] = useState("");
 
+  // ИИН кодирует дату рождения и пол - при вводе 12 цифр заполняем пустые поля.
+  function onIinChange(raw: string) {
+    const next = raw.replace(/\D/g, "").slice(0, 12);
+    setIin(next);
+    const info = parseIIN(next);
+    if (!info) return;
+    if (!birthDate) setBirthDate(info.birthDate);
+    if (!gender) setGender(info.gender);
+  }
+
   async function submit() {
     if (!name.trim()) { setError("Введите ФИО"); return; }
     if (iin && iin.length !== 12) { setError("ИИН должен состоять из 12 цифр"); return; }
@@ -609,7 +621,7 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
               value={iin}
               inputMode="numeric"
               maxLength={12}
-              onChange={(e) => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+              onChange={(e) => onIinChange(e.target.value)}
             />
           </Field>
           <Field label="Пол">
@@ -622,7 +634,10 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
         </div>
         <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" /></Field>
         <Field label="Дата рождения">
-          <DateInput value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={setBirthDate} />
+          <div className="flex items-center gap-2">
+            <DateInput value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={setBirthDate} />
+            <AgeCategoryBadge birthDate={birthDate} />
+          </div>
         </Field>
         <Field label="Заметки"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}

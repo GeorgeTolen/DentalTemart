@@ -21,6 +21,8 @@ import {
 } from "../lib/datetime";
 import { Button, Field, Input, Select, Textarea } from "../components/ui";
 import { DateInput, DateTimeInput } from "../components/DateInputs";
+import { AgeCategoryBadge } from "../components/AgeCategoryBadge";
+import { parseIIN } from "../lib/iin";
 // ========== ADMIN FLOW (stepper) ==========
 
 type FlowStep = 1 | 2 | 3 | 4 | 5;
@@ -134,6 +136,16 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
     return () => clearTimeout(t);
   }, [input]);
 
+  // ИИН кодирует дату рождения и пол - при вводе 12 цифр заполняем пустые поля.
+  function onIinChange(raw: string) {
+    const next = raw.replace(/\D/g, "").slice(0, 12);
+    setIin(next);
+    const info = parseIIN(next);
+    if (!info) return;
+    if (!birthDate) setBirthDate(info.birthDate);
+    if (!gender) setGender(info.gender);
+  }
+
   async function createPatient() {
     if (!name.trim()) { setError("Введите ФИО пациента"); return; }
     if (iin && iin.length !== 12) { setError("ИИН должен состоять из 12 цифр"); return; }
@@ -196,7 +208,7 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
                 value={iin}
                 inputMode="numeric"
                 maxLength={12}
-                onChange={(e) => setIin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                onChange={(e) => onIinChange(e.target.value)}
                 placeholder="Если ИИН уже есть в базе - подставится тот пациент"
               />
             </Field>
@@ -209,7 +221,10 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
               </Select>
             </Field>
             <Field label="Дата рождения">
-              <DateInput value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={setBirthDate} />
+              <div className="flex items-center gap-2">
+                <DateInput value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={setBirthDate} />
+                <AgeCategoryBadge birthDate={birthDate} />
+              </div>
             </Field>
             <Field label="Заметки"><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
           </div>
