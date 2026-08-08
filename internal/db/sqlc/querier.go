@@ -83,9 +83,10 @@ type Querier interface {
 	// принадлежать разным клиникам — join по patient_id без сверки clinic_id.
 	// Врач же всегда из клиники приёма.
 	//
-	// total везде отдаётся уже со скидкой приёма: умножаем каждую строку чека на
-	// (100 - discount_percent) и делим один раз с округлением half-up (+50)/100 —
-	// целочисленно, совпадает с Math.round на фронте.
+	// total везде отдаётся уже со скидкой приёма: сумма чека умножается на
+	// (100 - discount_percent) и делится через ROUND (half-up, совпадает с
+	// Math.round на фронте). Важно: SUM(bigint) в Postgres — это numeric, поэтому
+	// деление здесь точное, а не целочисленное; округляет именно ROUND.
 	ListAppointmentsInRange(ctx context.Context, arg ListAppointmentsInRangeParams) ([]ListAppointmentsInRangeRow, error)
 	// All clinics with quick aggregate counts, for the platform admin panel.
 	ListClinics(ctx context.Context) ([]ListClinicsRow, error)
@@ -139,8 +140,9 @@ type Querier interface {
 	// --- Статистика выручки ------------------------------------------------------
 	// Начислено за период: сумма позиций приёмов, кроме отменённых. Скидка приёма
 	// применяется к каждой позиции: сумма умножается на (100 - discount_percent) и
-	// делится один раз на группу с округлением half-up ((+50)/100). Из-за одного
-	// округления на группу разные отчёты могут расходиться на единицы тенге.
+	// делится один раз на группу через ROUND (half-up; SUM(bigint) — это numeric,
+	// поэтому округляет именно ROUND, а не деление). Из-за одного округления на
+	// группу разные отчёты могут расходиться на единицы тенге.
 	SumRevenueInRange(ctx context.Context, arg SumRevenueInRangeParams) (SumRevenueInRangeRow, error)
 	UpdateAppointment(ctx context.Context, arg UpdateAppointmentParams) (Appointment, error)
 	UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Clinic, error)

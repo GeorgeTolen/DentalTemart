@@ -165,9 +165,9 @@ SELECT
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color,
-    (((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+    ROUND((SELECT COALESCE(SUM(s.price * s.quantity), 0)
        FROM appointment_services s WHERE s.appointment_id = a.id)
-      * (100 - a.discount_percent) + 50) / 100)::bigint AS total
+      * (100 - a.discount_percent) / 100.0)::bigint AS total
 FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
@@ -240,9 +240,9 @@ SELECT
     cl.name     AS clinic_name,
     (a.clinic_id = $1) AS is_own,
     CASE WHEN a.clinic_id = $1 THEN (
-        ((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+        ROUND((SELECT COALESCE(SUM(s.price * s.quantity), 0)
             FROM appointment_services s WHERE s.appointment_id = a.id)
-         * (100 - a.discount_percent) + 50) / 100
+         * (100 - a.discount_percent) / 100.0)
     ) ELSE 0 END::bigint AS total
 FROM appointments a
 JOIN patients p  ON p.id = a.patient_id
@@ -334,9 +334,9 @@ SELECT
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color,
-    (((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+    ROUND((SELECT COALESCE(SUM(s.price * s.quantity), 0)
        FROM appointment_services s WHERE s.appointment_id = a.id)
-      * (100 - a.discount_percent) + 50) / 100)::bigint AS total
+      * (100 - a.discount_percent) / 100.0)::bigint AS total
 FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
@@ -422,9 +422,9 @@ SELECT
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color,
-    (((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+    ROUND((SELECT COALESCE(SUM(s.price * s.quantity), 0)
        FROM appointment_services s WHERE s.appointment_id = a.id)
-      * (100 - a.discount_percent) + 50) / 100)::bigint AS total
+      * (100 - a.discount_percent) / 100.0)::bigint AS total
 FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
@@ -469,9 +469,10 @@ type ListAppointmentsInRangeRow struct {
 // принадлежать разным клиникам — join по patient_id без сверки clinic_id.
 // Врач же всегда из клиники приёма.
 //
-// total везде отдаётся уже со скидкой приёма: умножаем каждую строку чека на
-// (100 - discount_percent) и делим один раз с округлением half-up (+50)/100 —
-// целочисленно, совпадает с Math.round на фронте.
+// total везде отдаётся уже со скидкой приёма: сумма чека умножается на
+// (100 - discount_percent) и делится через ROUND (half-up, совпадает с
+// Math.round на фронте). Важно: SUM(bigint) в Postgres — это numeric, поэтому
+// деление здесь точное, а не целочисленное; округляет именно ROUND.
 func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointmentsInRangeParams) ([]ListAppointmentsInRangeRow, error) {
 	rows, err := q.db.Query(ctx, listAppointmentsInRange,
 		arg.ClinicID,

@@ -55,10 +55,11 @@ RETURNING *;
 -- name: SumRevenueInRange :one
 -- Начислено за период: сумма позиций приёмов, кроме отменённых. Скидка приёма
 -- применяется к каждой позиции: сумма умножается на (100 - discount_percent) и
--- делится один раз на группу с округлением half-up ((+50)/100). Из-за одного
--- округления на группу разные отчёты могут расходиться на единицы тенге.
+-- делится один раз на группу через ROUND (half-up; SUM(bigint) — это numeric,
+-- поэтому округляет именно ROUND, а не деление). Из-за одного округления на
+-- группу разные отчёты могут расходиться на единицы тенге.
 SELECT
-    ((COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) + 50) / 100)::bigint AS revenue,
+    ROUND(COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) / 100.0)::bigint AS revenue,
     COALESCE(SUM(s.quantity), 0)::bigint           AS services_count,
     count(DISTINCT s.appointment_id)::bigint       AS appointments_count
 FROM appointment_services s
@@ -72,7 +73,7 @@ WHERE s.clinic_id = sqlc.arg('clinic_id')
 -- Помесячно за период — для графика «заработок по месяцам».
 SELECT
     to_char(date_trunc('month', a.start_time), 'YYYY-MM')  AS month,
-    ((COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) + 50) / 100)::bigint AS revenue,
+    ROUND(COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) / 100.0)::bigint AS revenue,
     COALESCE(SUM(s.quantity), 0)::bigint                   AS services_count
 FROM appointment_services s
 JOIN appointments a ON a.id = s.appointment_id
@@ -89,7 +90,7 @@ ORDER BY 1;
 SELECT
     s.name                                          AS name,
     COALESCE(SUM(s.quantity), 0)::bigint            AS services_count,
-    ((COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) + 50) / 100)::bigint AS revenue
+    ROUND(COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) / 100.0)::bigint AS revenue
 FROM appointment_services s
 JOIN appointments a ON a.id = s.appointment_id
 WHERE s.clinic_id = sqlc.arg('clinic_id')
@@ -106,7 +107,7 @@ LIMIT 20;
 SELECT
     COALESCE(dp.full_name, da.full_name, '')        AS doctor_name,
     COALESCE(SUM(s.quantity), 0)::bigint            AS services_count,
-    ((COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) + 50) / 100)::bigint AS revenue
+    ROUND(COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) / 100.0)::bigint AS revenue
 FROM appointment_services s
 JOIN appointments a ON a.id = s.appointment_id
 LEFT JOIN doctors dp ON dp.id = s.doctor_id
@@ -121,7 +122,7 @@ LIMIT 20;
 
 -- name: SumPlatformRevenue :one
 -- Сводно по всем клиникам — для панели платформы.
-SELECT ((COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) + 50) / 100)::bigint
+SELECT ROUND(COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) / 100.0)::bigint
 FROM appointment_services s
 JOIN appointments a ON a.id = s.appointment_id
 WHERE a.status <> 'cancelled';

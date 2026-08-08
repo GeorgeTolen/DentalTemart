@@ -188,10 +188,15 @@ const HISTORY_FILTERS: { key: AppointmentStatus | "all"; label: string }[] = [
   { key: "cancelled", label: "Отменённые" },
 ];
 
+// Сколько приёмов видно в свёрнутой истории: свежие сверху, остальное - по
+// кнопке «Показать всю историю».
+const HISTORY_PREVIEW_COUNT = 3;
+
 function TreatmentHistorySection({ history }: { history: Appointment[] }) {
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | "all">("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [showAll, setShowAll] = useState(false);
 
   // Выбор одной даты сразу даёт период в один день: вторая граница
   // подставляется той же датой (и поправляется, если диапазон перевёрнут).
@@ -211,6 +216,11 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
     if (dateTo && day > dateTo) return false;
     return true;
   });
+
+  // История отсортирована свежие-сверху, поэтому «3 последних приёма» - это
+  // просто первые три записи.
+  const visible = showAll ? filtered : filtered.slice(0, HISTORY_PREVIEW_COUNT);
+  const hiddenCount = filtered.length - visible.length;
 
   return (
     <div>
@@ -250,15 +260,31 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
           {history.length === 0 ? "Приёмов пока нет" : "Ничего не найдено по заданным фильтрам"}
         </div>
       ) : (
-        <div className="relative space-y-0">
-          {/* Вертикальная линия хронологии */}
-          <div className="absolute left-5 top-2 bottom-2 w-px bg-slate-200" />
-          <div className="space-y-3 pl-12">
-            {filtered.map((a, i) => (
-              <HistoryCard key={a.id} appointment={a} index={i} />
-            ))}
+        <>
+          <div className="relative space-y-0">
+            {/* Вертикальная линия хронологии */}
+            <div className="absolute left-5 top-2 bottom-2 w-px bg-slate-200" />
+            <div className="space-y-3 pl-12">
+              {visible.map((a, i) => (
+                <HistoryCard key={a.id} appointment={a} index={i} />
+              ))}
+            </div>
           </div>
-        </div>
+          {hiddenCount > 0 && (
+            <div className="mt-3 pl-12">
+              <Button variant="secondary" onClick={() => setShowAll(true)}>
+                Показать всю историю (ещё {hiddenCount})
+              </Button>
+            </div>
+          )}
+          {showAll && filtered.length > HISTORY_PREVIEW_COUNT && (
+            <div className="mt-3 pl-12">
+              <Button variant="secondary" onClick={() => setShowAll(false)}>
+                Свернуть - показать только {HISTORY_PREVIEW_COUNT} последних
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
