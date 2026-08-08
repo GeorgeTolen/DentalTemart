@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   useAppointmentServices,
   useDoctors,
+  useRateAppointment,
   useSaveAppointmentServices,
   useServices,
   type AppointmentServiceInput,
@@ -39,9 +40,13 @@ export default function AppointmentBillModal({
   const { data: doctors = [] } = useDoctors();
   const { data: existing, isLoading } = useAppointmentServices(appointment.id);
   const save = useSaveAppointmentServices();
+  const rate = useRateAppointment();
 
   const [rows, setRows] = useState<Row[]>([]);
   const [picked, setPicked] = useState<number | "">("");
+  const [discount, setDiscount] = useState(0);
+  // После сохранения чека окно превращается в необязательную оценку посещения.
+  const [step, setStep] = useState<"bill" | "rate">("bill");
   const [error, setError] = useState("");
   // Уже загруженный чек подставляем один раз, дальше не трогаем - иначе правки
   // затирались бы фоновым обновлением запроса.
@@ -58,11 +63,14 @@ export default function AppointmentBillModal({
         doctor_id: i.doctor_id ?? appointment.doctor_id,
       }))
     );
+    setDiscount(existing.discount_percent);
     setLoaded(true);
   }, [existing, loaded, appointment.doctor_id]);
 
   const activeServices = services.filter((s) => s.is_active);
   const total = rows.reduce((sum, r) => sum + r.price * r.quantity, 0);
+  // Та же формула, что и на сервере: округление half-up.
+  const discounted = Math.round((total * (100 - discount)) / 100);
 
   function addFromCatalog(serviceId: number) {
     const s = services.find((x) => x.id === serviceId);
@@ -127,11 +135,73 @@ export default function AppointmentBillModal({
       doctor_id: r.doctor_id,
     }));
     try {
-      await save.mutateAsync({ appointmentId: appointment.id, items });
+      await save.mutateAsync({
+        appointmentId: appointment.id,
+        items,
+        discountPercent: discount,
+      });
+      // Не закрываем окно: даём поставить необязательную оценку посещения.
+      setStep("rate");
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  async function submitRating(value: number) {
+    setError("");
+    try {
+      await rate.mutateAsync({ appointmentId: appointment.id, rating: value });
       onClose();
     } catch (e) {
       setError(errorMessage(e));
     }
+  }
+
+  if (step === "rate") {
+    return (
+      <Modal
+        title={`Оценка посещения - ${appointment.patient_name}`}
+        onClose={onClose}
+        footer={
+          <Button variant="secondary" onClick={onClose} disabled={rate.isPending}>
+            Пропустить
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">
+            Чек на {formatMoney(discounted)} сохранён. Как пациент оценил
+            посещение? Оценка необязательна и попадёт в рейтинг врача{" "}
+            {appointment.doctor_name}.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                onClick={() => submitRating(n)}
+                disabled={rate.isPending}
+                className={`h-11 w-11 rounded-xl text-sm font-semibold transition ${
+                  appointment.rating === n
+                    ? "bg-brand text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-brand-bg hover:text-brand-dark"
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-between px-1 text-xs text-slate-400">
+            <span>1 - плохо</span>
+            <span>10 - отлично</span>
+          </div>
+          {error && (
+            <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+        </div>
+      </Modal>
+    );
   }
 
   return (
@@ -140,9 +210,33 @@ export default function AppointmentBillModal({
       onClose={onClose}
       footer={
         <>
-          <div className="mr-auto text-left">
-            <div className="text-xs text-slate-400">Итого</div>
-            <div className="text-xl font-bold text-ink">{formatMoney(total)}</div>
+          <div className="mr-auto flex items-end gap-4 text-left">
+            <div>
+              <div className="text-xs text-slate-400">Итого</div>
+              <div className="text-xl font-bold text-ink">
+                {formatMoney(total)}
+              </div>
+            </div>
+            {/* Ячейка скидки полупрозрачна, пока с ней не работают. */}
+            <div className="w-20 opacity-60 transition focus-within:opacity-100">
+              <div className="text-xs text-slate-400">Скидка, %</div>
+              <Input
+                inputMode="numeric"
+                maxLength={3}
+                value={String(discount)}
+                onChange={(e) =>
+                  setDiscount(
+                    Math.min(100, Number(e.target.value.replace(/\D/g, "")) || 0)
+                  )
+                }
+              />
+            </div>
+            <div>
+              <div className="text-xs text-slate-400">Со скидкой</div>
+              <div className="text-xl font-bold text-brand">
+                {formatMoney(discounted)}
+              </div>
+            </div>
           </div>
           <Button variant="secondary" onClick={onClose}>
             Отмена

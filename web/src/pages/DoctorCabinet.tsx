@@ -148,6 +148,16 @@ export default function DoctorCabinet() {
  * Карточка врача. Используется и в кабинете самого врача, и (в режиме только
  * чтения) на странице «Врачи», чтобы профиль везде выглядел одинаково.
  */
+// ratingsLabel returns the correct Russian plural of "оценка" with the number.
+export function ratingsLabel(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} оценка`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
+    return `${n} оценки`;
+  return `${n} оценок`;
+}
+
 export function DoctorProfileCard({
   doctor,
   editable,
@@ -184,6 +194,14 @@ export function DoctorProfileCard({
               style={{ backgroundColor: doctor.color }}
             />
             <span className="text-xl font-bold text-ink">{doctor.full_name}</span>
+            {doctor.rating_count > 0 && (
+              <span
+                className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700"
+                title={`Средняя оценка посещений: ${ratingsLabel(doctor.rating_count)}`}
+              >
+                ★ {doctor.rating_avg.toFixed(1)} из 10
+              </span>
+            )}
             {!doctor.is_active && (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
                 неактивен

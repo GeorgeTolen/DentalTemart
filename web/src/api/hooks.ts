@@ -389,11 +389,12 @@ export function useSaveAppointmentServices() {
     mutationFn: async (args: {
       appointmentId: number;
       items: AppointmentServiceInput[];
+      discountPercent: number;
     }) =>
       (
         await api.put<{ total: number }>(
           `/appointments/${args.appointmentId}/services`,
-          { items: args.items }
+          { items: args.items, discount_percent: args.discountPercent }
         )
       ).data,
     onSuccess: (_d, args) => {
@@ -401,6 +402,25 @@ export function useSaveAppointmentServices() {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["patient-appointments"] });
       qc.invalidateQueries({ queryKey: ["revenue"] });
+    },
+  });
+}
+
+// Оценка посещения (1-10) после расчёта; среднее висит на враче как рейтинг.
+export function useRateAppointment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { appointmentId: number; rating: number }) =>
+      (
+        await api.put(`/appointments/${args.appointmentId}/rating`, {
+          rating: args.rating,
+        })
+      ).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["doctors"] });
+      qc.invalidateQueries({ queryKey: ["doctor-me"] });
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["patient-appointments"] });
     },
   });
 }

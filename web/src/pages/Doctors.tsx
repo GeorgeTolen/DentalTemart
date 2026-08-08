@@ -5,7 +5,7 @@ import type { Doctor } from "../lib/types";
 import { Button, Modal } from "../components/ui";
 import DoctorModal from "../components/DoctorModal";
 import { Avatar } from "../components/Avatar";
-import { DoctorProfileCard, DoctorProfileModal } from "./DoctorCabinet";
+import { DoctorProfileCard, DoctorProfileModal, ratingsLabel } from "./DoctorCabinet";
 import { yearsLabel } from "../lib/datetime";
 import { useAuth } from "../auth/AuthContext";
 
@@ -71,6 +71,14 @@ export default function Doctors() {
                 {d.experience_years > 0 && (
                   <div className="text-sm text-slate-400">
                     Стаж: {d.experience_years} {yearsLabel(d.experience_years)}
+                  </div>
+                )}
+                {d.rating_count > 0 && (
+                  <div className="text-sm font-medium text-amber-500">
+                    ★ {d.rating_avg.toFixed(1)}{" "}
+                    <span className="font-normal text-slate-400">
+                      · {ratingsLabel(d.rating_count)}
+                    </span>
                   </div>
                 )}
                 {canManage && d.user_email && (

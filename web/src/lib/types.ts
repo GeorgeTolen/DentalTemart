@@ -84,6 +84,9 @@ export interface Doctor {
   skills: string;
   education: string;
   avatar_url: string | null;
+  // Средняя оценка посещений (1-10) и число оценок.
+  rating_avg: number;
+  rating_count: number;
 }
 
 export type PatientRecordType = "xray" | "allergy" | "scan3d";
@@ -154,7 +157,10 @@ export interface AppointmentService {
 
 export interface AppointmentServices {
   items: AppointmentService[];
+  // total - сумма позиций без скидки, total_discounted - к оплате.
   total: number;
+  discount_percent: number;
+  total_discounted: number;
 }
 
 // Страница общей базы пациентов: база растёт, выгружаем по 20.
@@ -214,9 +220,12 @@ export interface Appointment {
   diagnosis: string;
   description: string;
   next_visit_date: string | null;
-  // Стоимость оказанных услуг, тенге. null - приём чужой клиники: история
-  // пациента общая, деньги нет.
+  // Стоимость оказанных услуг (уже со скидкой), тенге. null - приём чужой
+  // клиники: история пациента общая, деньги нет.
   total: number | null;
+  discount_percent: number;
+  // Оценка посещения 1-10, null - не оценён.
+  rating: number | null;
   clinic_name: string;
   is_own: boolean;
 }
