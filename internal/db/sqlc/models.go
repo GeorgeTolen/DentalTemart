@@ -11,19 +11,21 @@ import (
 )
 
 type Appointment struct {
-	ID            int64       `json:"id"`
-	PatientID     int64       `json:"patient_id"`
-	DoctorID      int64       `json:"doctor_id"`
-	StartTime     time.Time   `json:"start_time"`
-	EndTime       time.Time   `json:"end_time"`
-	Status        string      `json:"status"`
-	Diagnosis     pgtype.Text `json:"diagnosis"`
-	Description   pgtype.Text `json:"description"`
-	NextVisitDate *time.Time  `json:"next_visit_date"`
-	CreatedBy     pgtype.Int8 `json:"created_by"`
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
-	ClinicID      int64       `json:"clinic_id"`
+	ID              int64       `json:"id"`
+	PatientID       int64       `json:"patient_id"`
+	DoctorID        int64       `json:"doctor_id"`
+	StartTime       time.Time   `json:"start_time"`
+	EndTime         time.Time   `json:"end_time"`
+	Status          string      `json:"status"`
+	Diagnosis       pgtype.Text `json:"diagnosis"`
+	Description     pgtype.Text `json:"description"`
+	NextVisitDate   *time.Time  `json:"next_visit_date"`
+	CreatedBy       pgtype.Int8 `json:"created_by"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	ClinicID        int64       `json:"clinic_id"`
+	DiscountPercent int16       `json:"discount_percent"`
+	Rating          pgtype.Int2 `json:"rating"`
 }
 
 type AppointmentService struct {

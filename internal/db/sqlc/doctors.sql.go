@@ -220,6 +220,26 @@ func (q *Queries) GetDoctorByUserID(ctx context.Context, arg GetDoctorByUserIDPa
 	return i, err
 }
 
+const getDoctorRating = `-- name: GetDoctorRating :one
+SELECT COALESCE(ROUND(AVG(rating)::numeric, 1), 0)::float8 AS rating_avg,
+       count(rating)::bigint                               AS rating_count
+FROM appointments
+WHERE doctor_id = $1 AND rating IS NOT NULL AND status <> 'cancelled'
+`
+
+type GetDoctorRatingRow struct {
+	RatingAvg   float64 `json:"rating_avg"`
+	RatingCount int64   `json:"rating_count"`
+}
+
+// Средняя оценка врача для его личного кабинета (/doctors/me).
+func (q *Queries) GetDoctorRating(ctx context.Context, doctorID int64) (GetDoctorRatingRow, error) {
+	row := q.db.QueryRow(ctx, getDoctorRating, doctorID)
+	var i GetDoctorRatingRow
+	err := row.Scan(&i.RatingAvg, &i.RatingCount)
+	return i, err
+}
+
 const listDoctorSchedules = `-- name: ListDoctorSchedules :many
 SELECT s.id, s.doctor_id, s.weekday, s.start_time, s.end_time FROM doctor_schedules s
 JOIN doctors d ON d.id = s.doctor_id
@@ -259,7 +279,15 @@ func (q *Queries) ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedul
 }
 
 const listDoctors = `-- name: ListDoctors :many
-SELECT d.id, d.full_name, d.specialization, d.phone, d.color, d.is_active, d.created_at, d.user_id, d.clinic_id, d.avatar_path, d.birth_date, d.experience_years, d.bio, d.skills, d.education, COALESCE(u.email, '') AS user_email
+SELECT d.id, d.full_name, d.specialization, d.phone, d.color, d.is_active, d.created_at, d.user_id, d.clinic_id, d.avatar_path, d.birth_date, d.experience_years, d.bio, d.skills, d.education, COALESCE(u.email, '') AS user_email,
+    (SELECT COALESCE(ROUND(AVG(a.rating)::numeric, 1), 0)::float8
+       FROM appointments a
+      WHERE a.doctor_id = d.id AND a.rating IS NOT NULL
+        AND a.status <> 'cancelled')           AS rating_avg,
+    (SELECT count(*)
+       FROM appointments a
+      WHERE a.doctor_id = d.id AND a.rating IS NOT NULL
+        AND a.status <> 'cancelled')::bigint   AS rating_count
 FROM doctors d
 LEFT JOIN users u ON u.id = d.user_id
 WHERE d.clinic_id = $1
@@ -283,9 +311,13 @@ type ListDoctorsRow struct {
 	Skills          pgtype.Text `json:"skills"`
 	Education       pgtype.Text `json:"education"`
 	UserEmail       string      `json:"user_email"`
+	RatingAvg       float64     `json:"rating_avg"`
+	RatingCount     int64       `json:"rating_count"`
 }
 
-// Includes the linked account's login (email) so the admin panel can show it.
+// Includes the linked account's login (email) so the admin panel can show it,
+// plus the doctor's average visit rating (1–10, from completed appointments;
+// appointments of a doctor are always in the doctor's clinic by construction).
 func (q *Queries) ListDoctors(ctx context.Context, clinicID int64) ([]ListDoctorsRow, error) {
 	rows, err := q.db.Query(ctx, listDoctors, clinicID)
 	if err != nil {
@@ -312,6 +344,8 @@ func (q *Queries) ListDoctors(ctx context.Context, clinicID int64) ([]ListDoctor
 			&i.Skills,
 			&i.Education,
 			&i.UserEmail,
+			&i.RatingAvg,
+			&i.RatingCount,
 		); err != nil {
 			return nil, err
 		}

@@ -188,7 +188,16 @@ func (h *Handlers) DeleteService(w http.ResponseWriter, r *http.Request) {
 
 type appointmentServicesResponse struct {
 	Items []appointmentServiceDTO `json:"items"`
-	Total int64                   `json:"total"`
+	// Total — сумма позиций без скидки; TotalDiscounted — к оплате.
+	Total           int64 `json:"total"`
+	DiscountPercent int32 `json:"discount_percent"`
+	TotalDiscounted int64 `json:"total_discounted"`
+}
+
+// applyDiscount returns the discounted amount, rounding half-up — the same
+// formula the SQL aggregates and the frontend use.
+func applyDiscount(total int64, percent int32) int64 {
+	return (total*int64(100-percent) + 50) / 100
 }
 
 // ListAppointmentServices returns the appointment's services and their total.
@@ -207,6 +216,16 @@ func (h *Handlers) ListAppointmentServices(w http.ResponseWriter, r *http.Reques
 		httpx.Fail(w, err)
 		return
 	}
+	// Скидка хранится на приёме; заодно чужой приём получает честный 404.
+	appt, err := h.q.GetAppointment(r.Context(), sqlc.GetAppointmentParams{ID: id, ClinicID: clinicID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
+			return
+		}
+		httpx.Fail(w, err)
+		return
+	}
 	rows, err := h.q.ListAppointmentServices(r.Context(), sqlc.ListAppointmentServicesParams{
 		AppointmentID: id,
 		ClinicID:      clinicID,
@@ -215,12 +234,16 @@ func (h *Handlers) ListAppointmentServices(w http.ResponseWriter, r *http.Reques
 		httpx.Fail(w, err)
 		return
 	}
-	resp := appointmentServicesResponse{Items: make([]appointmentServiceDTO, 0, len(rows))}
+	resp := appointmentServicesResponse{
+		Items:           make([]appointmentServiceDTO, 0, len(rows)),
+		DiscountPercent: int32(appt.DiscountPercent),
+	}
 	for _, row := range rows {
 		item := toAppointmentServiceDTO(row)
 		resp.Total += item.Sum
 		resp.Items = append(resp.Items, item)
 	}
+	resp.TotalDiscounted = applyDiscount(resp.Total, resp.DiscountPercent)
 	httpx.JSON(w, http.StatusOK, resp)
 }
 
@@ -234,7 +257,8 @@ type appointmentServiceItem struct {
 }
 
 type putAppointmentServicesRequest struct {
-	Items []appointmentServiceItem `json:"items"`
+	Items           []appointmentServiceItem `json:"items"`
+	DiscountPercent int32                    `json:"discount_percent"`
 }
 
 // PutAppointmentServices replaces the appointment's whole service list in one
@@ -270,6 +294,10 @@ func (h *Handlers) PutAppointmentServices(w http.ResponseWriter, r *http.Request
 	var req putAppointmentServicesRequest
 	if err := httpx.Decode(r, &req); err != nil {
 		httpx.Fail(w, err)
+		return
+	}
+	if req.DiscountPercent < 0 || req.DiscountPercent > 100 {
+		httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "скидка должна быть от 0 до 100%"))
 		return
 	}
 	for i, item := range req.Items {
@@ -324,11 +352,25 @@ func (h *Handlers) PutAppointmentServices(w http.ResponseWriter, r *http.Request
 		total += item.Price * int64(item.Quantity)
 	}
 
+	if err := qtx.SetAppointmentDiscount(r.Context(), sqlc.SetAppointmentDiscountParams{
+		ID:              id,
+		DiscountPercent: int16(req.DiscountPercent),
+		ClinicID:        clinicID,
+	}); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+
 	if err := tx.Commit(r.Context()); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
+	discounted := applyDiscount(total, req.DiscountPercent)
+	msg := "Пробил услуги (" + itoa(int64(len(req.Items))) + " поз., " + itoa(discounted) + " ₸"
+	if req.DiscountPercent > 0 {
+		msg += ", скидка " + itoa(int64(req.DiscountPercent)) + "%"
+	}
 	h.logEvent(r.Context(), clinicID, eventAppointmentBill,
-		"Пробил услуги ("+itoa(int64(len(req.Items)))+" поз., "+itoa(total)+" ₸) в записи "+h.appointmentLabel(r, id, clinicID))
-	httpx.JSON(w, http.StatusOK, map[string]int64{"total": total})
+		msg+") в записи "+h.appointmentLabel(r, id, clinicID))
+	httpx.JSON(w, http.StatusOK, map[string]int64{"total": discounted})
 }

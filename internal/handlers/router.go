@@ -90,6 +90,7 @@ func (h *Handlers) Router() http.Handler {
 					r.Delete("/{id}", h.DeleteAppointment)
 					r.Get("/{id}/services", h.ListAppointmentServices)
 					r.Put("/{id}/services", h.PutAppointmentServices)
+					r.Put("/{id}/rating", h.RateAppointment)
 				})
 
 				// Прайс клиники и финансы (владелец и менеджер).

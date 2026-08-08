@@ -1,6 +1,10 @@
 -- Пациенты общие для платформы, поэтому приём и карточка пациента могут
 -- принадлежать разным клиникам — join по patient_id без сверки clinic_id.
 -- Врач же всегда из клиники приёма.
+--
+-- total везде отдаётся уже со скидкой приёма: умножаем каждую строку чека на
+-- (100 - discount_percent) и делим один раз с округлением half-up (+50)/100 —
+-- целочисленно, совпадает с Math.round на фронте.
 
 -- name: ListAppointmentsInRange :many
 SELECT
@@ -9,8 +13,9 @@ SELECT
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color,
-    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
-       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
+    (((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)
+      * (100 - a.discount_percent) + 50) / 100)::bigint AS total
 FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
@@ -32,8 +37,9 @@ SELECT
     cl.name     AS clinic_name,
     (a.clinic_id = sqlc.arg('viewer_clinic_id')) AS is_own,
     CASE WHEN a.clinic_id = sqlc.arg('viewer_clinic_id') THEN (
-        SELECT COALESCE(SUM(s.price * s.quantity), 0)
-          FROM appointment_services s WHERE s.appointment_id = a.id
+        ((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+            FROM appointment_services s WHERE s.appointment_id = a.id)
+         * (100 - a.discount_percent) + 50) / 100
     ) ELSE 0 END::bigint AS total
 FROM appointments a
 JOIN patients p  ON p.id = a.patient_id
@@ -49,8 +55,9 @@ SELECT
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color,
-    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
-       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
+    (((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)
+      * (100 - a.discount_percent) + 50) / 100)::bigint AS total
 FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
@@ -85,6 +92,17 @@ SET patient_id = $2,
 WHERE id = $1 AND clinic_id = $10
 RETURNING *;
 
+-- name: SetAppointmentDiscount :exec
+UPDATE appointments
+SET discount_percent = $2, updated_at = now()
+WHERE id = $1 AND clinic_id = $3;
+
+-- name: SetAppointmentRating :exec
+-- Оценка посещения 1–10; повторный вызов перезаписывает её.
+UPDATE appointments
+SET rating = $2, updated_at = now()
+WHERE id = $1 AND clinic_id = $3;
+
 -- name: DeleteAppointment :exec
 DELETE FROM appointments WHERE id = $1 AND clinic_id = $2;
 
@@ -108,8 +126,9 @@ SELECT
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color,
-    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
-       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
+    (((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)
+      * (100 - a.discount_percent) + 50) / 100)::bigint AS total
 FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id

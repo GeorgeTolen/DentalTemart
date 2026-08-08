@@ -240,7 +240,7 @@ const revenueByDoctor = `-- name: RevenueByDoctor :many
 SELECT
     COALESCE(dp.full_name, da.full_name, '')        AS doctor_name,
     COALESCE(SUM(s.quantity), 0)::bigint            AS services_count,
-    COALESCE(SUM(s.price * s.quantity), 0)::bigint  AS revenue
+    ((COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) + 50) / 100)::bigint AS revenue
 FROM appointment_services s
 JOIN appointments a ON a.id = s.appointment_id
 LEFT JOIN doctors dp ON dp.id = s.doctor_id
@@ -291,7 +291,7 @@ func (q *Queries) RevenueByDoctor(ctx context.Context, arg RevenueByDoctorParams
 const revenueByMonth = `-- name: RevenueByMonth :many
 SELECT
     to_char(date_trunc('month', a.start_time), 'YYYY-MM')  AS month,
-    COALESCE(SUM(s.price * s.quantity), 0)::bigint         AS revenue,
+    ((COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) + 50) / 100)::bigint AS revenue,
     COALESCE(SUM(s.quantity), 0)::bigint                   AS services_count
 FROM appointment_services s
 JOIN appointments a ON a.id = s.appointment_id
@@ -340,7 +340,7 @@ const revenueByService = `-- name: RevenueByService :many
 SELECT
     s.name                                          AS name,
     COALESCE(SUM(s.quantity), 0)::bigint            AS services_count,
-    COALESCE(SUM(s.price * s.quantity), 0)::bigint  AS revenue
+    ((COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) + 50) / 100)::bigint AS revenue
 FROM appointment_services s
 JOIN appointments a ON a.id = s.appointment_id
 WHERE s.clinic_id = $1
@@ -404,7 +404,7 @@ func (q *Queries) SeedClinicServices(ctx context.Context, clinicID int64) error 
 }
 
 const sumPlatformRevenue = `-- name: SumPlatformRevenue :one
-SELECT COALESCE(SUM(s.price * s.quantity), 0)::bigint
+SELECT ((COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) + 50) / 100)::bigint
 FROM appointment_services s
 JOIN appointments a ON a.id = s.appointment_id
 WHERE a.status <> 'cancelled'
@@ -421,7 +421,7 @@ func (q *Queries) SumPlatformRevenue(ctx context.Context) (int64, error) {
 const sumRevenueInRange = `-- name: SumRevenueInRange :one
 
 SELECT
-    COALESCE(SUM(s.price * s.quantity), 0)::bigint AS revenue,
+    ((COALESCE(SUM(s.price * s.quantity * (100 - a.discount_percent)), 0) + 50) / 100)::bigint AS revenue,
     COALESCE(SUM(s.quantity), 0)::bigint           AS services_count,
     count(DISTINCT s.appointment_id)::bigint       AS appointments_count
 FROM appointment_services s
@@ -445,7 +445,10 @@ type SumRevenueInRangeRow struct {
 }
 
 // --- Статистика выручки ------------------------------------------------------
-// Начислено за период: сумма позиций приёмов, кроме отменённых.
+// Начислено за период: сумма позиций приёмов, кроме отменённых. Скидка приёма
+// применяется к каждой позиции: сумма умножается на (100 - discount_percent) и
+// делится один раз на группу с округлением half-up ((+50)/100). Из-за одного
+// округления на группу разные отчёты могут расходиться на единицы тенге.
 func (q *Queries) SumRevenueInRange(ctx context.Context, arg SumRevenueInRangeParams) (SumRevenueInRangeRow, error) {
 	row := q.db.QueryRow(ctx, sumRevenueInRange, arg.ClinicID, arg.From, arg.To)
 	var i SumRevenueInRangeRow

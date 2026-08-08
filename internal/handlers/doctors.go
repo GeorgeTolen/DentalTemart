@@ -354,8 +354,14 @@ func (h *Handlers) GetMyDoctorProfile(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	h.logEvent(r.Context(), clinicID, eventDoctorUpdate, "Изменил карточку врача: "+d.FullName)
-	httpx.JSON(w, http.StatusOK, toDoctorDTO(d))
+	dto := toDoctorDTO(d)
+	// Рейтинг в общем виде считается только в списке врачей; для кабинета
+	// добираем его отдельным запросом.
+	if rate, err := h.q.GetDoctorRating(r.Context(), d.ID); err == nil {
+		dto.RatingAvg = rate.RatingAvg
+		dto.RatingCount = rate.RatingCount
+	}
+	httpx.JSON(w, http.StatusOK, dto)
 }
 
 type doctorProfileRequest struct {

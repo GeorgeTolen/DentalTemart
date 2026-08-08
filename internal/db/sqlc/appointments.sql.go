@@ -85,7 +85,7 @@ INSERT INTO appointments (
     clinic_id, patient_id, doctor_id, start_time, end_time, status,
     diagnosis, description, next_visit_date, created_by
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, patient_id, doctor_id, start_time, end_time, status, diagnosis, description, next_visit_date, created_by, created_at, updated_at, clinic_id
+RETURNING id, patient_id, doctor_id, start_time, end_time, status, diagnosis, description, next_visit_date, created_by, created_at, updated_at, clinic_id, discount_percent, rating
 `
 
 type CreateAppointmentParams struct {
@@ -129,6 +129,8 @@ func (q *Queries) CreateAppointment(ctx context.Context, arg CreateAppointmentPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ClinicID,
+		&i.DiscountPercent,
+		&i.Rating,
 	)
 	return i, err
 }
@@ -158,13 +160,14 @@ func (q *Queries) DeleteArchivedAppointments(ctx context.Context, clinicID int64
 
 const getAppointment = `-- name: GetAppointment :one
 SELECT
-    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id,
+    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id, a.discount_percent, a.rating,
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color,
-    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
-       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
+    (((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)
+      * (100 - a.discount_percent) + 50) / 100)::bigint AS total
 FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
@@ -177,24 +180,26 @@ type GetAppointmentParams struct {
 }
 
 type GetAppointmentRow struct {
-	ID            int64       `json:"id"`
-	PatientID     int64       `json:"patient_id"`
-	DoctorID      int64       `json:"doctor_id"`
-	StartTime     time.Time   `json:"start_time"`
-	EndTime       time.Time   `json:"end_time"`
-	Status        string      `json:"status"`
-	Diagnosis     pgtype.Text `json:"diagnosis"`
-	Description   pgtype.Text `json:"description"`
-	NextVisitDate *time.Time  `json:"next_visit_date"`
-	CreatedBy     pgtype.Int8 `json:"created_by"`
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
-	ClinicID      int64       `json:"clinic_id"`
-	PatientName   string      `json:"patient_name"`
-	PatientPhone  pgtype.Text `json:"patient_phone"`
-	DoctorName    string      `json:"doctor_name"`
-	DoctorColor   string      `json:"doctor_color"`
-	Total         int64       `json:"total"`
+	ID              int64       `json:"id"`
+	PatientID       int64       `json:"patient_id"`
+	DoctorID        int64       `json:"doctor_id"`
+	StartTime       time.Time   `json:"start_time"`
+	EndTime         time.Time   `json:"end_time"`
+	Status          string      `json:"status"`
+	Diagnosis       pgtype.Text `json:"diagnosis"`
+	Description     pgtype.Text `json:"description"`
+	NextVisitDate   *time.Time  `json:"next_visit_date"`
+	CreatedBy       pgtype.Int8 `json:"created_by"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	ClinicID        int64       `json:"clinic_id"`
+	DiscountPercent int16       `json:"discount_percent"`
+	Rating          pgtype.Int2 `json:"rating"`
+	PatientName     string      `json:"patient_name"`
+	PatientPhone    pgtype.Text `json:"patient_phone"`
+	DoctorName      string      `json:"doctor_name"`
+	DoctorColor     string      `json:"doctor_color"`
+	Total           int64       `json:"total"`
 }
 
 func (q *Queries) GetAppointment(ctx context.Context, arg GetAppointmentParams) (GetAppointmentRow, error) {
@@ -214,6 +219,8 @@ func (q *Queries) GetAppointment(ctx context.Context, arg GetAppointmentParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ClinicID,
+		&i.DiscountPercent,
+		&i.Rating,
 		&i.PatientName,
 		&i.PatientPhone,
 		&i.DoctorName,
@@ -225,7 +232,7 @@ func (q *Queries) GetAppointment(ctx context.Context, arg GetAppointmentParams) 
 
 const listAppointmentsByPatient = `-- name: ListAppointmentsByPatient :many
 SELECT
-    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id,
+    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id, a.discount_percent, a.rating,
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
@@ -233,8 +240,9 @@ SELECT
     cl.name     AS clinic_name,
     (a.clinic_id = $1) AS is_own,
     CASE WHEN a.clinic_id = $1 THEN (
-        SELECT COALESCE(SUM(s.price * s.quantity), 0)
-          FROM appointment_services s WHERE s.appointment_id = a.id
+        ((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+            FROM appointment_services s WHERE s.appointment_id = a.id)
+         * (100 - a.discount_percent) + 50) / 100
     ) ELSE 0 END::bigint AS total
 FROM appointments a
 JOIN patients p  ON p.id = a.patient_id
@@ -250,26 +258,28 @@ type ListAppointmentsByPatientParams struct {
 }
 
 type ListAppointmentsByPatientRow struct {
-	ID            int64       `json:"id"`
-	PatientID     int64       `json:"patient_id"`
-	DoctorID      int64       `json:"doctor_id"`
-	StartTime     time.Time   `json:"start_time"`
-	EndTime       time.Time   `json:"end_time"`
-	Status        string      `json:"status"`
-	Diagnosis     pgtype.Text `json:"diagnosis"`
-	Description   pgtype.Text `json:"description"`
-	NextVisitDate *time.Time  `json:"next_visit_date"`
-	CreatedBy     pgtype.Int8 `json:"created_by"`
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
-	ClinicID      int64       `json:"clinic_id"`
-	PatientName   string      `json:"patient_name"`
-	PatientPhone  pgtype.Text `json:"patient_phone"`
-	DoctorName    string      `json:"doctor_name"`
-	DoctorColor   string      `json:"doctor_color"`
-	ClinicName    pgtype.Text `json:"clinic_name"`
-	IsOwn         bool        `json:"is_own"`
-	Total         int64       `json:"total"`
+	ID              int64       `json:"id"`
+	PatientID       int64       `json:"patient_id"`
+	DoctorID        int64       `json:"doctor_id"`
+	StartTime       time.Time   `json:"start_time"`
+	EndTime         time.Time   `json:"end_time"`
+	Status          string      `json:"status"`
+	Diagnosis       pgtype.Text `json:"diagnosis"`
+	Description     pgtype.Text `json:"description"`
+	NextVisitDate   *time.Time  `json:"next_visit_date"`
+	CreatedBy       pgtype.Int8 `json:"created_by"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	ClinicID        int64       `json:"clinic_id"`
+	DiscountPercent int16       `json:"discount_percent"`
+	Rating          pgtype.Int2 `json:"rating"`
+	PatientName     string      `json:"patient_name"`
+	PatientPhone    pgtype.Text `json:"patient_phone"`
+	DoctorName      string      `json:"doctor_name"`
+	DoctorColor     string      `json:"doctor_color"`
+	ClinicName      pgtype.Text `json:"clinic_name"`
+	IsOwn           bool        `json:"is_own"`
+	Total           int64       `json:"total"`
 }
 
 // Вся история пациента по всем клиникам платформы. Суммы — только по приёмам
@@ -297,6 +307,8 @@ func (q *Queries) ListAppointmentsByPatient(ctx context.Context, arg ListAppoint
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ClinicID,
+			&i.DiscountPercent,
+			&i.Rating,
 			&i.PatientName,
 			&i.PatientPhone,
 			&i.DoctorName,
@@ -317,13 +329,14 @@ func (q *Queries) ListAppointmentsByPatient(ctx context.Context, arg ListAppoint
 
 const listAppointmentsByStatus = `-- name: ListAppointmentsByStatus :many
 SELECT
-    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id,
+    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id, a.discount_percent, a.rating,
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color,
-    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
-       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
+    (((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)
+      * (100 - a.discount_percent) + 50) / 100)::bigint AS total
 FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
@@ -338,24 +351,26 @@ type ListAppointmentsByStatusParams struct {
 }
 
 type ListAppointmentsByStatusRow struct {
-	ID            int64       `json:"id"`
-	PatientID     int64       `json:"patient_id"`
-	DoctorID      int64       `json:"doctor_id"`
-	StartTime     time.Time   `json:"start_time"`
-	EndTime       time.Time   `json:"end_time"`
-	Status        string      `json:"status"`
-	Diagnosis     pgtype.Text `json:"diagnosis"`
-	Description   pgtype.Text `json:"description"`
-	NextVisitDate *time.Time  `json:"next_visit_date"`
-	CreatedBy     pgtype.Int8 `json:"created_by"`
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
-	ClinicID      int64       `json:"clinic_id"`
-	PatientName   string      `json:"patient_name"`
-	PatientPhone  pgtype.Text `json:"patient_phone"`
-	DoctorName    string      `json:"doctor_name"`
-	DoctorColor   string      `json:"doctor_color"`
-	Total         int64       `json:"total"`
+	ID              int64       `json:"id"`
+	PatientID       int64       `json:"patient_id"`
+	DoctorID        int64       `json:"doctor_id"`
+	StartTime       time.Time   `json:"start_time"`
+	EndTime         time.Time   `json:"end_time"`
+	Status          string      `json:"status"`
+	Diagnosis       pgtype.Text `json:"diagnosis"`
+	Description     pgtype.Text `json:"description"`
+	NextVisitDate   *time.Time  `json:"next_visit_date"`
+	CreatedBy       pgtype.Int8 `json:"created_by"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	ClinicID        int64       `json:"clinic_id"`
+	DiscountPercent int16       `json:"discount_percent"`
+	Rating          pgtype.Int2 `json:"rating"`
+	PatientName     string      `json:"patient_name"`
+	PatientPhone    pgtype.Text `json:"patient_phone"`
+	DoctorName      string      `json:"doctor_name"`
+	DoctorColor     string      `json:"doctor_color"`
+	Total           int64       `json:"total"`
 }
 
 func (q *Queries) ListAppointmentsByStatus(ctx context.Context, arg ListAppointmentsByStatusParams) ([]ListAppointmentsByStatusRow, error) {
@@ -381,6 +396,8 @@ func (q *Queries) ListAppointmentsByStatus(ctx context.Context, arg ListAppointm
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ClinicID,
+			&i.DiscountPercent,
+			&i.Rating,
 			&i.PatientName,
 			&i.PatientPhone,
 			&i.DoctorName,
@@ -400,13 +417,14 @@ func (q *Queries) ListAppointmentsByStatus(ctx context.Context, arg ListAppointm
 const listAppointmentsInRange = `-- name: ListAppointmentsInRange :many
 
 SELECT
-    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id,
+    a.id, a.patient_id, a.doctor_id, a.start_time, a.end_time, a.status, a.diagnosis, a.description, a.next_visit_date, a.created_by, a.created_at, a.updated_at, a.clinic_id, a.discount_percent, a.rating,
     p.full_name AS patient_name,
     p.phone     AS patient_phone,
     d.full_name AS doctor_name,
     d.color     AS doctor_color,
-    (SELECT COALESCE(SUM(s.price * s.quantity), 0)
-       FROM appointment_services s WHERE s.appointment_id = a.id)::bigint AS total
+    (((SELECT COALESCE(SUM(s.price * s.quantity), 0)
+       FROM appointment_services s WHERE s.appointment_id = a.id)
+      * (100 - a.discount_percent) + 50) / 100)::bigint AS total
 FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
@@ -425,29 +443,35 @@ type ListAppointmentsInRangeParams struct {
 }
 
 type ListAppointmentsInRangeRow struct {
-	ID            int64       `json:"id"`
-	PatientID     int64       `json:"patient_id"`
-	DoctorID      int64       `json:"doctor_id"`
-	StartTime     time.Time   `json:"start_time"`
-	EndTime       time.Time   `json:"end_time"`
-	Status        string      `json:"status"`
-	Diagnosis     pgtype.Text `json:"diagnosis"`
-	Description   pgtype.Text `json:"description"`
-	NextVisitDate *time.Time  `json:"next_visit_date"`
-	CreatedBy     pgtype.Int8 `json:"created_by"`
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
-	ClinicID      int64       `json:"clinic_id"`
-	PatientName   string      `json:"patient_name"`
-	PatientPhone  pgtype.Text `json:"patient_phone"`
-	DoctorName    string      `json:"doctor_name"`
-	DoctorColor   string      `json:"doctor_color"`
-	Total         int64       `json:"total"`
+	ID              int64       `json:"id"`
+	PatientID       int64       `json:"patient_id"`
+	DoctorID        int64       `json:"doctor_id"`
+	StartTime       time.Time   `json:"start_time"`
+	EndTime         time.Time   `json:"end_time"`
+	Status          string      `json:"status"`
+	Diagnosis       pgtype.Text `json:"diagnosis"`
+	Description     pgtype.Text `json:"description"`
+	NextVisitDate   *time.Time  `json:"next_visit_date"`
+	CreatedBy       pgtype.Int8 `json:"created_by"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	ClinicID        int64       `json:"clinic_id"`
+	DiscountPercent int16       `json:"discount_percent"`
+	Rating          pgtype.Int2 `json:"rating"`
+	PatientName     string      `json:"patient_name"`
+	PatientPhone    pgtype.Text `json:"patient_phone"`
+	DoctorName      string      `json:"doctor_name"`
+	DoctorColor     string      `json:"doctor_color"`
+	Total           int64       `json:"total"`
 }
 
 // Пациенты общие для платформы, поэтому приём и карточка пациента могут
 // принадлежать разным клиникам — join по patient_id без сверки clinic_id.
 // Врач же всегда из клиники приёма.
+//
+// total везде отдаётся уже со скидкой приёма: умножаем каждую строку чека на
+// (100 - discount_percent) и делим один раз с округлением half-up (+50)/100 —
+// целочисленно, совпадает с Math.round на фронте.
 func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointmentsInRangeParams) ([]ListAppointmentsInRangeRow, error) {
 	rows, err := q.db.Query(ctx, listAppointmentsInRange,
 		arg.ClinicID,
@@ -476,6 +500,8 @@ func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointme
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ClinicID,
+			&i.DiscountPercent,
+			&i.Rating,
 			&i.PatientName,
 			&i.PatientPhone,
 			&i.DoctorName,
@@ -492,6 +518,41 @@ func (q *Queries) ListAppointmentsInRange(ctx context.Context, arg ListAppointme
 	return items, nil
 }
 
+const setAppointmentDiscount = `-- name: SetAppointmentDiscount :exec
+UPDATE appointments
+SET discount_percent = $2, updated_at = now()
+WHERE id = $1 AND clinic_id = $3
+`
+
+type SetAppointmentDiscountParams struct {
+	ID              int64 `json:"id"`
+	DiscountPercent int16 `json:"discount_percent"`
+	ClinicID        int64 `json:"clinic_id"`
+}
+
+func (q *Queries) SetAppointmentDiscount(ctx context.Context, arg SetAppointmentDiscountParams) error {
+	_, err := q.db.Exec(ctx, setAppointmentDiscount, arg.ID, arg.DiscountPercent, arg.ClinicID)
+	return err
+}
+
+const setAppointmentRating = `-- name: SetAppointmentRating :exec
+UPDATE appointments
+SET rating = $2, updated_at = now()
+WHERE id = $1 AND clinic_id = $3
+`
+
+type SetAppointmentRatingParams struct {
+	ID       int64       `json:"id"`
+	Rating   pgtype.Int2 `json:"rating"`
+	ClinicID int64       `json:"clinic_id"`
+}
+
+// Оценка посещения 1–10; повторный вызов перезаписывает её.
+func (q *Queries) SetAppointmentRating(ctx context.Context, arg SetAppointmentRatingParams) error {
+	_, err := q.db.Exec(ctx, setAppointmentRating, arg.ID, arg.Rating, arg.ClinicID)
+	return err
+}
+
 const updateAppointment = `-- name: UpdateAppointment :one
 UPDATE appointments
 SET patient_id = $2,
@@ -504,7 +565,7 @@ SET patient_id = $2,
     next_visit_date = $9,
     updated_at = now()
 WHERE id = $1 AND clinic_id = $10
-RETURNING id, patient_id, doctor_id, start_time, end_time, status, diagnosis, description, next_visit_date, created_by, created_at, updated_at, clinic_id
+RETURNING id, patient_id, doctor_id, start_time, end_time, status, diagnosis, description, next_visit_date, created_by, created_at, updated_at, clinic_id, discount_percent, rating
 `
 
 type UpdateAppointmentParams struct {
@@ -548,6 +609,8 @@ func (q *Queries) UpdateAppointment(ctx context.Context, arg UpdateAppointmentPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ClinicID,
+		&i.DiscountPercent,
+		&i.Rating,
 	)
 	return i, err
 }

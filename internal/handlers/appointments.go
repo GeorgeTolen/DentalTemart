@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"temart/internal/db/sqlc"
 	"temart/internal/httpx"
@@ -274,6 +275,59 @@ func (h *Handlers) DeleteAppointment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.logEvent(r.Context(), clinicID, eventAppointmentDelete, "Удалил запись "+label)
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type rateAppointmentRequest struct {
+	Rating int32 `json:"rating"`
+}
+
+// RateAppointment stores the visit's 1–10 rating. Оценку собирает
+// администратор после расчёта; повторный вызов перезаписывает её. Среднее по
+// оценкам показывается на карточке врача.
+func (h *Handlers) RateAppointment(w http.ResponseWriter, r *http.Request) {
+	if err := h.requireManager(r.Context()); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	clinicID, err := h.clinicID(r.Context())
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	id, err := idParam(r)
+	if err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	var req rateAppointmentRequest
+	if err := httpx.Decode(r, &req); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	if req.Rating < 1 || req.Rating > 10 {
+		httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "оценка должна быть от 1 до 10"))
+		return
+	}
+	// Чужой приём не оценить: и проверка существования, и клиника в одном месте.
+	if _, err := h.q.GetAppointment(r.Context(), sqlc.GetAppointmentParams{ID: id, ClinicID: clinicID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "запись не найдена"))
+			return
+		}
+		httpx.Fail(w, err)
+		return
+	}
+	if err := h.q.SetAppointmentRating(r.Context(), sqlc.SetAppointmentRatingParams{
+		ID:       id,
+		Rating:   pgtype.Int2{Int16: int16(req.Rating), Valid: true},
+		ClinicID: clinicID,
+	}); err != nil {
+		httpx.Fail(w, err)
+		return
+	}
+	h.logEvent(r.Context(), clinicID, eventAppointmentRate,
+		"Оценил приём на "+itoa(int64(req.Rating))+"/10 в записи "+h.appointmentLabel(r, id, clinicID))
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

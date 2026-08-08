@@ -1,10 +1,27 @@
 -- name: ListDoctors :many
--- Includes the linked account's login (email) so the admin panel can show it.
-SELECT d.*, COALESCE(u.email, '') AS user_email
+-- Includes the linked account's login (email) so the admin panel can show it,
+-- plus the doctor's average visit rating (1–10, from completed appointments;
+-- appointments of a doctor are always in the doctor's clinic by construction).
+SELECT d.*, COALESCE(u.email, '') AS user_email,
+    (SELECT COALESCE(ROUND(AVG(a.rating)::numeric, 1), 0)::float8
+       FROM appointments a
+      WHERE a.doctor_id = d.id AND a.rating IS NOT NULL
+        AND a.status <> 'cancelled')           AS rating_avg,
+    (SELECT count(*)
+       FROM appointments a
+      WHERE a.doctor_id = d.id AND a.rating IS NOT NULL
+        AND a.status <> 'cancelled')::bigint   AS rating_count
 FROM doctors d
 LEFT JOIN users u ON u.id = d.user_id
 WHERE d.clinic_id = $1
 ORDER BY d.full_name;
+
+-- name: GetDoctorRating :one
+-- Средняя оценка врача для его личного кабинета (/doctors/me).
+SELECT COALESCE(ROUND(AVG(rating)::numeric, 1), 0)::float8 AS rating_avg,
+       count(rating)::bigint                               AS rating_count
+FROM appointments
+WHERE doctor_id = $1 AND rating IS NOT NULL AND status <> 'cancelled';
 
 -- name: DoctorColorTaken :one
 -- Whether another doctor of the clinic already uses this calendar colour

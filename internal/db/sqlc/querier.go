@@ -59,6 +59,8 @@ type Querier interface {
 	// Clinic-scoped so a user can only ever resolve to a doctor profile in their
 	// own clinic (prevents cross-clinic linkage from leaking a foreign profile).
 	GetDoctorByUserID(ctx context.Context, arg GetDoctorByUserIDParams) (Doctor, error)
+	// Средняя оценка врача для его личного кабинета (/doctors/me).
+	GetDoctorRating(ctx context.Context, doctorID int64) (GetDoctorRatingRow, error)
 	GetPatient(ctx context.Context, id int64) (GetPatientRow, error)
 	// Дедупликация по ИИН в масштабах платформы: одна и та же карточка не должна
 	// заводиться в каждой клинике заново.
@@ -80,11 +82,17 @@ type Querier interface {
 	// Пациенты общие для платформы, поэтому приём и карточка пациента могут
 	// принадлежать разным клиникам — join по patient_id без сверки clinic_id.
 	// Врач же всегда из клиники приёма.
+	//
+	// total везде отдаётся уже со скидкой приёма: умножаем каждую строку чека на
+	// (100 - discount_percent) и делим один раз с округлением half-up (+50)/100 —
+	// целочисленно, совпадает с Math.round на фронте.
 	ListAppointmentsInRange(ctx context.Context, arg ListAppointmentsInRangeParams) ([]ListAppointmentsInRangeRow, error)
 	// All clinics with quick aggregate counts, for the platform admin panel.
 	ListClinics(ctx context.Context) ([]ListClinicsRow, error)
 	ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedulesParams) ([]DoctorSchedule, error)
-	// Includes the linked account's login (email) so the admin panel can show it.
+	// Includes the linked account's login (email) so the admin panel can show it,
+	// plus the doctor's average visit rating (1–10, from completed appointments;
+	// appointments of a doctor are always in the doctor's clinic by construction).
 	ListDoctors(ctx context.Context, clinicID int64) ([]ListDoctorsRow, error)
 	// Курсор по id, а не OFFSET: события пишутся непрерывно, и при листании
 	// по смещению уже показанные строки уезжали бы вниз и дублировались.
@@ -121,12 +129,18 @@ type Querier interface {
 	RevenueByService(ctx context.Context, arg RevenueByServiceParams) ([]RevenueByServiceRow, error)
 	// Базовый прайс новой клиники — чтобы кассой можно было пользоваться сразу.
 	SeedClinicServices(ctx context.Context, clinicID int64) error
+	SetAppointmentDiscount(ctx context.Context, arg SetAppointmentDiscountParams) error
+	// Оценка посещения 1–10; повторный вызов перезаписывает её.
+	SetAppointmentRating(ctx context.Context, arg SetAppointmentRatingParams) error
 	// Срок доступа: NULL — бессрочно, прошлое — заморожена.
 	SetClinicAccess(ctx context.Context, arg SetClinicAccessParams) (Clinic, error)
 	// Сводно по всем клиникам — для панели платформы.
 	SumPlatformRevenue(ctx context.Context) (int64, error)
 	// --- Статистика выручки ------------------------------------------------------
-	// Начислено за период: сумма позиций приёмов, кроме отменённых.
+	// Начислено за период: сумма позиций приёмов, кроме отменённых. Скидка приёма
+	// применяется к каждой позиции: сумма умножается на (100 - discount_percent) и
+	// делится один раз на группу с округлением half-up ((+50)/100). Из-за одного
+	// округления на группу разные отчёты могут расходиться на единицы тенге.
 	SumRevenueInRange(ctx context.Context, arg SumRevenueInRangeParams) (SumRevenueInRangeRow, error)
 	UpdateAppointment(ctx context.Context, arg UpdateAppointmentParams) (Appointment, error)
 	UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Clinic, error)

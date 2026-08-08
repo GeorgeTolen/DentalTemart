@@ -51,6 +51,11 @@ type doctorDTO struct {
 	Skills          string  `json:"skills"`
 	Education       string  `json:"education"`
 	AvatarURL       *string `json:"avatar_url"`
+	// Средняя оценка посещений (1–10) и число оценок. Заполняются в списке
+	// врачей и в /doctors/me; в ответах мутаций остаются нулевыми — фронт
+	// перечитывает список.
+	RatingAvg   float64 `json:"rating_avg"`
+	RatingCount int64   `json:"rating_count"`
 }
 
 func toDoctorDTO(d sqlc.Doctor) doctorDTO {
@@ -83,6 +88,8 @@ func fromDoctorListRow(d sqlc.ListDoctorsRow) doctorDTO {
 		Skills: d.Skills, Education: d.Education, AvatarPath: d.AvatarPath,
 	})
 	dto.UserEmail = d.UserEmail
+	dto.RatingAvg = d.RatingAvg
+	dto.RatingCount = d.RatingCount
 	return dto
 }
 
@@ -223,9 +230,12 @@ type appointmentDTO struct {
 	Diagnosis     string    `json:"diagnosis"`
 	Description   string    `json:"description"`
 	NextVisitDate *string   `json:"next_visit_date"`
-	// Total — стоимость оказанных услуг в тенге. nil означает «не ваша клиника»:
-	// история пациента общая, а деньги — нет.
-	Total *int64 `json:"total"`
+	// Total — стоимость оказанных услуг в тенге, уже со скидкой. nil означает
+	// «не ваша клиника»: история пациента общая, а деньги — нет.
+	Total           *int64 `json:"total"`
+	DiscountPercent int32  `json:"discount_percent"`
+	// Rating — оценка посещения 1–10, nil пока приём не оценён.
+	Rating *int32 `json:"rating"`
 	// ClinicName заполняется только в общей истории пациента, чтобы было видно,
 	// в какой клинике был приём. IsOwn — приём клиники читателя.
 	ClinicName string `json:"clinic_name"`
@@ -246,11 +256,13 @@ type appointmentJoin struct {
 	NextVisitDate *time.Time
 	PatientName   string
 	PatientPhone  pgtype.Text
-	DoctorName    string
-	DoctorColor   string
-	Total         int64
-	ClinicName    pgtype.Text
-	IsOwn         bool
+	DoctorName      string
+	DoctorColor     string
+	Total           int64
+	DiscountPercent int16
+	Rating          pgtype.Int2
+	ClinicName      pgtype.Text
+	IsOwn           bool
 }
 
 func (j appointmentJoin) dto() appointmentDTO {
@@ -274,6 +286,11 @@ func (j appointmentJoin) dto() appointmentDTO {
 	if j.IsOwn {
 		total := j.Total
 		dto.Total = &total
+		dto.DiscountPercent = int32(j.DiscountPercent)
+	}
+	if j.Rating.Valid {
+		rating := int32(j.Rating.Int16)
+		dto.Rating = &rating
 	}
 	return dto
 }
@@ -285,7 +302,7 @@ func fromRangeRow(r sqlc.ListAppointmentsInRangeRow) appointmentDTO {
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
-		Total: r.Total, IsOwn: true,
+		Total: r.Total, DiscountPercent: r.DiscountPercent, Rating: r.Rating, IsOwn: true,
 	}.dto()
 }
 
@@ -296,7 +313,8 @@ func fromPatientRow(r sqlc.ListAppointmentsByPatientRow) appointmentDTO {
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
-		Total: r.Total, ClinicName: r.ClinicName, IsOwn: r.IsOwn,
+		Total: r.Total, DiscountPercent: r.DiscountPercent, Rating: r.Rating,
+		ClinicName: r.ClinicName, IsOwn: r.IsOwn,
 	}.dto()
 }
 
@@ -307,7 +325,7 @@ func fromStatusRow(r sqlc.ListAppointmentsByStatusRow) appointmentDTO {
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
-		Total: r.Total, IsOwn: true,
+		Total: r.Total, DiscountPercent: r.DiscountPercent, Rating: r.Rating, IsOwn: true,
 	}.dto()
 }
 
@@ -318,7 +336,7 @@ func fromGetRow(r sqlc.GetAppointmentRow) appointmentDTO {
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
-		Total: r.Total, IsOwn: true,
+		Total: r.Total, DiscountPercent: r.DiscountPercent, Rating: r.Rating, IsOwn: true,
 	}.dto()
 }
 

@@ -29,6 +29,7 @@ const (
 	eventAppointmentCancel = "appointment.cancel"
 	eventAppointmentDelete = "appointment.delete"
 	eventAppointmentBill   = "appointment.services"
+	eventAppointmentRate   = "appointment.rate"
 	eventPatientCreate     = "patient.create"
 	eventPatientUpdate     = "patient.update"
 	eventPatientDelete     = "patient.delete"
