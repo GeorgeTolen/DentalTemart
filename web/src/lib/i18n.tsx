@@ -26,8 +26,9 @@ export function translate(
 ): string {
   let out = lang === "ru" ? s : dicts[lang][s] ?? s;
   if (params) {
+    // split/join вместо replaceAll: цель сборки - ES2020.
     for (const [k, v] of Object.entries(params)) {
-      out = out.replaceAll(`{${k}}`, String(v));
+      out = out.split(`{${k}}`).join(String(v));
     }
   }
   return out;
