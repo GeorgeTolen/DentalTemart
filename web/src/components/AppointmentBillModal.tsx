@@ -10,6 +10,7 @@ import {
 import { errorMessage } from "../api/client";
 import type { Appointment } from "../lib/types";
 import { formatMoney, parseMoneyInput, formatAmount } from "../lib/money";
+import { useT } from "../lib/i18n";
 import { Button, Field, Input, Modal, Select } from "./ui";
 
 // Строка чека в состоянии редактирования. service_id = 0 - разовая услуга,
@@ -36,6 +37,7 @@ export default function AppointmentBillModal({
   appointment: Appointment;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const { data: services = [] } = useServices();
   const { data: doctors = [] } = useDoctors();
   const { data: existing, isLoading } = useAppointmentServices(appointment.id);
@@ -160,19 +162,20 @@ export default function AppointmentBillModal({
   if (step === "rate") {
     return (
       <Modal
-        title={`Оценка посещения - ${appointment.patient_name}`}
+        title={t("Оценка посещения - {name}", { name: appointment.patient_name })}
         onClose={onClose}
         footer={
           <Button variant="secondary" onClick={onClose} disabled={rate.isPending}>
-            Пропустить
+            {t("Пропустить")}
           </Button>
         }
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-500">
-            Чек на {formatMoney(discounted)} сохранён. Как пациент оценил
-            посещение? Оценка необязательна и попадёт в рейтинг врача{" "}
-            {appointment.doctor_name}.
+            {t(
+              "Чек на {sum} сохранён. Как пациент оценил посещение? Оценка необязательна и попадёт в рейтинг врача {doctor}.",
+              { sum: formatMoney(discounted), doctor: appointment.doctor_name }
+            )}
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
@@ -191,12 +194,12 @@ export default function AppointmentBillModal({
             ))}
           </div>
           <div className="flex justify-between px-1 text-xs text-slate-400">
-            <span>1 - плохо</span>
-            <span>10 - отлично</span>
+            <span>{t("1 - плохо")}</span>
+            <span>{t("10 - отлично")}</span>
           </div>
           {error && (
             <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
-              {error}
+              {t(error)}
             </div>
           )}
         </div>
@@ -206,20 +209,20 @@ export default function AppointmentBillModal({
 
   return (
     <Modal
-      title={`Услуги и стоимость - ${appointment.patient_name}`}
+      title={t("Услуги и стоимость - {name}", { name: appointment.patient_name })}
       onClose={onClose}
       footer={
         <>
           <div className="mr-auto flex items-end gap-4 text-left">
             <div>
-              <div className="text-xs text-slate-400">Итого</div>
+              <div className="text-xs text-slate-400">{t("Итого")}</div>
               <div className="text-xl font-bold text-ink">
                 {formatMoney(total)}
               </div>
             </div>
             {/* Ячейка скидки полупрозрачна, пока с ней не работают. */}
             <div className="w-20 opacity-60 transition focus-within:opacity-100">
-              <div className="text-xs text-slate-400">Скидка, %</div>
+              <div className="text-xs text-slate-400">{t("Скидка, %")}</div>
               <Input
                 inputMode="numeric"
                 maxLength={3}
@@ -232,29 +235,29 @@ export default function AppointmentBillModal({
               />
             </div>
             <div>
-              <div className="text-xs text-slate-400">Со скидкой</div>
+              <div className="text-xs text-slate-400">{t("Со скидкой")}</div>
               <div className="text-xl font-bold text-brand">
                 {formatMoney(discounted)}
               </div>
             </div>
           </div>
           <Button variant="secondary" onClick={onClose}>
-            Отмена
+            {t("Отмена")}
           </Button>
           <Button onClick={submit} disabled={save.isPending}>
-            {save.isPending ? "Сохранение…" : "Сохранить"}
+            {save.isPending ? t("Сохранение…") : t("Сохранить")}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         {isLoading ? (
-          <p className="text-sm text-slate-400">Загрузка…</p>
+          <p className="text-sm text-slate-400">{t("Загрузка…")}</p>
         ) : (
           <>
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-[12rem] flex-1">
-                <Field label="Добавить из прайса">
+                <Field label={t("Добавить из прайса")}>
                   <Select
                     value={picked}
                     onChange={(e) => {
@@ -263,7 +266,7 @@ export default function AppointmentBillModal({
                       if (id) addFromCatalog(id);
                     }}
                   >
-                    <option value="">- выберите услугу -</option>
+                    <option value="">{t("- выберите услугу -")}</option>
                     {activeServices.map((s) => (
                       <option key={s.id} value={s.id} title={s.description}>
                         {s.name} - {formatAmount(s.price)} ₸
@@ -273,19 +276,19 @@ export default function AppointmentBillModal({
                 </Field>
               </div>
               <Button variant="secondary" onClick={addCustom}>
-                + Своя услуга
+                {t("+ Своя услуга")}
               </Button>
             </div>
 
             {activeServices.length === 0 && (
               <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                Прайс пуст. Заполните его во вкладке «Управление» → «Услуги».
+                {t("Прайс пуст. Заполните его во вкладке «Управление» → «Услуги».")}
               </p>
             )}
 
             {rows.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400">
-                Услуги не добавлены
+                {t("Услуги не добавлены")}
               </p>
             ) : (
               <ul className="space-y-2">
@@ -296,16 +299,16 @@ export default function AppointmentBillModal({
                   >
                     <div className="flex flex-wrap items-end gap-2">
                       <div className="min-w-[10rem] flex-1">
-                        <Field label="Услуга">
+                        <Field label={t("Услуга")}>
                           <Input
                             value={r.name}
                             onChange={(e) => patch(i, { name: e.target.value })}
-                            placeholder="Название"
+                            placeholder={t("Название")}
                           />
                         </Field>
                       </div>
                       <div className="w-28">
-                        <Field label="Цена, ₸">
+                        <Field label={t("Цена, ₸")}>
                           <Input
                             inputMode="numeric"
                             value={formatAmount(r.price)}
@@ -316,7 +319,7 @@ export default function AppointmentBillModal({
                         </Field>
                       </div>
                       <div className="w-20">
-                        <Field label="Кол-во">
+                        <Field label={t("Кол-во")}>
                           <Input
                             inputMode="numeric"
                             value={String(r.quantity)}
@@ -332,7 +335,7 @@ export default function AppointmentBillModal({
                         </Field>
                       </div>
                       <div className="min-w-[9rem] flex-1">
-                        <Field label="Врач">
+                        <Field label={t("Врач")}>
                           <Select
                             value={r.doctor_id}
                             onChange={(e) =>
@@ -351,7 +354,7 @@ export default function AppointmentBillModal({
                         onClick={() => removeRow(i)}
                         className="pb-2.5 text-sm text-red-500 hover:underline"
                       >
-                        Убрать
+                        {t("Убрать")}
                       </button>
                     </div>
                     <div className="mt-1 text-right text-sm text-slate-500">
@@ -366,7 +369,7 @@ export default function AppointmentBillModal({
 
         {error && (
           <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
-            {error}
+            {t(error)}
           </div>
         )}
       </div>

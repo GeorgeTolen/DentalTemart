@@ -8,6 +8,7 @@ import {
 import { errorMessage } from "../api/client";
 import { formatDate, formatDateTime } from "../lib/datetime";
 import { Button } from "../components/ui";
+import { useT } from "../lib/i18n";
 
 type ArchiveTab = "completed" | "cancelled";
 
@@ -18,6 +19,7 @@ const ARCHIVE_TABS: { key: ArchiveTab; label: string }[] = [
 
 // Завершённые и отменённые приёмы + массовая очистка архива.
 export default function Archive() {
+  const { t } = useT();
   const [tab, setTab] = useState<ArchiveTab>("completed");
   const { data: appointments = [], isLoading } = useArchivedAppointments(tab);
   const { data: countData } = useArchivedCount();
@@ -29,7 +31,9 @@ export default function Archive() {
   async function handleDelete() {
     if (
       !confirm(
-        `Удалить все завершённые и отменённые записи (${countData?.count ?? 0} шт.)? Это действие нельзя отменить.`
+        t("Удалить все завершённые и отменённые записи ({count} шт.)? Это действие нельзя отменить.", {
+          count: countData?.count ?? 0,
+        })
       )
     )
       return;
@@ -44,39 +48,39 @@ export default function Archive() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold">Архив</h1>
+      <h1 className="text-2xl font-bold">{t("Архив")}</h1>
 
       <div className="flex w-fit gap-1 rounded-2xl bg-slate-100 p-1">
-        {ARCHIVE_TABS.map((t) => (
+        {ARCHIVE_TABS.map((tabItem) => (
           <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
+            key={tabItem.key}
+            onClick={() => setTab(tabItem.key)}
             className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-              tab === t.key ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:text-ink"
+              tab === tabItem.key ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:text-ink"
             }`}
           >
-            {t.label}
+            {t(tabItem.label)}
           </button>
         ))}
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-slate-400">Загрузка…</p>
+        <p className="text-sm text-slate-400">{t("Загрузка…")}</p>
       ) : appointments.length === 0 ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-          {tab === "completed" ? "Завершённых записей нет" : "Отменённых записей нет"}
+          {tab === "completed" ? t("Завершённых записей нет") : t("Отменённых записей нет")}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Пациент</th>
-                <th className="px-4 py-3 text-left font-medium">Врач</th>
-                <th className="px-4 py-3 text-left font-medium">Дата и время</th>
-                <th className="px-4 py-3 text-left font-medium">Диагноз</th>
-                <th className="px-4 py-3 text-left font-medium">Описание</th>
-                <th className="px-4 py-3 text-left font-medium">Следующий приём</th>
+                <th className="px-4 py-3 text-left font-medium">{t("Пациент")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("Врач")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("Дата и время")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("Диагноз")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("Описание")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("Следующий приём")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -103,24 +107,23 @@ export default function Archive() {
       )}
 
       <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
-        <h3 className="text-lg font-semibold">Очистка архива</h3>
+        <h3 className="text-lg font-semibold">{t("Очистка архива")}</h3>
         <p className="text-sm text-slate-600">
-          Удаляет все записи со статусом «Завершён» и «Отменён» без ограничений (обе
-          вкладки выше). Это действие необратимо.
+          {t("Удаляет все записи со статусом «Завершён» и «Отменён» без ограничений (обе вкладки выше). Это действие необратимо.")}
         </p>
 
         <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
-          Записей для удаления: <strong className="text-lg">{countData?.count ?? 0}</strong>
+          {t("Записей для удаления")}: <strong className="text-lg">{countData?.count ?? 0}</strong>
         </div>
 
         {done && (
           <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700">
-            Архив успешно очищен.
+            {t("Архив успешно очищен.")}
           </div>
         )}
 
         {error && (
-          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>
         )}
 
         <Button
@@ -128,7 +131,9 @@ export default function Archive() {
           onClick={handleDelete}
           disabled={deleteArchived.isPending || (countData?.count ?? 0) === 0}
         >
-          {deleteArchived.isPending ? "Удаление…" : `Удалить ${countData?.count ?? 0} записей`}
+          {deleteArchived.isPending
+            ? t("Удаление…")
+            : t("Удалить {count} записей", { count: countData?.count ?? 0 })}
         </Button>
       </div>
     </div>

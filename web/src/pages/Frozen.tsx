@@ -1,6 +1,7 @@
 import { useAuth } from "../auth/AuthContext";
 import { Button } from "../components/ui";
 import { HourglassIcon } from "../components/icons";
+import { useT } from "../lib/i18n";
 
 /**
  * Экран замороженной клиники: пробный (или оплаченный) период истёк. Пользователь
@@ -8,6 +9,7 @@ import { HourglassIcon } from "../components/icons";
  * блокировка настоящая, на сервере, а не только спрятанный интерфейс.
  */
 export default function Frozen() {
+  const { t } = useT();
   const { user, logout } = useAuth();
 
   return (
@@ -17,14 +19,15 @@ export default function Frozen() {
           <HourglassIcon className="h-8 w-8" />
         </div>
         <h1 className="mt-4 text-xl font-bold text-ink">
-          Ваш пробный период истёк
+          {t("Ваш пробный период истёк")}
         </h1>
         {user?.clinic_name && (
           <p className="mt-1 text-sm text-slate-400">{user.clinic_name}</p>
         )}
         <p className="mt-4 text-sm text-slate-600">
-          Доступ к платформе приостановлен, но все ваши данные - пациенты, записи
-          и история - в сохранности. Хотите продлить? Напишите нам:
+          {t(
+            "Доступ к платформе приостановлен, но все ваши данные - пациенты, записи и история - в сохранности. Хотите продлить? Напишите нам:"
+          )}
         </p>
 
         <div className="mt-5 space-y-2">
@@ -45,7 +48,7 @@ export default function Frozen() {
         </div>
 
         <Button variant="ghost" className="mt-6" onClick={() => logout()}>
-          Выйти
+          {t("Выйти")}
         </Button>
       </div>
     </div>

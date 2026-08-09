@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useChangeMyPassword } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import { Button, Field, Input } from "./ui";
+import { useT } from "../lib/i18n";
 
 /**
  * Смена собственного пароля - для любой роли клиники.
@@ -10,6 +11,7 @@ import { Button, Field, Input } from "./ui";
  * что после смены выкидывает только с других устройств.
  */
 export default function PasswordChangeForm() {
+  const { t } = useT();
   const change = useChangeMyPassword();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -35,23 +37,23 @@ export default function PasswordChangeForm() {
 
   return (
     <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold">Смена пароля</h2>
+      <h2 className="text-lg font-semibold">{t("Смена пароля")}</h2>
       <p className="mt-1 text-sm text-slate-400">
-        После смены сессии на других устройствах завершатся.
+        {t("После смены сессии на других устройствах завершатся.")}
       </p>
 
       <div className="mt-4 max-w-sm space-y-4">
-        <Field label="Текущий пароль *">
+        <Field label={t("Текущий пароль *")}>
           <Input
             type="password"
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
           />
         </Field>
-        <Field label="Новый пароль * (минимум 6 символов)">
+        <Field label={t("Новый пароль * (минимум 6 символов)")}>
           <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} />
         </Field>
-        <Field label="Повторите новый пароль *">
+        <Field label={t("Повторите новый пароль *")}>
           <Input
             type="password"
             value={repeat}
@@ -61,15 +63,15 @@ export default function PasswordChangeForm() {
 
         {done && (
           <div className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-700">
-            Пароль изменён.
+            {t("Пароль изменён.")}
           </div>
         )}
         {error && (
-          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>
         )}
 
         <Button onClick={submit} disabled={change.isPending}>
-          {change.isPending ? "Сохранение…" : "Сменить пароль"}
+          {change.isPending ? t("Сохранение…") : t("Сменить пароль")}
         </Button>
       </div>
     </div>

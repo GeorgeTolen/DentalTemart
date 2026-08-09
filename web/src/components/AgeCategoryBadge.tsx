@@ -1,8 +1,10 @@
 import { ageCategory } from "../lib/datetime";
+import { useT } from "../lib/i18n";
 
 // Пилюля «Детский/Взрослый» рядом с датой рождения. Ничего не рендерит, пока
 // дата не заполнена.
 export function AgeCategoryBadge({ birthDate }: { birthDate: string | null }) {
+  const { t } = useT();
   const category = ageCategory(birthDate);
   if (!category) return null;
   return (
@@ -13,7 +15,7 @@ export function AgeCategoryBadge({ birthDate }: { birthDate: string | null }) {
           : "bg-slate-100 text-slate-600"
       }`}
     >
-      {category}
+      {t(category)}
     </span>
   );
 }

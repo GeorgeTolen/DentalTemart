@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
+import { useT } from "./lib/i18n";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import PlatformLogin from "./pages/PlatformLogin";
@@ -30,8 +31,9 @@ function FullScreen({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { user, loading, supportClinic } = useAuth();
+  const { t } = useT();
 
-  if (loading) return <FullScreen>Загрузка…</FullScreen>;
+  if (loading) return <FullScreen>{t("Загрузка…")}</FullScreen>;
 
   // Not signed in: clinic picker/login + separate platform login.
   if (!user) {

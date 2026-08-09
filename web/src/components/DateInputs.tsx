@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fieldClass } from "./ui";
 import { CalendarIcon } from "./icons";
+import { useT } from "../lib/i18n";
 
 // Locale-independent date & time inputs that ALWAYS show day-month-year
 // (ДД.ММ.ГГГГ). Native <input type="date"> renders in the browser's locale
@@ -70,9 +71,10 @@ export function DateInput({
   max,
   disabled,
   autoFocus,
-  placeholder = "дд.мм.гггг",
+  placeholder,
   className = "",
 }: DateInputProps) {
+  const { t } = useT();
   const [text, setText] = useState(() => isoToDisplay(value));
 
   // Sync from the outside only when the value genuinely diverges (e.g. the form
@@ -94,7 +96,7 @@ export function DateInput({
         className={`${fieldClass} pr-10`}
         value={text}
         onChange={(e) => handleText(e.target.value)}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("дд.мм.гггг")}
         inputMode="numeric"
         disabled={disabled}
         autoFocus={autoFocus}
@@ -132,6 +134,7 @@ interface TimeInputProps {
 }
 
 export function TimeInput({ value, onChange, disabled, className = "" }: TimeInputProps) {
+  const { t } = useT();
   const [text, setText] = useState(() => value);
 
   useEffect(() => {
@@ -151,7 +154,7 @@ export function TimeInput({ value, onChange, disabled, className = "" }: TimeInp
       className={`${fieldClass} ${className}`}
       value={text}
       onChange={(e) => handleText(e.target.value)}
-      placeholder="чч:мм"
+      placeholder={t("чч:мм")}
       inputMode="numeric"
       disabled={disabled}
     />

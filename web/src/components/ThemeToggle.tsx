@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useT } from "../lib/i18n";
 
 const STORAGE_KEY = "temart:theme";
 
@@ -20,6 +21,7 @@ export function initTheme() {
  * логотипом; выбор запоминается в localStorage.
  */
 export default function ThemeToggle({ className = "" }: { className?: string }) {
+  const { t } = useT();
   const [dark, setDark] = useState(
     () => typeof document !== "undefined" && document.documentElement.classList.contains("dark")
   );
@@ -33,8 +35,8 @@ export default function ThemeToggle({ className = "" }: { className?: string }) 
     <button
       type="button"
       onClick={() => setDark((v) => !v)}
-      title={dark ? "Включить светлую тему" : "Включить тёмную тему"}
-      aria-label={dark ? "Светлая тема" : "Тёмная тема"}
+      title={dark ? t("Включить светлую тему") : t("Включить тёмную тему")}
+      aria-label={dark ? t("Светлая тема") : t("Тёмная тема")}
       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition hover:bg-slate-100 dark:hover:bg-slate-700 ${className}`}
     >
       {dark ? <MoonIcon /> : <SunIcon />}

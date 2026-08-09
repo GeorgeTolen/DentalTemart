@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { errorMessage } from "../api/client";
 import { usePublicClinics } from "../api/hooks";
 import { Button, Field, Input } from "../components/ui";
+import { useT } from "../lib/i18n";
 import type { PublicClinic } from "../lib/types";
 
 // Clinic user login: first choose the clinic (стоматология), then sign in.
@@ -22,12 +23,13 @@ export default function Login() {
 }
 
 export function AuthShell({ children }: { children: React.ReactNode }) {
+  const { t } = useT();
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm">
         <div className="mb-1 text-center text-3xl font-bold text-brand">Temart</div>
         <p className="mb-6 text-center text-sm text-slate-400">
-          CRM для стоматологических клиник
+          {t("CRM для стоматологических клиник")}
         </p>
         {children}
       </div>
@@ -36,6 +38,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
 }
 
 function ClinicPicker({ onPick }: { onPick: (c: PublicClinic) => void }) {
+  const { t } = useT();
   const { data: clinics = [], isLoading, isError } = usePublicClinics();
   const [q, setQ] = useState("");
 
@@ -50,12 +53,12 @@ function ClinicPicker({ onPick }: { onPick: (c: PublicClinic) => void }) {
   return (
     <div className="space-y-4">
       <h2 className="text-center text-lg font-semibold text-ink">
-        Выберите вашу клинику
+        {t("Выберите вашу клинику")}
       </h2>
 
       {clinics.length > 5 && (
         <Input
-          placeholder="Поиск клиники…"
+          placeholder={t("Поиск клиники…")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           autoFocus
@@ -64,16 +67,16 @@ function ClinicPicker({ onPick }: { onPick: (c: PublicClinic) => void }) {
 
       <div className="max-h-72 space-y-2 overflow-y-auto">
         {isLoading && (
-          <p className="px-2 text-sm text-slate-400">Загрузка клиник…</p>
+          <p className="px-2 text-sm text-slate-400">{t("Загрузка клиник…")}</p>
         )}
         {isError && (
           <p className="px-2 text-sm text-red-500">
-            Не удалось загрузить список клиник.
+            {t("Не удалось загрузить список клиник.")}
           </p>
         )}
         {!isLoading && !isError && clinics.length === 0 && (
           <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
-            Пока нет ни одной клиники. Обратитесь к администратору платформы.
+            {t("Пока нет ни одной клиники. Обратитесь к администратору платформы.")}
           </p>
         )}
         {filtered.map((c) => (
@@ -87,7 +90,7 @@ function ClinicPicker({ onPick }: { onPick: (c: PublicClinic) => void }) {
           </button>
         ))}
         {!isLoading && clinics.length > 0 && filtered.length === 0 && (
-          <p className="px-2 text-sm text-slate-400">Клиника не найдена</p>
+          <p className="px-2 text-sm text-slate-400">{t("Клиника не найдена")}</p>
         )}
       </div>
 
@@ -96,7 +99,7 @@ function ClinicPicker({ onPick }: { onPick: (c: PublicClinic) => void }) {
           to="/platform-login"
           className="text-sm text-slate-400 hover:text-brand"
         >
-          Вход для администратора платформы
+          {t("Вход для администратора платформы")}
         </Link>
       </div>
     </div>
@@ -110,6 +113,7 @@ function ClinicSignIn({
   clinic: PublicClinic;
   onBack: () => void;
 }) {
+  const { t } = useT();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -136,10 +140,10 @@ function ClinicSignIn({
         onClick={onBack}
         className="text-sm text-slate-400 hover:text-brand"
       >
-        ← выбрать другую клинику
+        {t("← выбрать другую клинику")}
       </button>
       <div className="rounded-xl bg-brand-bg px-4 py-3 text-center">
-        <div className="text-xs uppercase tracking-wide text-brand">Клиника</div>
+        <div className="text-xs uppercase tracking-wide text-brand">{t("Клиника")}</div>
         <div className="font-semibold text-ink">{clinic.name}</div>
       </div>
 
@@ -152,7 +156,7 @@ function ClinicSignIn({
           autoFocus
         />
       </Field>
-      <Field label="Пароль">
+      <Field label={t("Пароль")}>
         <Input
           type="password"
           value={password}
@@ -163,12 +167,12 @@ function ClinicSignIn({
 
       {error && (
         <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
-          {error}
+          {t(error)}
         </div>
       )}
 
       <Button type="submit" disabled={busy} className="w-full">
-        {busy ? "Вход…" : "Войти"}
+        {busy ? t("Вход…") : t("Войти")}
       </Button>
     </form>
   );

@@ -5,6 +5,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
+import { useT } from "../lib/i18n";
 
 type Variant = "primary" | "secondary" | "danger" | "ghost" | "success";
 
@@ -73,6 +74,7 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const { t } = useT();
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
@@ -87,7 +89,7 @@ export function Modal({
           <button
             onClick={onClose}
             className="text-2xl leading-none text-slate-400 hover:text-slate-600"
-            aria-label="Закрыть"
+            aria-label={t("Закрыть")}
           >
             ×
           </button>
@@ -104,6 +106,7 @@ export function Modal({
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  const { t } = useT();
   const map: Record<string, string> = {
     scheduled: "bg-brand-light text-brand-dark",
     completed: "bg-green-100 text-green-700",
@@ -122,7 +125,7 @@ export function StatusBadge({ status }: { status: string }) {
         map[status] ?? "bg-slate-100 text-slate-600"
       }`}
     >
-      {labels[status] ?? status}
+      {labels[status] ? t(labels[status]) : status}
     </span>
   );
 }

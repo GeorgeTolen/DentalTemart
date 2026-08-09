@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useDeleteAvatar, useUploadAvatar } from "../api/hooks";
 import { errorMessage } from "../api/client";
+import { useT } from "../lib/i18n";
 
 const SIZES = {
   sm: "h-10 w-10 text-base",
@@ -67,6 +68,7 @@ export function AvatarUpload({
   color?: string;
   size?: keyof typeof SIZES;
 }) {
+  const { t } = useT();
   const upload = useUploadAvatar(kind);
   const remove = useDeleteAvatar(kind);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -101,7 +103,7 @@ export function AvatarUpload({
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        title="Загрузить фото"
+        title={t("Загрузить фото")}
         className="relative rounded-full transition hover:opacity-80 disabled:opacity-50"
       >
         <Avatar name={name} url={url} size={size} color={color} />
@@ -120,7 +122,7 @@ export function AvatarUpload({
           disabled={busy}
           className="block text-brand hover:underline disabled:opacity-50"
         >
-          {busy ? "Загрузка…" : url ? "Заменить фото" : "Загрузить фото"}
+          {busy ? t("Загрузка…") : url ? t("Заменить фото") : t("Загрузить фото")}
         </button>
         {url && (
           <button
@@ -129,11 +131,11 @@ export function AvatarUpload({
             disabled={busy}
             className="mt-1 block text-red-500 hover:underline disabled:opacity-50"
           >
-            Удалить фото
+            {t("Удалить фото")}
           </button>
         )}
-        <div className="mt-1 text-xs text-slate-400">jpg, png, webp - до 5 МБ</div>
-        {error && <div className="mt-1 text-xs text-red-600">{error}</div>}
+        <div className="mt-1 text-xs text-slate-400">{t("jpg, png, webp - до 5 МБ")}</div>
+        {error && <div className="mt-1 text-xs text-red-600">{t(error)}</div>}
       </div>
     </div>
   );

@@ -12,7 +12,6 @@ import {
   formatDate,
   formatDateTime,
   age,
-  yearsLabel,
   ageCategory,
   localInputToISO,
   validateBirthDate,
@@ -40,8 +39,10 @@ import {
   useDeletePatientRecord,
 } from "../api/hooks";
 import { useAuth } from "../auth/AuthContext";
+import { useT, dateLocale, yearsText } from "../lib/i18n";
 
 export default function PatientDetail() {
+  const { t, lang } = useT();
   const { readOnly } = useAuth();
   const { id } = useParams();
   const patientId = id ? Number(id) : null;
@@ -50,8 +51,8 @@ export default function PatientDetail() {
   const [editingPatient, setEditingPatient] = useState(false);
   const [newAppt, setNewAppt] = useState(false);
 
-  if (isLoading) return <div className="text-slate-400">Загрузка…</div>;
-  if (!patient) return <div className="text-slate-400">Пациент не найден</div>;
+  if (isLoading) return <div className="text-slate-400">{t("Загрузка…")}</div>;
+  if (!patient) return <div className="text-slate-400">{t("Пациент не найден")}</div>;
 
   const lastVisit = history.find((a) => a.status === "completed");
   const nextVisit = [...history].reverse().find((a) => a.status === "scheduled");
@@ -63,7 +64,7 @@ export default function PatientDetail() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <Link to="/patients" className="text-sm text-brand hover:underline">
-          ← К списку пациентов
+          ← {t("К списку пациентов")}
         </Link>
         {!readOnly && (
           <div className="flex gap-2">
@@ -71,11 +72,11 @@ export default function PatientDetail() {
                 которая её завела - остальным сервер ответит 403. */}
             {patient.is_own && (
               <Button variant="secondary" onClick={() => setEditingPatient(true)}>
-                Редактировать
+                {t("Редактировать")}
               </Button>
             )}
             <Button onClick={() => setNewAppt(true)}>
-              + Новая запись
+              + {t("Новая запись")}
             </Button>
           </div>
         )}
@@ -105,29 +106,29 @@ export default function PatientDetail() {
                       : "bg-slate-100 text-slate-600"
                   }`}
                 >
-                  {category}
+                  {t(category)}
                 </span>
               )}
               {!patient.is_own && patient.clinic_name && (
                 <span
                   className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-500"
-                  title="Карточку завела другая клиника платформы"
+                  title={t("Карточку завела другая клиника платформы")}
                 >
                   {patient.clinic_name}
                 </span>
               )}
             </div>
             <div className="mt-1 flex flex-wrap gap-4 text-sm text-slate-500">
-              {patient.iin && <span>ИИН: {patient.iin}</span>}
-              {patient.gender && <span>Пол: {GENDER_LABELS[patient.gender]}</span>}
-              {patient.phone && <span>Телефон: {patient.phone}</span>}
+              {patient.iin && <span>{t("ИИН")}: {patient.iin}</span>}
+              {patient.gender && <span>{t("Пол")}: {t(GENDER_LABELS[patient.gender])}</span>}
+              {patient.phone && <span>{t("Телефон")}: {patient.phone}</span>}
               {patient.birth_date && (
                 <span>
-                  Дата рождения: {formatDate(patient.birth_date)}
+                  {t("Дата рождения")}: {formatDate(patient.birth_date)}
                   {age(patient.birth_date) !== null && (
                     <span className="text-slate-400">
                       {" "}
-                      ({age(patient.birth_date)} {yearsLabel(age(patient.birth_date)!)})
+                      ({yearsText(lang, age(patient.birth_date)!)})
                     </span>
                   )}
                 </span>
@@ -138,7 +139,7 @@ export default function PatientDetail() {
 
         {patient.notes && (
           <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            <span className="font-medium text-slate-500">Заметки: </span>
+            <span className="font-medium text-slate-500">{t("Заметки")}: </span>
             {patient.notes}
           </div>
         )}
@@ -149,14 +150,14 @@ export default function PatientDetail() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {nextVisit && (
             <div className="rounded-2xl border border-brand/20 bg-brand-bg p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-brand">Ближайшая запись</div>
+              <div className="text-xs font-medium uppercase tracking-wide text-brand">{t("Ближайшая запись")}</div>
               <div className="mt-1 font-semibold text-ink">{formatDateTime(nextVisit.start_time)}</div>
               <div className="text-sm text-slate-500">{nextVisit.doctor_name}</div>
             </div>
           )}
           {lastVisit && (
             <div className="rounded-2xl border border-green-200 bg-green-50 p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-green-600">Последний приём</div>
+              <div className="text-xs font-medium uppercase tracking-wide text-green-600">{t("Последний приём")}</div>
               <div className="mt-1 font-semibold text-ink">{formatDateTime(lastVisit.start_time)}</div>
               <div className="text-sm text-slate-500">{lastVisit.doctor_name}</div>
               {lastVisit.diagnosis && <div className="mt-1 text-sm text-slate-600">{lastVisit.diagnosis}</div>}
@@ -193,6 +194,7 @@ const HISTORY_FILTERS: { key: AppointmentStatus | "all"; label: string }[] = [
 const HISTORY_PREVIEW_COUNT = 3;
 
 function TreatmentHistorySection({ history }: { history: Appointment[] }) {
+  const { t } = useT();
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | "all">("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -225,17 +227,17 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-lg font-semibold">История лечения</h2>
+        <h2 className="text-lg font-semibold">{t("История лечения")}</h2>
         <div className="flex flex-wrap items-end gap-2">
-          <Field label="С даты">
+          <Field label={t("С даты")}>
             <DateInput value={dateFrom} onChange={changeFrom} />
           </Field>
-          <Field label="По дату">
+          <Field label={t("По дату")}>
             <DateInput value={dateTo} onChange={changeTo} />
           </Field>
           {(dateFrom || dateTo) && (
             <Button variant="secondary" onClick={() => { setDateFrom(""); setDateTo(""); }}>
-              Сбросить
+              {t("Сбросить")}
             </Button>
           )}
         </div>
@@ -250,14 +252,14 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
               statusFilter === f.key ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:text-ink"
             }`}
           >
-            {f.label}
+            {t(f.label)}
           </button>
         ))}
       </div>
 
       {filtered.length === 0 ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-          {history.length === 0 ? "Приёмов пока нет" : "Ничего не найдено по заданным фильтрам"}
+          {history.length === 0 ? t("Приёмов пока нет") : t("Ничего не найдено по заданным фильтрам")}
         </div>
       ) : (
         <>
@@ -273,14 +275,14 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
           {hiddenCount > 0 && (
             <div className="mt-3 pl-12">
               <Button variant="secondary" onClick={() => setShowAll(true)}>
-                Показать всю историю (ещё {hiddenCount})
+                {t("Показать всю историю (ещё {n})", { n: hiddenCount })}
               </Button>
             </div>
           )}
           {showAll && filtered.length > HISTORY_PREVIEW_COUNT && (
             <div className="mt-3 pl-12">
               <Button variant="secondary" onClick={() => setShowAll(false)}>
-                Свернуть - показать только {HISTORY_PREVIEW_COUNT} последних
+                {t("Свернуть - показать только {n} последних", { n: HISTORY_PREVIEW_COUNT })}
               </Button>
             </div>
           )}
@@ -291,6 +293,7 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
 }
 
 function HistoryCard({ appointment: a }: { appointment: Appointment; index: number }) {
+  const { t, lang } = useT();
   const { user, readOnly } = useAuth();
   const canBill = user?.role === "owner" || user?.role === "admin";
   const [open, setOpen] = useState(false);
@@ -342,20 +345,20 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
                 {formatDate(a.start_time)}
               </span>
               <span className="text-sm text-slate-400">
-                {date.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}
+                {date.toLocaleTimeString(dateLocale(lang), { hour: "2-digit", minute: "2-digit" })}
               </span>
               <StatusBadge status={a.status} />
               {!a.is_own && a.clinic_name && (
                 <span
                   className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500"
-                  title="Приём в другой клинике платформы"
+                  title={t("Приём в другой клинике платформы")}
                 >
                   {a.clinic_name}
                 </span>
               )}
             </div>
             <div className="mt-0.5 text-sm text-slate-500">
-              Врач: {a.doctor_name}
+              {t("Врач")}: {a.doctor_name}
               {a.diagnosis && <span className="ml-3 text-slate-600">· {a.diagnosis}</span>}
             </div>
           </div>
@@ -370,26 +373,26 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
         {open && (
           <div className="border-t border-slate-100 px-4 pb-4 pt-3 space-y-3 text-sm">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Detail label="Врач" value={a.doctor_name} />
-              <Detail label="Начало" value={date.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} />
-              <Detail label="Окончание" value={new Date(a.end_time).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} />
-              <Detail label="Статус" value={STATUS_LABELS[a.status]} />
+              <Detail label={t("Врач")} value={a.doctor_name} />
+              <Detail label={t("Начало")} value={date.toLocaleTimeString(dateLocale(lang), { hour: "2-digit", minute: "2-digit" })} />
+              <Detail label={t("Окончание")} value={new Date(a.end_time).toLocaleTimeString(dateLocale(lang), { hour: "2-digit", minute: "2-digit" })} />
+              <Detail label={t("Статус")} value={t(STATUS_LABELS[a.status])} />
             </div>
             {a.diagnosis && (
               <div>
-                <div className="text-xs text-slate-400">Диагноз</div>
+                <div className="text-xs text-slate-400">{t("Диагноз")}</div>
                 <div className="mt-0.5 font-medium text-ink">{a.diagnosis}</div>
               </div>
             )}
             {a.description && (
               <div>
-                <div className="text-xs text-slate-400">Описание приёма</div>
+                <div className="text-xs text-slate-400">{t("Описание приёма")}</div>
                 <div className="mt-0.5 whitespace-pre-wrap text-slate-600">{a.description}</div>
               </div>
             )}
             {a.next_visit_date && (
               <div className="rounded-xl bg-brand-bg px-3 py-2 text-brand text-sm">
-                Следующий приём назначен на: <strong>{formatDate(a.next_visit_date)}</strong>
+                {t("Следующий приём назначен на")}: <strong>{formatDate(a.next_visit_date)}</strong>
               </div>
             )}
             {/* Чужой приём можно только читать: менять его вправе лишь та
@@ -398,16 +401,16 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
               <div className="flex flex-wrap gap-2">
                 {a.status !== "completed" && (
                   <Button onClick={markCompleted} disabled={saveAppt.isPending}>
-                    {saveAppt.isPending ? "Сохранение…" : "Отметить завершённым"}
+                    {saveAppt.isPending ? t("Сохранение…") : t("Отметить завершённым")}
                   </Button>
                 )}
                 {canBill && (
                   <Button variant="secondary" onClick={() => setBilling(true)}>
-                    Услуги и стоимость
+                    {t("Услуги и стоимость")}
                   </Button>
                 )}
                 <Button variant="secondary" onClick={() => setSchedulingFollowUp(true)}>
-                  {a.next_visit_date ? "Изменить след. приём" : "Следующий приём"}
+                  {a.next_visit_date ? t("Изменить след. приём") : t("Следующий приём")}
                 </Button>
               </div>
             )}
@@ -427,6 +430,7 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
 const RECORD_TABS: PatientRecordType[] = ["xray", "allergy", "scan3d"];
 
 function PatientRecordsSection({ patientId }: { patientId: number }) {
+  const { t } = useT();
   const { readOnly } = useAuth();
   const [tab, setTab] = useState<PatientRecordType>("xray");
   const [adding, setAdding] = useState(false);
@@ -434,7 +438,7 @@ function PatientRecordsSection({ patientId }: { patientId: number }) {
   const deleteRecord = useDeletePatientRecord();
 
   async function onDelete(recordId: number) {
-    if (!confirm("Удалить запись?")) return;
+    if (!confirm(t("Удалить запись?"))) return;
     try {
       await deleteRecord.mutateAsync({ patientId, recordId });
     } catch (e) {
@@ -445,30 +449,30 @@ function PatientRecordsSection({ patientId }: { patientId: number }) {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-lg font-semibold">Медицинские записи</h2>
+        <h2 className="text-lg font-semibold">{t("Медицинские записи")}</h2>
         {!readOnly && (
-          <Button onClick={() => setAdding(true)}>+ Добавить запись</Button>
+          <Button onClick={() => setAdding(true)}>+ {t("Добавить запись")}</Button>
         )}
       </div>
       <div className="mb-3 flex gap-1 rounded-2xl bg-slate-100 p-1 w-fit">
-        {RECORD_TABS.map((t) => (
+        {RECORD_TABS.map((tabType) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tabType}
+            onClick={() => setTab(tabType)}
             className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-              tab === t ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:text-ink"
+              tab === tabType ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:text-ink"
             }`}
           >
-            {RECORD_TYPE_LABELS[t]}
+            {t(RECORD_TYPE_LABELS[tabType])}
           </button>
         ))}
       </div>
 
       {isLoading ? (
-        <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">Загрузка…</div>
+        <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">{t("Загрузка…")}</div>
       ) : records.length === 0 ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-          Записей пока нет
+          {t("Записей пока нет")}
         </div>
       ) : (
         <div className="space-y-3">
@@ -483,7 +487,7 @@ function PatientRecordsSection({ patientId }: { patientId: number }) {
                     {!r.is_own && r.clinic_name && (
                       <span
                         className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-slate-500"
-                        title="Запись сделала другая клиника платформы"
+                        title={t("Запись сделала другая клиника платформы")}
                       >
                         {r.clinic_name}
                       </span>
@@ -497,7 +501,7 @@ function PatientRecordsSection({ patientId }: { patientId: number }) {
                       className="mt-2 inline-block text-sm text-brand hover:underline"
                     >
                       <PaperclipIcon className="mr-1 inline h-4 w-4 align-text-bottom" />
-                      {r.file_name || "Открыть файл"}
+                      {r.file_name || t("Открыть файл")}
                     </a>
                   )}
                 </div>
@@ -508,7 +512,7 @@ function PatientRecordsSection({ patientId }: { patientId: number }) {
                     onClick={() => onDelete(r.id)}
                     className="shrink-0 text-sm text-red-500 hover:underline"
                   >
-                    Удалить
+                    {t("Удалить")}
                   </button>
                 )}
               </div>
@@ -533,6 +537,7 @@ function AddRecordModal({
   defaultType: PatientRecordType;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const save = useSavePatientRecord();
   const [type, setType] = useState<PatientRecordType>(defaultType);
   const [title, setTitle] = useState("");
@@ -555,26 +560,26 @@ function AddRecordModal({
 
   return (
     <Modal
-      title="Новая медицинская запись"
+      title={t("Новая медицинская запись")}
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
-          <Button onClick={submit} disabled={save.isPending}>{save.isPending ? "Сохранение…" : "Сохранить"}</Button>
+          <Button variant="secondary" onClick={onClose}>{t("Отмена")}</Button>
+          <Button onClick={submit} disabled={save.isPending}>{save.isPending ? t("Сохранение…") : t("Сохранить")}</Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Тип записи">
+        <Field label={t("Тип записи")}>
           <Select value={type} onChange={(e) => setType(e.target.value as PatientRecordType)}>
-            {RECORD_TABS.map((t) => (
-              <option key={t} value={t}>{RECORD_TYPE_LABELS[t]}</option>
+            {RECORD_TABS.map((recordType) => (
+              <option key={recordType} value={recordType}>{t(RECORD_TYPE_LABELS[recordType])}</option>
             ))}
           </Select>
         </Field>
-        <Field label="Заголовок"><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Напр.: Снимок зуба 16" /></Field>
-        <Field label="Заметка"><Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Описание, заключение..." /></Field>
-        <Field label={type === "allergy" ? "Файл (необязательно)" : "Файл (изображение или 3D-модель)"}>
+        <Field label={t("Заголовок")}><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("Напр.: Снимок зуба 16")} /></Field>
+        <Field label={t("Заметка")}><Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("Описание, заключение...")} /></Field>
+        <Field label={type === "allergy" ? t("Файл (необязательно)") : t("Файл (изображение или 3D-модель)")}>
           <input
             type="file"
             accept={type === "scan3d" ? "image/*,.stl,.obj,.glb,.gltf" : "image/*"}
@@ -582,7 +587,7 @@ function AddRecordModal({
             className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-brand-bg file:px-3.5 file:py-2 file:text-sm file:font-medium file:text-brand-dark"
           />
         </Field>
-        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>}
       </div>
     </Modal>
   );
@@ -598,6 +603,7 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 function PatientEditModal({ patient, onClose }: { patient: { id: number; full_name: string; phone: string; birth_date: string | null; notes: string; iin: string; gender: Gender }; onClose: () => void }) {
+  const { t } = useT();
   const save = useSavePatient();
   const [name, setName] = useState(patient.full_name);
   const [phone, setPhone] = useState(patient.phone ?? "");
@@ -630,19 +636,19 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
 
   return (
     <Modal
-      title="Редактировать пациента"
+      title={t("Редактировать пациента")}
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
-          <Button onClick={submit} disabled={save.isPending}>{save.isPending ? "Сохранение…" : "Сохранить"}</Button>
+          <Button variant="secondary" onClick={onClose}>{t("Отмена")}</Button>
+          <Button onClick={submit} disabled={save.isPending}>{save.isPending ? t("Сохранение…") : t("Сохранить")}</Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="ФИО *"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label={t("ФИО *")}><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="ИИН (12 цифр)">
+          <Field label={t("ИИН (12 цифр)")}>
             <Input
               value={iin}
               inputMode="numeric"
@@ -650,29 +656,30 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
               onChange={(e) => onIinChange(e.target.value)}
             />
           </Field>
-          <Field label="Пол">
+          <Field label={t("Пол")}>
             <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
-              <option value="">- не указан -</option>
-              <option value="male">{GENDER_LABELS.male}</option>
-              <option value="female">{GENDER_LABELS.female}</option>
+              <option value="">{t("- не указан -")}</option>
+              <option value="male">{t(GENDER_LABELS.male)}</option>
+              <option value="female">{t(GENDER_LABELS.female)}</option>
             </Select>
           </Field>
         </div>
-        <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" /></Field>
-        <Field label="Дата рождения">
+        <Field label={t("Телефон")}><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" /></Field>
+        <Field label={t("Дата рождения")}>
           <div className="flex items-center gap-2">
             <DateInput value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={setBirthDate} />
             <AgeCategoryBadge birthDate={birthDate} />
           </div>
         </Field>
-        <Field label="Заметки"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
-        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+        <Field label={t("Заметки")}><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>}
       </div>
     </Modal>
   );
 }
 
 function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: number; patientName: string; onClose: () => void }) {
+  const { t } = useT();
   const { data: doctors = [] } = useDoctors();
   const activeDoctors = doctors.filter((d) => d.is_active);
   const save = useSaveAppointment();
@@ -708,41 +715,41 @@ function NewAppointmentModal({ patientId, patientName, onClose }: { patientId: n
 
   return (
     <Modal
-      title="Новая запись"
+      title={t("Новая запись")}
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
-          <Button onClick={submit} disabled={save.isPending}>{save.isPending ? "Сохранение…" : "Создать запись"}</Button>
+          <Button variant="secondary" onClick={onClose}>{t("Отмена")}</Button>
+          <Button onClick={submit} disabled={save.isPending}>{save.isPending ? t("Сохранение…") : t("Создать запись")}</Button>
         </>
       }
     >
       <div className="space-y-4">
         <div className="rounded-xl bg-brand-bg px-4 py-2 text-sm">
-          Пациент: <strong>{patientName}</strong>
+          {t("Пациент")}: <strong>{patientName}</strong>
         </div>
-        <Field label="Врач">
+        <Field label={t("Врач")}>
           <Select value={String(doctorId)} onChange={(e) => setDoctorId(Number(e.target.value))}>
-            <option value="">- выберите врача -</option>
+            <option value="">{t("- выберите врача -")}</option>
             {activeDoctors.map((d) => (
               <option key={d.id} value={d.id}>{d.full_name}{d.specialization && ` · ${d.specialization}`}</option>
             ))}
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Начало"><DateTimeInput value={start} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setStart} /></Field>
-          <Field label="Окончание"><DateTimeInput value={end} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setEnd} /></Field>
+          <Field label={t("Начало")}><DateTimeInput value={start} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setStart} /></Field>
+          <Field label={t("Окончание")}><DateTimeInput value={end} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setEnd} /></Field>
         </div>
-        <Field label="Статус">
+        <Field label={t("Статус")}>
           <Select value={status} onChange={(e) => setStatus(e.target.value as AppointmentStatus)}>
             {(Object.entries(STATUS_LABELS) as [AppointmentStatus, string][]).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
+              <option key={k} value={k}>{t(v)}</option>
             ))}
           </Select>
         </Field>
-        <Field label="Диагноз"><Input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Необязательно" /></Field>
-        <Field label="Описание"><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Необязательно" /></Field>
-        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+        <Field label={t("Диагноз")}><Input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder={t("Необязательно")} /></Field>
+        <Field label={t("Описание")}><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("Необязательно")} /></Field>
+        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>}
       </div>
     </Modal>
   );

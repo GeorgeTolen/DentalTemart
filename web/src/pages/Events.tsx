@@ -3,6 +3,7 @@ import { useEvents } from "../api/hooks";
 import { formatDateTime } from "../lib/datetime";
 import type { ClinicEvent } from "../lib/types";
 import { Button } from "../components/ui";
+import { useT } from "../lib/i18n";
 
 // Как показывать тип действия: цвет по «тяжести», чтобы удаления бросались
 // в глаза при беглом просмотре.
@@ -32,6 +33,7 @@ function actionBadge(action: string) {
  * уже показанные строки уезжали бы вниз и дублировались.
  */
 export default function Events() {
+  const { t } = useT();
   const [before, setBefore] = useState(0);
   // Накопленные страницы: «Показать ещё» добавляет снизу, а не заменяет экран.
   const [loaded, setLoaded] = useState<ClinicEvent[]>([]);
@@ -49,17 +51,17 @@ export default function Events() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold">События</h1>
+        <h1 className="text-2xl font-bold">{t("События")}</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Что происходило в клинике: записи, пациенты, врачи, прайс и учётные записи.
+          {t("Что происходило в клинике: записи, пациенты, врачи, прайс и учётные записи.")}
         </p>
       </div>
 
       {isLoading && items.length === 0 ? (
-        <p className="text-sm text-slate-400">Загрузка…</p>
+        <p className="text-sm text-slate-400">{t("Загрузка…")}</p>
       ) : items.length === 0 ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-          Событий пока нет
+          {t("Событий пока нет")}
         </div>
       ) : (
         <>
@@ -67,10 +69,10 @@ export default function Events() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Когда</th>
-                  <th className="px-4 py-3 font-medium">Кто</th>
-                  <th className="px-4 py-3 font-medium">Действие</th>
-                  <th className="px-4 py-3 font-medium">Что произошло</th>
+                  <th className="px-4 py-3 font-medium">{t("Когда")}</th>
+                  <th className="px-4 py-3 font-medium">{t("Кто")}</th>
+                  <th className="px-4 py-3 font-medium">{t("Действие")}</th>
+                  <th className="px-4 py-3 font-medium">{t("Что произошло")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -86,7 +88,7 @@ export default function Events() {
                         <span
                           className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}
                         >
-                          {badge.label}
+                          {t(badge.label)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{e.message}</td>
@@ -100,7 +102,7 @@ export default function Events() {
           {nextBefore > 0 && (
             <div className="flex justify-center">
               <Button variant="secondary" onClick={showMore} disabled={isLoading}>
-                {isLoading ? "Загрузка…" : "Показать ещё"}
+                {isLoading ? t("Загрузка…") : t("Показать ещё")}
               </Button>
             </div>
           )}

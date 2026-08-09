@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Input } from "./ui";
+import { useT } from "../lib/i18n";
 
 /**
  * Боковая шторка выбора из списка.
@@ -34,6 +35,7 @@ export function PickerDrawer({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const { t } = useT();
   // Esc закрывает шторку, не закрывая модалку под ней.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -57,7 +59,7 @@ export function PickerDrawer({
           <button
             onClick={onClose}
             className="text-2xl leading-none text-slate-400 hover:text-slate-600"
-            aria-label="Закрыть"
+            aria-label={t("Закрыть")}
           >
             ×
           </button>
@@ -74,10 +76,10 @@ export function PickerDrawer({
 
         <div className="flex-1 overflow-y-auto p-2">
           {loading ? (
-            <p className="px-2 py-4 text-sm text-slate-400">Поиск…</p>
+            <p className="px-2 py-4 text-sm text-slate-400">{t("Поиск…")}</p>
           ) : isEmpty ? (
             <p className="px-2 py-4 text-sm text-slate-400">
-              {emptyLabel ?? "Ничего не найдено"}
+              {emptyLabel ? t(emptyLabel) : t("Ничего не найдено")}
             </p>
           ) : (
             <div className="space-y-1">{children}</div>
@@ -136,6 +138,7 @@ export function PickerField({
   placeholder: string;
   onClick: () => void;
 }) {
+  const { t } = useT();
   return (
     <button
       type="button"
@@ -145,7 +148,7 @@ export function PickerField({
       <span className={value ? "text-ink" : "text-slate-400"}>
         {value || placeholder}
       </span>
-      <span className="ml-2 shrink-0 text-xs text-slate-400">выбрать ▸</span>
+      <span className="ml-2 shrink-0 text-xs text-slate-400">{t("выбрать")} ▸</span>
     </button>
   );
 }

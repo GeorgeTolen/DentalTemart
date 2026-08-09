@@ -2,8 +2,37 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_LABELS } from "../lib/types";
+import { useT, type Lang } from "../lib/i18n";
 import ThemeToggle from "./ThemeToggle";
 import { CalendarIcon } from "./icons";
+
+// Переключатель языка: рус / қаз / eng. Выбор живёт в localStorage.
+const LANGS: { code: Lang; label: string }[] = [
+  { code: "ru", label: "РУС" },
+  { code: "kk", label: "ҚАЗ" },
+  { code: "en", label: "ENG" },
+];
+
+function LangSwitcher({ className = "" }: { className?: string }) {
+  const { lang, setLang } = useT();
+  return (
+    <div className={`flex gap-0.5 rounded-lg bg-slate-100 p-0.5 ${className}`}>
+      {LANGS.map((l) => (
+        <button
+          key={l.code}
+          onClick={() => setLang(l.code)}
+          className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition ${
+            lang === l.code
+              ? "bg-white text-ink shadow-sm"
+              : "text-slate-400 hover:text-ink"
+          }`}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 interface NavItem {
   to: string;
@@ -23,6 +52,7 @@ const CLINIC_LINKS: NavItem[] = [
 
 export default function Layout() {
   const { user, logout, supportClinic, exitSupport } = useAuth();
+  const { t } = useT();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -73,14 +103,15 @@ export default function Layout() {
       {supportClinic && (
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-amber-500 px-4 py-1.5 text-center text-xs font-medium text-white">
           <span>
-            Режим поддержки: «{supportClinic.name}» - только просмотр, изменения
-            недоступны
+            {t("Режим поддержки: «{name}» - только просмотр, изменения недоступны", {
+              name: supportClinic.name,
+            })}
           </span>
           <button
             onClick={onExit}
             className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30"
           >
-            Выйти из режима
+            {t("Выйти из режима")}
           </button>
         </div>
       )}
@@ -95,6 +126,7 @@ export default function Layout() {
               )}
             </div>
             <ThemeToggle />
+            <LangSwitcher />
           </div>
           <div className="flex min-w-0 items-center gap-2">
             {supportClinic ? (
@@ -105,7 +137,7 @@ export default function Layout() {
               <button
                 onClick={() => navigate("/my-cabinet")}
                 className="max-w-[42vw] truncate text-sm font-medium text-ink"
-                title="Личный кабинет"
+                title={t("Личный кабинет")}
               >
                 {user?.full_name}
               </button>
@@ -114,7 +146,7 @@ export default function Layout() {
               onClick={onExit}
               className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 active:bg-slate-100"
             >
-              {supportClinic ? "К платформе" : "Выйти"}
+              {supportClinic ? t("К платформе") : t("Выйти")}
             </button>
           </div>
         </header>
@@ -134,7 +166,7 @@ export default function Layout() {
                 }`
               }
             >
-              {l.label}
+              {t(l.label)}
             </NavLink>
           ))}
         </nav>
@@ -166,7 +198,7 @@ export default function Layout() {
               }
             >
               <CalendarIcon className="h-5 w-5" />
-              {CALENDAR.label}
+              {t(CALENDAR.label)}
             </NavLink>
 
             {mainLinks.map((l) => (
@@ -181,7 +213,7 @@ export default function Layout() {
                   }`
                 }
               >
-                {l.label}
+                {t(l.label)}
               </NavLink>
             ))}
           </nav>
@@ -195,7 +227,7 @@ export default function Layout() {
                   onClick={() => setManageOpen((v) => !v)}
                   className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
                 >
-                  Управление
+                  {t("Управление")}
                   <span className="text-xs text-slate-400">{showManage ? "▾" : "▸"}</span>
                 </button>
                 {showManage && (
@@ -212,7 +244,7 @@ export default function Layout() {
                           }`
                         }
                       >
-                        {l.label}
+                        {t(l.label)}
                       </NavLink>
                     ))}
                   </div>
@@ -224,27 +256,30 @@ export default function Layout() {
               <div className="px-3 py-1.5">
                 <span className="block text-sm font-medium text-ink">{user?.full_name}</span>
                 <span className="block text-xs text-slate-400">
-                  {user ? ROLE_LABELS[user.role] : ""}
+                  {user ? t(ROLE_LABELS[user.role]) : ""}
                 </span>
               </div>
             ) : (
               <button
                 onClick={() => navigate("/my-cabinet")}
-                title="Открыть личный кабинет"
+                title={t("Открыть личный кабинет")}
                 className="block w-full rounded-xl px-3 py-1.5 text-left transition hover:bg-brand-bg"
               >
                 <span className="block text-sm font-medium text-ink">{user?.full_name}</span>
                 <span className="block text-xs text-slate-400">
-                  {user ? ROLE_LABELS[user.role] : ""}
+                  {user ? t(ROLE_LABELS[user.role]) : ""}
                 </span>
               </button>
             )}
-            <button
-              onClick={onExit}
-              className="mt-2 px-3 text-sm text-slate-500 hover:text-brand"
-            >
-              {supportClinic ? "Вернуться к платформе" : "Выйти"}
-            </button>
+            <div className="mt-2 flex items-center justify-between gap-2 px-3">
+              <button
+                onClick={onExit}
+                className="text-sm text-slate-500 hover:text-brand"
+              >
+                {supportClinic ? t("Вернуться к платформе") : t("Выйти")}
+              </button>
+              <LangSwitcher />
+            </div>
           </div>
         </aside>
 

@@ -20,6 +20,7 @@ import {
   addMinutesToLocalInput,
 } from "../lib/datetime";
 import { Button, Field, Input, Select, Textarea } from "../components/ui";
+import { useT } from "../lib/i18n";
 import { DateInput, DateTimeInput } from "../components/DateInputs";
 import { AgeCategoryBadge } from "../components/AgeCategoryBadge";
 import { parseIIN } from "../lib/iin";
@@ -33,6 +34,7 @@ interface FlowState {
 }
 
 function AdminFlow() {
+  const { t } = useT();
   const [step, setStep] = useState<FlowStep>(1);
   const [flow, setFlow] = useState<FlowState>({ patient: null, appointment: null });
   const [error, setError] = useState("");
@@ -61,7 +63,7 @@ function AdminFlow() {
               {s < step ? "✓" : s}
             </div>
             <span className={`whitespace-nowrap text-sm ${s === step ? "font-semibold text-ink" : "text-slate-400"}`}>
-              {["Регистрация пациента", "Назначение записи", "Проведение процедуры", "Закрытие записи", "Новая запись"][s - 1]}
+              {t(["Регистрация пациента", "Назначение записи", "Проведение процедуры", "Закрытие записи", "Новая запись"][s - 1])}
             </span>
             {s < 5 && <div className="h-px w-6 shrink-0 bg-slate-200" />}
           </div>
@@ -69,7 +71,7 @@ function AdminFlow() {
       </div>
 
       {error && (
-        <div className="rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">{error}</div>
+        <div className="rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">{t(error)}</div>
       )}
 
       {step === 1 && (
@@ -115,6 +117,7 @@ function AdminFlow() {
 
 // Step 1: Register / find patient
 function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setError: (e: string) => void }) {
+  const { t } = useT();
   const [input, setInput] = useState("");
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<"search" | "new">("search");
@@ -132,8 +135,8 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
   const searchPending = search !== input;
 
   useEffect(() => {
-    const t = setTimeout(() => setSearch(input), 300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setSearch(input), 300);
+    return () => clearTimeout(timer);
   }, [input]);
 
   // ИИН кодирует дату рождения и пол - при вводе 12 цифр заполняем пустые поля.
@@ -161,28 +164,28 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
 
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
-      <h3 className="text-lg font-semibold">Шаг 1: Регистрация пациента</h3>
+      <h3 className="text-lg font-semibold">{t("Шаг 1: Регистрация пациента")}</h3>
       <div className="flex gap-3">
-        <Button variant={mode === "search" ? "primary" : "secondary"} onClick={() => setMode("search")}>Найти существующего</Button>
-        <Button variant={mode === "new" ? "primary" : "secondary"} onClick={() => setMode("new")}>Создать нового</Button>
+        <Button variant={mode === "search" ? "primary" : "secondary"} onClick={() => setMode("search")}>{t("Найти существующего")}</Button>
+        <Button variant={mode === "new" ? "primary" : "secondary"} onClick={() => setMode("new")}>{t("Создать нового")}</Button>
       </div>
 
       {mode === "search" ? (
         <div className="space-y-3">
-          <Field label="Поиск по имени или телефону">
+          <Field label={t("Поиск по имени или телефону")}>
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Начните вводить имя или телефон..."
+              placeholder={t("Начните вводить имя или телефон...")}
               autoFocus
             />
           </Field>
           <div className="max-h-60 overflow-y-auto space-y-1">
             {!input && (
-              <p className="text-sm text-slate-400 px-2">Введите имя или телефон для поиска</p>
+              <p className="text-sm text-slate-400 px-2">{t("Введите имя или телефон для поиска")}</p>
             )}
             {input && (searchPending || isFetching) && (
-              <p className="text-sm text-slate-400 px-2">Поиск...</p>
+              <p className="text-sm text-slate-400 px-2">{t("Поиск...")}</p>
             )}
             {input && !searchPending && !isFetching && patients.map((p) => (
               <button
@@ -195,41 +198,41 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
               </button>
             ))}
             {input && !searchPending && !isFetching && patients.length === 0 && (
-              <p className="text-sm text-slate-400 px-2">Пациент не найден</p>
+              <p className="text-sm text-slate-400 px-2">{t("Пациент не найден")}</p>
             )}
           </div>
         </div>
       ) : (
         <div className="space-y-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="ФИО *"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Иванов Иван Иванович" /></Field>
-            <Field label="ИИН (12 цифр)">
+            <Field label={t("ФИО *")}><Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Иванов Иван Иванович")} /></Field>
+            <Field label={t("ИИН (12 цифр)")}>
               <Input
                 value={iin}
                 inputMode="numeric"
                 maxLength={12}
                 onChange={(e) => onIinChange(e.target.value)}
-                placeholder="Если ИИН уже есть в базе - подставится тот пациент"
+                placeholder={t("Если ИИН уже есть в базе - подставится тот пациент")}
               />
             </Field>
-            <Field label="Телефон"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7..." /></Field>
-            <Field label="Пол">
+            <Field label={t("Телефон")}><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7..." /></Field>
+            <Field label={t("Пол")}>
               <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
-                <option value="">- не указан -</option>
-                <option value="male">{GENDER_LABELS.male}</option>
-                <option value="female">{GENDER_LABELS.female}</option>
+                <option value="">{t("- не указан -")}</option>
+                <option value="male">{t(GENDER_LABELS.male)}</option>
+                <option value="female">{t(GENDER_LABELS.female)}</option>
               </Select>
             </Field>
-            <Field label="Дата рождения">
+            <Field label={t("Дата рождения")}>
               <div className="flex items-center gap-2">
                 <DateInput value={birthDate} min={minBirthDateInput()} max={todayInput()} onChange={setBirthDate} />
                 <AgeCategoryBadge birthDate={birthDate} />
               </div>
             </Field>
-            <Field label="Заметки"><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+            <Field label={t("Заметки")}><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
           </div>
           <Button onClick={createPatient} disabled={savePatient.isPending}>
-            {savePatient.isPending ? "Сохранение…" : "Зарегистрировать и продолжить"}
+            {savePatient.isPending ? t("Сохранение…") : t("Зарегистрировать и продолжить")}
           </Button>
         </div>
       )}
@@ -241,6 +244,7 @@ function FlowStep1({ onNext, setError }: { onNext: (p: Patient) => void; setErro
 function FlowStep2({ patient, onNext, onBack, setError }: {
   patient: Patient; onNext: (a: Appointment) => void; onBack: () => void; setError: (e: string) => void;
 }) {
+  const { t } = useT();
   const { data: doctors = [] } = useDoctors();
   const activeDoctors = doctors.filter((d) => d.is_active);
   const saveAppt = useSaveAppointment();
@@ -273,27 +277,27 @@ function FlowStep2({ patient, onNext, onBack, setError }: {
 
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
-      <h3 className="text-lg font-semibold">Шаг 2: Назначение записи</h3>
+      <h3 className="text-lg font-semibold">{t("Шаг 2: Назначение записи")}</h3>
       <div className="rounded-xl bg-brand-bg px-4 py-2 text-sm">
-        Пациент: <strong>{patient.full_name}</strong>
+        {t("Пациент")}: <strong>{patient.full_name}</strong>
       </div>
       <div className="space-y-3">
-        <Field label="Врач">
+        <Field label={t("Врач")}>
           <Select value={String(doctorId)} onChange={(e) => setDoctorId(Number(e.target.value))}>
-            <option value="">- выберите -</option>
+            <option value="">{t("- выберите -")}</option>
             {activeDoctors.map((d) => (
               <option key={d.id} value={d.id}>{d.full_name}{d.specialization && ` · ${d.specialization}`}</option>
             ))}
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Начало"><DateTimeInput value={start} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setStart} /></Field>
-          <Field label="Окончание"><DateTimeInput value={end} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setEnd} /></Field>
+          <Field label={t("Начало")}><DateTimeInput value={start} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setStart} /></Field>
+          <Field label={t("Окончание")}><DateTimeInput value={end} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setEnd} /></Field>
         </div>
       </div>
       <div className="flex gap-3">
-        <Button variant="secondary" onClick={onBack}>Назад</Button>
-        <Button onClick={schedule} disabled={saveAppt.isPending}>{saveAppt.isPending ? "Сохранение…" : "Назначить запись"}</Button>
+        <Button variant="secondary" onClick={onBack}>{t("Назад")}</Button>
+        <Button onClick={schedule} disabled={saveAppt.isPending}>{saveAppt.isPending ? t("Сохранение…") : t("Назначить запись")}</Button>
       </div>
     </div>
   );
@@ -303,6 +307,7 @@ function FlowStep2({ patient, onNext, onBack, setError }: {
 function FlowStep3({ appointment, onNext, onBack, setError }: {
   appointment: Appointment; onNext: (a: Appointment) => void; onBack: () => void; setError: (e: string) => void;
 }) {
+  const { t } = useT();
   const saveAppt = useSaveAppointment();
   const [diagnosis, setDiagnosis] = useState(appointment.diagnosis ?? "");
   const [description, setDescription] = useState(appointment.description ?? "");
@@ -327,21 +332,21 @@ function FlowStep3({ appointment, onNext, onBack, setError }: {
 
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
-      <h3 className="text-lg font-semibold">Шаг 3: Проведение процедуры</h3>
+      <h3 className="text-lg font-semibold">{t("Шаг 3: Проведение процедуры")}</h3>
       <div className="rounded-xl bg-brand-bg px-4 py-2 text-sm space-y-1">
-        <div>Пациент: <strong>{appointment.patient_name}</strong></div>
-        <div>Врач: <strong>{appointment.doctor_name}</strong></div>
-        <div>Время: <strong>{formatDateTime(appointment.start_time)}</strong></div>
+        <div>{t("Пациент")}: <strong>{appointment.patient_name}</strong></div>
+        <div>{t("Врач")}: <strong>{appointment.doctor_name}</strong></div>
+        <div>{t("Время")}: <strong>{formatDateTime(appointment.start_time)}</strong></div>
       </div>
-      <Field label="Диагноз">
-        <Input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder="Введите диагноз" />
+      <Field label={t("Диагноз")}>
+        <Input value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} placeholder={t("Введите диагноз")} />
       </Field>
-      <Field label="Описание приёма">
-        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание проведённых процедур..." />
+      <Field label={t("Описание приёма")}>
+        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("Описание проведённых процедур...")} />
       </Field>
       <div className="flex gap-3">
-        <Button variant="secondary" onClick={onBack}>Назад</Button>
-        <Button onClick={save} disabled={saveAppt.isPending}>{saveAppt.isPending ? "Сохранение…" : "Сохранить и продолжить"}</Button>
+        <Button variant="secondary" onClick={onBack}>{t("Назад")}</Button>
+        <Button onClick={save} disabled={saveAppt.isPending}>{saveAppt.isPending ? t("Сохранение…") : t("Сохранить и продолжить")}</Button>
       </div>
     </div>
   );
@@ -351,6 +356,7 @@ function FlowStep3({ appointment, onNext, onBack, setError }: {
 function FlowStep4({ appointment, onNext, onBack, setError }: {
   appointment: Appointment; onNext: (a: Appointment) => void; onBack: () => void; setError: (e: string) => void;
 }) {
+  const { t } = useT();
   const saveAppt = useSaveAppointment();
 
   async function complete() {
@@ -373,19 +379,19 @@ function FlowStep4({ appointment, onNext, onBack, setError }: {
 
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
-      <h3 className="text-lg font-semibold">Шаг 4: Закрытие записи</h3>
+      <h3 className="text-lg font-semibold">{t("Шаг 4: Закрытие записи")}</h3>
       <div className="rounded-xl bg-slate-50 px-4 py-4 space-y-2 text-sm">
-        <div>Пациент: <strong>{appointment.patient_name}</strong></div>
-        <div>Врач: <strong>{appointment.doctor_name}</strong></div>
-        <div>Время: <strong>{formatDateTime(appointment.start_time)}</strong></div>
-        {appointment.diagnosis && <div>Диагноз: <strong>{appointment.diagnosis}</strong></div>}
-        {appointment.description && <div>Описание: <span className="text-slate-600">{appointment.description}</span></div>}
+        <div>{t("Пациент")}: <strong>{appointment.patient_name}</strong></div>
+        <div>{t("Врач")}: <strong>{appointment.doctor_name}</strong></div>
+        <div>{t("Время")}: <strong>{formatDateTime(appointment.start_time)}</strong></div>
+        {appointment.diagnosis && <div>{t("Диагноз")}: <strong>{appointment.diagnosis}</strong></div>}
+        {appointment.description && <div>{t("Описание")}: <span className="text-slate-600">{appointment.description}</span></div>}
       </div>
-      <p className="text-sm text-slate-600">Подтвердите закрытие записи - статус изменится на «Завершён».</p>
+      <p className="text-sm text-slate-600">{t("Подтвердите закрытие записи - статус изменится на «Завершён».")}</p>
       <div className="flex gap-3">
-        <Button variant="secondary" onClick={onBack}>Назад</Button>
+        <Button variant="secondary" onClick={onBack}>{t("Назад")}</Button>
         <Button onClick={complete} disabled={saveAppt.isPending}>
-          {saveAppt.isPending ? "Сохранение…" : "Завершить приём"}
+          {saveAppt.isPending ? t("Сохранение…") : t("Завершить приём")}
         </Button>
       </div>
     </div>
@@ -396,6 +402,7 @@ function FlowStep4({ appointment, onNext, onBack, setError }: {
 function FlowStep5({ appointment, onFinish, setError }: {
   appointment: Appointment; onFinish: () => void; setError: (e: string) => void;
 }) {
+  const { t } = useT();
   const { data: doctors = [] } = useDoctors();
   const activeDoctors = doctors.filter((d) => d.is_active);
   const saveAppt = useSaveAppointment();
@@ -428,30 +435,30 @@ function FlowStep5({ appointment, onFinish, setError }: {
 
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
-      <h3 className="text-lg font-semibold">Шаг 5: Назначить новую запись</h3>
+      <h3 className="text-lg font-semibold">{t("Шаг 5: Назначить новую запись")}</h3>
       <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
-        Приём завершён. Пациент: <strong>{appointment.patient_name}</strong>
+        {t("Приём завершён")}. {t("Пациент")}: <strong>{appointment.patient_name}</strong>
       </div>
       <div className="flex gap-3">
-        <Button variant={schedule ? "primary" : "secondary"} onClick={() => setSchedule(true)}>Назначить следующий приём</Button>
-        <Button variant="ghost" onClick={onFinish}>Завершить без записи</Button>
+        <Button variant={schedule ? "primary" : "secondary"} onClick={() => setSchedule(true)}>{t("Назначить следующий приём")}</Button>
+        <Button variant="ghost" onClick={onFinish}>{t("Завершить без записи")}</Button>
       </div>
       {schedule && (
         <div className="space-y-3">
-          <Field label="Врач">
+          <Field label={t("Врач")}>
             <Select value={String(doctorId)} onChange={(e) => setDoctorId(Number(e.target.value))}>
-              <option value="">- выберите -</option>
+              <option value="">{t("- выберите -")}</option>
               {activeDoctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.full_name}</option>
               ))}
             </Select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Начало"><DateTimeInput value={start} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setStart} /></Field>
-            <Field label="Окончание"><DateTimeInput value={end} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setEnd} /></Field>
+            <Field label={t("Начало")}><DateTimeInput value={start} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setStart} /></Field>
+            <Field label={t("Окончание")}><DateTimeInput value={end} maxDate={maxAppointmentInput().slice(0, 10)} onChange={setEnd} /></Field>
           </div>
           <Button onClick={createNext} disabled={saveAppt.isPending}>
-            {saveAppt.isPending ? "Сохранение…" : "Создать запись и завершить"}
+            {saveAppt.isPending ? t("Сохранение…") : t("Создать запись и завершить")}
           </Button>
         </div>
       )}
@@ -466,12 +473,13 @@ function FlowStep5({ appointment, onFinish, setError }: {
 // закрытие → следующая запись. Остальное управление живёт отдельными
 // страницами в разделе «Управление» бокового меню.
 export default function Admin() {
+  const { t } = useT();
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-ink">Создать запись</h1>
+        <h1 className="text-2xl font-bold text-ink">{t("Создать запись")}</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Пошаговый сценарий: от регистрации пациента до следующего приёма.
+          {t("Пошаговый сценарий: от регистрации пациента до следующего приёма.")}
         </p>
       </div>
       <AdminFlow />

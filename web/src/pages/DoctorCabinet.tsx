@@ -12,11 +12,11 @@ import {
   formatTime,
   formatDate,
   age,
-  yearsLabel,
   minBirthDateInput,
   todayInput,
   validateBirthDate,
 } from "../lib/datetime";
+import { useT, yearsText, ratingsText } from "../lib/i18n";
 import { Button, Field, Input, Modal, StatusBadge, Textarea } from "../components/ui";
 import { DateInput } from "../components/DateInputs";
 import { Avatar, AvatarUpload } from "../components/Avatar";
@@ -34,6 +34,7 @@ const WEEKDAY_LABELS: Record<number, string> = {
 };
 
 export default function DoctorCabinet() {
+  const { t } = useT();
   const { user, readOnly } = useAuth();
   const { data: doctor, isLoading, error } = useMyDoctorProfile();
   const { data: schedule = [] } = useSchedule(doctor?.id ?? null);
@@ -44,27 +45,30 @@ export default function DoctorCabinet() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Мой кабинет</h1>
+      <h1 className="text-2xl font-bold">{t("Мой кабинет")}</h1>
 
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
-          Учётная запись
+          {t("Учётная запись")}
         </div>
         <div className="mt-1 font-semibold text-ink">{user?.full_name}</div>
         <div className="text-sm text-slate-500">{user?.email}</div>
         {user?.clinic_name && (
-          <div className="mt-1 text-sm text-slate-400">Клиника: {user.clinic_name}</div>
+          <div className="mt-1 text-sm text-slate-400">
+            {t("Клиника:")} {user.clinic_name}
+          </div>
         )}
       </div>
 
       {isLoading ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-          Загрузка…
+          {t("Загрузка…")}
         </div>
       ) : error || !doctor ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-          Профиль врача ещё не привязан к вашему аккаунту. Обратитесь к владельцу
-          клиники.
+          {t(
+            "Профиль врача ещё не привязан к вашему аккаунту. Обратитесь к владельцу клиники."
+          )}
         </div>
       ) : (
         <>
@@ -80,22 +84,22 @@ export default function DoctorCabinet() {
               <div className="text-3xl font-bold text-brand">
                 {dashboard?.today_count ?? 0}
               </div>
-              <div className="mt-0.5 text-sm text-slate-400">Приёмов сегодня</div>
+              <div className="mt-0.5 text-sm text-slate-400">{t("Приёмов сегодня")}</div>
             </div>
             <div className="rounded-2xl bg-white p-5 shadow-sm">
               <div className="text-3xl font-bold text-ink">
                 {dashboard?.week_count ?? 0}
               </div>
-              <div className="mt-0.5 text-sm text-slate-400">Приёмов за неделю</div>
+              <div className="mt-0.5 text-sm text-slate-400">{t("Приёмов за неделю")}</div>
             </div>
           </div>
 
           {/* Приёмы на сегодня */}
           <div>
-            <h2 className="mb-3 text-lg font-semibold">Приёмы на сегодня</h2>
+            <h2 className="mb-3 text-lg font-semibold">{t("Приёмы на сегодня")}</h2>
             {today.length === 0 ? (
               <div className="rounded-2xl bg-white p-8 text-center text-slate-400 shadow-sm">
-                На сегодня приёмов нет
+                {t("На сегодня приёмов нет")}
               </div>
             ) : (
               <div className="space-y-2">
@@ -108,10 +112,10 @@ export default function DoctorCabinet() {
 
           {/* График работы */}
           <div>
-            <h2 className="mb-3 text-lg font-semibold">Мой график</h2>
+            <h2 className="mb-3 text-lg font-semibold">{t("Мой график")}</h2>
             {schedule.length === 0 ? (
               <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-                График не задан
+                {t("График не задан")}
               </div>
             ) : (
               <div className="space-y-2">
@@ -121,7 +125,7 @@ export default function DoctorCabinet() {
                     className="flex items-center justify-between rounded-xl bg-white px-4 py-3 shadow-sm"
                   >
                     <span className="text-sm font-medium text-ink">
-                      {WEEKDAY_LABELS[s.weekday]}
+                      {t(WEEKDAY_LABELS[s.weekday])}
                     </span>
                     <span className="text-sm text-slate-500">
                       {s.start_time} - {s.end_time}
@@ -148,16 +152,6 @@ export default function DoctorCabinet() {
  * Карточка врача. Используется и в кабинете самого врача, и (в режиме только
  * чтения) на странице «Врачи», чтобы профиль везде выглядел одинаково.
  */
-// ratingsLabel returns the correct Russian plural of "оценка" with the number.
-export function ratingsLabel(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${n} оценка`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
-    return `${n} оценки`;
-  return `${n} оценок`;
-}
-
 export function DoctorProfileCard({
   doctor,
   editable,
@@ -167,6 +161,7 @@ export function DoctorProfileCard({
   editable: boolean;
   onEdit?: () => void;
 }) {
+  const { t, lang } = useT();
   const years = age(doctor.birth_date);
   return (
     <div className="rounded-2xl bg-white p-6 shadow-sm">
@@ -197,47 +192,53 @@ export function DoctorProfileCard({
             {doctor.rating_count > 0 && (
               <span
                 className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700"
-                title={`Средняя оценка посещений: ${ratingsLabel(doctor.rating_count)}`}
+                title={t("Средняя оценка посещений: {ratings}", {
+                  ratings: ratingsText(lang, doctor.rating_count),
+                })}
               >
-                ★ {doctor.rating_avg.toFixed(1)} из 10
+                ★ {doctor.rating_avg.toFixed(1)} {t("из 10")}
               </span>
             )}
             {!doctor.is_active && (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                неактивен
+                {t("неактивен")}
               </span>
             )}
           </div>
           <div className="mt-0.5 text-sm text-slate-500">
-            {doctor.specialization || "Направление не указано"}
+            {doctor.specialization || t("Направление не указано")}
           </div>
           <div className="text-sm text-slate-400">{doctor.phone}</div>
 
           <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
             <ProfileField
-              label="Стаж работы"
+              label={t("Стаж работы")}
               value={
                 doctor.experience_years > 0
-                  ? `${doctor.experience_years} ${yearsLabel(doctor.experience_years)}`
+                  ? yearsText(lang, doctor.experience_years)
                   : ""
               }
             />
             <ProfileField
-              label="Возраст"
+              label={t("Возраст")}
               value={
                 years != null && doctor.birth_date
-                  ? `${years} ${yearsLabel(years)} · ${formatDate(doctor.birth_date)}`
+                  ? `${yearsText(lang, years)} · ${formatDate(doctor.birth_date)}`
                   : ""
               }
             />
-            <ProfileField label="Образование" value={doctor.education} wide />
-            <ProfileField label="Опыт работы" value={doctor.bio} wide />
-            <ProfileField label="Способности и навыки" value={doctor.skills} wide />
+            <ProfileField label={t("Образование")} value={doctor.education} wide />
+            <ProfileField label={t("Опыт работы")} value={doctor.bio} wide />
+            <ProfileField
+              label={t("Способности и навыки")}
+              value={doctor.skills}
+              wide
+            />
           </dl>
         </div>
         {editable && onEdit && (
           <Button variant="secondary" onClick={onEdit}>
-            Редактировать профиль
+            {t("Редактировать профиль")}
           </Button>
         )}
       </div>
@@ -254,11 +255,12 @@ function ProfileField({
   value: string;
   wide?: boolean;
 }) {
+  const { t } = useT();
   return (
     <div className={wide ? "sm:col-span-2" : undefined}>
       <dt className="text-xs text-slate-400">{label}</dt>
       <dd className="mt-0.5 whitespace-pre-wrap text-sm text-ink">
-        {value || <span className="text-slate-300">не указано</span>}
+        {value || <span className="text-slate-300">{t("не указано")}</span>}
       </dd>
     </div>
   );
@@ -271,6 +273,7 @@ export function DoctorProfileModal({
   doctor: Doctor;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const save = useSaveDoctorProfile();
   const [specialization, setSpecialization] = useState(doctor.specialization);
   const [phone, setPhone] = useState(doctor.phone);
@@ -307,35 +310,35 @@ export function DoctorProfileModal({
 
   return (
     <Modal
-      title="Мой профиль"
+      title={t("Мой профиль")}
       onClose={onClose}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
-            Отмена
+            {t("Отмена")}
           </Button>
           <Button onClick={submit} disabled={save.isPending}>
-            {save.isPending ? "Сохранение…" : "Сохранить"}
+            {save.isPending ? t("Сохранение…") : t("Сохранить")}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         <p className="text-xs text-slate-400">
-          ФИО, цвет в календаре и график работы задаёт владелец клиники.
+          {t("ФИО, цвет в календаре и график работы задаёт владелец клиники.")}
         </p>
-        <Field label="Направление">
+        <Field label={t("Направление")}>
           <Input
             value={specialization}
             onChange={(e) => setSpecialization(e.target.value)}
-            placeholder="Терапевт-стоматолог, ортодонт…"
+            placeholder={t("Терапевт-стоматолог, ортодонт…")}
           />
         </Field>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Телефон">
+          <Field label={t("Телефон")}>
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" />
           </Field>
-          <Field label="Стаж работы, лет">
+          <Field label={t("Стаж работы, лет")}>
             <Input
               inputMode="numeric"
               value={experience}
@@ -343,7 +346,7 @@ export function DoctorProfileModal({
             />
           </Field>
         </div>
-        <Field label="Дата рождения">
+        <Field label={t("Дата рождения")}>
           <DateInput
             value={birthDate}
             min={minBirthDateInput()}
@@ -351,30 +354,30 @@ export function DoctorProfileModal({
             onChange={setBirthDate}
           />
         </Field>
-        <Field label="Образование">
+        <Field label={t("Образование")}>
           <Textarea
             value={education}
             onChange={(e) => setEducation(e.target.value)}
-            placeholder="Вуз, год выпуска, курсы повышения квалификации"
+            placeholder={t("Вуз, год выпуска, курсы повышения квалификации")}
           />
         </Field>
-        <Field label="Опыт работы">
+        <Field label={t("Опыт работы")}>
           <Textarea
             value={bio}
             onChange={(e) => setBio(e.target.value)}
-            placeholder="Где и кем работали, чем занимались"
+            placeholder={t("Где и кем работали, чем занимались")}
           />
         </Field>
-        <Field label="Способности и навыки">
+        <Field label={t("Способности и навыки")}>
           <Textarea
             value={skills}
             onChange={(e) => setSkills(e.target.value)}
-            placeholder="Методики, оборудование, направления, которыми владеете"
+            placeholder={t("Методики, оборудование, направления, которыми владеете")}
           />
         </Field>
         {error && (
           <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
-            {error}
+            {t(error)}
           </div>
         )}
       </div>

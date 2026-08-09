@@ -5,11 +5,12 @@ import type { Doctor } from "../lib/types";
 import { Button, Modal } from "../components/ui";
 import DoctorModal from "../components/DoctorModal";
 import { Avatar } from "../components/Avatar";
-import { DoctorProfileCard, DoctorProfileModal, ratingsLabel } from "./DoctorCabinet";
-import { yearsLabel } from "../lib/datetime";
+import { DoctorProfileCard, DoctorProfileModal } from "./DoctorCabinet";
+import { useT, yearsText, ratingsText } from "../lib/i18n";
 import { useAuth } from "../auth/AuthContext";
 
 export default function Doctors() {
+  const { t, lang } = useT();
   const { user, readOnly } = useAuth();
   const canManage = user?.role !== "doctor" && !readOnly;
   const { data: allDoctors = [] } = useDoctors();
@@ -27,8 +28,10 @@ export default function Doctors() {
   async function onDelete(d: Doctor) {
     if (
       !confirm(
-        `Удалить врача «${d.full_name}»?\n\nВместе с ним будут удалены его приёмы и график работы. ` +
-          `Чтобы просто скрыть врача из списков, снимите отметку «Активен».`
+        t(
+          "Удалить врача «{name}»?\n\nВместе с ним будут удалены его приёмы и график работы. Чтобы просто скрыть врача из списков, снимите отметку «Активен».",
+          { name: d.full_name }
+        )
       )
     )
       return;
@@ -42,8 +45,8 @@ export default function Doctors() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Врачи</h1>
-        {canManage && <Button onClick={() => setEditing("new")}>Новый врач</Button>}
+        <h1 className="text-2xl font-bold">{t("Врачи")}</h1>
+        {canManage && <Button onClick={() => setEditing("new")}>{t("Новый врач")}</Button>}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -54,7 +57,7 @@ export default function Doctors() {
             <button
               onClick={() => setViewing(d)}
               className="flex w-full flex-1 items-start gap-3 text-left"
-              title="Открыть профиль врача"
+              title={t("Открыть профиль врача")}
             >
               <Avatar
                 name={d.full_name}
@@ -70,25 +73,25 @@ export default function Doctors() {
                 <div className="text-sm text-slate-400">{d.phone}</div>
                 {d.experience_years > 0 && (
                   <div className="text-sm text-slate-400">
-                    Стаж: {d.experience_years} {yearsLabel(d.experience_years)}
+                    {t("Стаж: {years}", { years: yearsText(lang, d.experience_years) })}
                   </div>
                 )}
                 {d.rating_count > 0 && (
                   <div className="text-sm font-medium text-amber-500">
                     ★ {d.rating_avg.toFixed(1)}{" "}
                     <span className="font-normal text-slate-400">
-                      · {ratingsLabel(d.rating_count)}
+                      · {ratingsText(lang, d.rating_count)}
                     </span>
                   </div>
                 )}
                 {canManage && d.user_email && (
                   <div className="mt-1 truncate text-xs text-slate-400">
-                    Логин: {d.user_email}
+                    {t("Логин:")} {d.user_email}
                   </div>
                 )}
                 {!d.is_active && (
                   <span className="mt-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                    неактивен
+                    {t("неактивен")}
                   </span>
                 )}
               </div>
@@ -102,13 +105,13 @@ export default function Doctors() {
                     onClick={() => setEditing(d)}
                     className="text-brand hover:underline"
                   >
-                    Изменить
+                    {t("Изменить")}
                   </button>
                   <button
                     onClick={() => onDelete(d)}
                     className="text-red-500 hover:underline"
                   >
-                    Удалить
+                    {t("Удалить")}
                   </button>
                 </>
               )}
@@ -117,7 +120,7 @@ export default function Doctors() {
         ))}
         {doctors.length === 0 && (
           <div className="col-span-full rounded-2xl bg-white p-8 text-center text-slate-400 shadow-sm">
-            Врачей пока нет
+            {t("Врачей пока нет")}
           </div>
         )}
       </div>
@@ -132,7 +135,7 @@ export default function Doctors() {
         <Modal
           title={viewing.full_name}
           onClose={() => setViewing(null)}
-          footer={<Button onClick={() => setViewing(null)}>Закрыть</Button>}
+          footer={<Button onClick={() => setViewing(null)}>{t("Закрыть")}</Button>}
         >
           {/* Владелец и менеджер могут дополнить профиль врача за него -
               например, пока врач не завёл себе учётную запись. */}

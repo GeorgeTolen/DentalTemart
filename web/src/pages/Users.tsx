@@ -4,19 +4,21 @@ import { errorMessage } from "../api/client";
 import type { ClinicUser, Role } from "../lib/types";
 import { ROLE_LABELS } from "../lib/types";
 import { Button, Field, Input, Modal, Select } from "../components/ui";
+import { useT } from "../lib/i18n";
 
 // Roles a clinic owner can assign (superadmin is platform-only).
 const ROLES: Role[] = ["owner", "admin", "doctor"];
 
 // Учётные записи сотрудников клиники. Доступно только владельцу.
 export default function Users() {
+  const { t } = useT();
   const { data: users = [], isLoading } = useUsers();
   const deleteUser = useDeleteUser();
   const [editing, setEditing] = useState<ClinicUser | null | "new">(null);
   const [error, setError] = useState("");
 
   async function del(u: ClinicUser) {
-    if (!confirm(`Удалить пользователя ${u.full_name}?`)) return;
+    if (!confirm(t("Удалить пользователя {name}?", { name: u.full_name }))) return;
     try {
       await deleteUser.mutateAsync(u.id);
     } catch (e) {
@@ -28,28 +30,28 @@ export default function Users() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Пользователи</h1>
+          <h1 className="text-2xl font-bold">{t("Пользователи")}</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Учётные записи сотрудников клиники и их роли.
+            {t("Учётные записи сотрудников клиники и их роли.")}
           </p>
         </div>
-        <Button onClick={() => setEditing("new")}>+ Добавить</Button>
+        <Button onClick={() => setEditing("new")}>{t("+ Добавить")}</Button>
       </div>
 
       {error && (
-        <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+        <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>
       )}
 
       {isLoading ? (
-        <p className="text-sm text-slate-400">Загрузка…</p>
+        <p className="text-sm text-slate-400">{t("Загрузка…")}</p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">ФИО</th>
+                <th className="px-4 py-3 text-left font-medium">{t("ФИО")}</th>
                 <th className="px-4 py-3 text-left font-medium">Email</th>
-                <th className="px-4 py-3 text-left font-medium">Роль</th>
+                <th className="px-4 py-3 text-left font-medium">{t("Роль")}</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -60,7 +62,7 @@ export default function Users() {
                   <td className="px-4 py-3 text-slate-500">{u.email}</td>
                   <td className="px-4 py-3">
                     <span className="rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-medium text-brand-dark">
-                      {ROLE_LABELS[u.role as Role] ?? u.role}
+                      {t(ROLE_LABELS[u.role as Role] ?? u.role)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -70,14 +72,14 @@ export default function Users() {
                         className="px-2 py-1 text-xs"
                         onClick={() => setEditing(u)}
                       >
-                        Изменить
+                        {t("Изменить")}
                       </Button>
                       <Button
                         variant="danger"
                         className="px-2 py-1 text-xs"
                         onClick={() => del(u)}
                       >
-                        Удалить
+                        {t("Удалить")}
                       </Button>
                     </div>
                   </td>
@@ -96,6 +98,7 @@ export default function Users() {
 }
 
 function UserModal({ user, onClose }: { user: ClinicUser | null; onClose: () => void }) {
+  const { t } = useT();
   const saveUser = useSaveUser();
   const [name, setName] = useState(user?.full_name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -125,29 +128,29 @@ function UserModal({ user, onClose }: { user: ClinicUser | null; onClose: () => 
 
   return (
     <Modal
-      title={user ? "Редактировать пользователя" : "Новый пользователь"}
+      title={user ? t("Редактировать пользователя") : t("Новый пользователь")}
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
+          <Button variant="secondary" onClick={onClose}>{t("Отмена")}</Button>
           <Button onClick={save} disabled={saveUser.isPending}>
-            {saveUser.isPending ? "Сохранение…" : "Сохранить"}
+            {saveUser.isPending ? t("Сохранение…") : t("Сохранить")}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="ФИО">
+        <Field label={t("ФИО")}>
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label="Email">
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
-        <Field label="Роль">
+        <Field label={t("Роль")}>
           <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
             {ROLES.map((r) => (
               <option key={r} value={r}>
-                {ROLE_LABELS[r]}
+                {t(ROLE_LABELS[r])}
               </option>
             ))}
           </Select>
@@ -155,8 +158,8 @@ function UserModal({ user, onClose }: { user: ClinicUser | null; onClose: () => 
         <Field
           label={
             user
-              ? "Новый пароль (оставьте пустым чтобы не менять, минимум 6 символов)"
-              : "Пароль * (минимум 6 символов)"
+              ? t("Новый пароль (оставьте пустым чтобы не менять, минимум 6 символов)")
+              : t("Пароль * (минимум 6 символов)")
           }
         >
           <Input
@@ -167,7 +170,7 @@ function UserModal({ user, onClose }: { user: ClinicUser | null; onClose: () => 
           />
         </Field>
         {error && (
-          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>
         )}
       </div>
     </Modal>

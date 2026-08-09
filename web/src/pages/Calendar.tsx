@@ -9,6 +9,10 @@ import type {
   EventClickArg,
 } from "@fullcalendar/core";
 import ruLocale from "@fullcalendar/core/locales/ru";
+import kkLocale from "@fullcalendar/core/locales/kk";
+// Английскую локаль тоже импортируем объектом: строковый код FullCalendar
+// принимает только у зарегистрированных локалей.
+import enLocale from "@fullcalendar/core/locales/en-gb";
 import {
   useAppointments,
   useDoctors,
@@ -20,6 +24,7 @@ import type { Appointment } from "../lib/types";
 import AppointmentModal from "../components/AppointmentModal";
 import { Button, Select } from "../components/ui";
 import { useAuth } from "../auth/AuthContext";
+import { useT } from "../lib/i18n";
 
 interface ModalState {
   existing: Appointment | null;
@@ -31,6 +36,7 @@ interface ModalState {
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
 export default function CalendarPage() {
+  const { t, lang } = useT();
   // Режим поддержки: календарь показываем, но создавать и двигать записи нельзя.
   const { user, readOnly } = useAuth();
   const [range, setRange] = useState<{ from: string; to: string }>({
@@ -66,8 +72,8 @@ export default function CalendarPage() {
   // завершённые с галочкой и приглушены, «не пришёл» помечен крестом.
   const STATUS_MARK: Record<string, string> = {
     completed: "✓ ",
-    cancelled: "✕ отменён · ",
-    no_show: "✕ не пришёл · ",
+    cancelled: `✕ ${t("отменён")} · `,
+    no_show: `✕ ${t("не пришёл")} · `,
   };
   const events = appointments.map((a) => ({
     id: String(a.id),
@@ -143,7 +149,7 @@ export default function CalendarPage() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Календарь</h1>
+        <h1 className="text-2xl font-bold">{t("Календарь")}</h1>
         <div className="flex items-center gap-3">
           <div className="w-52">
             <Select
@@ -152,7 +158,7 @@ export default function CalendarPage() {
                 setDoctorId(e.target.value ? Number(e.target.value) : null)
               }
             >
-              <option value="">Все врачи</option>
+              <option value="">{t("Все врачи")}</option>
               {doctors.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.full_name}
@@ -162,7 +168,7 @@ export default function CalendarPage() {
           </div>
           {!readOnly && (
             <Button onClick={() => setModal({ existing: null })}>
-              Новая запись
+              {t("Новая запись")}
             </Button>
           )}
         </div>
@@ -170,8 +176,9 @@ export default function CalendarPage() {
 
       {!readOnly && (
         <p className="text-sm text-slate-400">
-          Карточку записи можно перетащить на другое время или растянуть за край,
-          чтобы изменить длительность.
+          {t(
+            "Карточку записи можно перетащить на другое время или растянуть за край, чтобы изменить длительность."
+          )}
         </p>
       )}
 
@@ -180,7 +187,7 @@ export default function CalendarPage() {
           plugins={[timeGridPlugin, interactionPlugin]}
           // На телефоне по умолчанию - вид «День» (неделя не влезает по ширине).
           initialView={isMobile ? "timeGridDay" : "timeGridWeek"}
-          locale={ruLocale}
+          locale={lang === "kk" ? kkLocale : lang === "en" ? enLocale : ruLocale}
           headerToolbar={{
             left: "prev,next today",
             center: "title",

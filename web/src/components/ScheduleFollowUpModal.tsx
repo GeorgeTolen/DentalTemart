@@ -5,6 +5,7 @@ import { localInputToISO, validateAppointmentDate } from "../lib/datetime";
 import { Button, Field, Input, Modal, Select } from "./ui";
 import { DateField } from "./TimePickerDrawer";
 import type { Appointment } from "../lib/types";
+import { useT } from "../lib/i18n";
 
 // Quick "schedule the next visit" modal, reused from the Dashboard, the
 // Appointments page, and the patient's treatment history.
@@ -15,6 +16,7 @@ export default function ScheduleFollowUpModal({
   appointment: Appointment;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const { data: doctors = [] } = useDoctors();
   const activeDoctors = doctors.filter((d) => d.is_active || d.id === appointment.doctor_id);
   const save = useSaveAppointment();
@@ -75,22 +77,28 @@ export default function ScheduleFollowUpModal({
 
   return (
     <Modal
-      title={isEdit ? "Изменить следующий приём" : "Записать на следующий приём"}
+      title={t(
+        isEdit ? "Изменить следующий приём" : "Записать на следующий приём"
+      )}
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
+          <Button variant="secondary" onClick={onClose}>{t("Отмена")}</Button>
           <Button onClick={submit} disabled={save.isPending}>
-            {save.isPending ? "Сохранение…" : isEdit ? "Сохранить" : "Записать"}
+            {save.isPending
+              ? t("Сохранение…")
+              : isEdit
+                ? t("Сохранить")
+                : t("Записать")}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         <div className="rounded-xl bg-brand-bg px-4 py-2 text-sm">
-          Пациент: <strong>{appointment.patient_name}</strong>
+          {t("Пациент")}: <strong>{appointment.patient_name}</strong>
         </div>
-        <Field label="Врач">
+        <Field label={t("Врач")}>
           <Select value={String(doctorId)} onChange={(e) => setDoctorId(Number(e.target.value))}>
             {activeDoctors.map((d) => (
               <option key={d.id} value={d.id}>
@@ -100,18 +108,18 @@ export default function ScheduleFollowUpModal({
           </Select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Дата">
+          <Field label={t("Дата")}>
             <DateField
               value={date}
               onChange={setDate}
-              drawerTitle="Дата следующего приёма"
+              drawerTitle={t("Дата следующего приёма")}
             />
           </Field>
-          <Field label="Время">
+          <Field label={t("Время")}>
             <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
           </Field>
         </div>
-        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>}
       </div>
     </Modal>
   );

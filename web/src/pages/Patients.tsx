@@ -12,11 +12,13 @@ import { DateInput } from "../components/DateInputs";
 import { AgeCategoryBadge } from "../components/AgeCategoryBadge";
 import { formatDate, validateBirthDate, minBirthDateInput, todayInput } from "../lib/datetime";
 import { parseIIN } from "../lib/iin";
+import { useT } from "../lib/i18n";
 
 // В таблице пол показываем одной буквой - колонка узкая, слово не нужно.
 const GENDER_SHORT: Record<"male" | "female", string> = { male: "М", female: "Ж" };
 
 export default function Patients() {
+  const { t } = useT();
   const { readOnly } = useAuth();
   const [input, setInput] = useState("");
   const search = useDebounced(input);
@@ -39,20 +41,20 @@ export default function Patients() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Пациенты</h1>
+        <h1 className="text-2xl font-bold">{t("Пациенты")}</h1>
         {!readOnly && (
-          <Button onClick={() => setEditing("new")}>Новый пациент</Button>
+          <Button onClick={() => setEditing("new")}>{t("Новый пациент")}</Button>
         )}
       </div>
 
       <div className="max-w-md">
         <Input
-          placeholder="Поиск по ФИО, телефону или ИИН…"
+          placeholder={t("Поиск по ФИО, телефону или ИИН…")}
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
         <p className="mt-1.5 text-xs text-slate-400">
-          База пациентов общая для всех клиник платформы.
+          {t("База пациентов общая для всех клиник платформы.")}
         </p>
       </div>
 
@@ -60,11 +62,11 @@ export default function Patients() {
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-slate-500">
             <tr>
-              <th className="px-5 py-3 font-medium">ФИО</th>
-              <th className="px-5 py-3 font-medium">ИИН</th>
-              <th className="px-5 py-3 font-medium">Телефон</th>
-              <th className="px-5 py-3 font-medium">Дата рождения</th>
-              <th className="px-5 py-3 font-medium">Пол</th>
+              <th className="px-5 py-3 font-medium">{t("ФИО")}</th>
+              <th className="px-5 py-3 font-medium">{t("ИИН")}</th>
+              <th className="px-5 py-3 font-medium">{t("Телефон")}</th>
+              <th className="px-5 py-3 font-medium">{t("Дата рождения")}</th>
+              <th className="px-5 py-3 font-medium">{t("Пол")}</th>
               <th className="px-5 py-3" />
             </tr>
           </thead>
@@ -85,7 +87,7 @@ export default function Patients() {
                   {formatDate(p.birth_date)}
                 </td>
                 <td className="px-5 py-3 text-slate-600">
-                  {p.gender ? GENDER_SHORT[p.gender] : "-"}
+                  {p.gender ? t(GENDER_SHORT[p.gender]) : "-"}
                 </td>
                 <td className="px-5 py-3 text-right">
                   {/* Карточка общая, но правит её только заведшая клиника -
@@ -95,7 +97,7 @@ export default function Patients() {
                       onClick={() => setEditing(p)}
                       className="text-brand hover:underline"
                     >
-                      Изменить
+                      {t("Изменить")}
                     </button>
                   )}
                 </td>
@@ -104,7 +106,7 @@ export default function Patients() {
             {!isLoading && patients.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-5 py-8 text-center text-slate-400">
-                  Пациенты не найдены
+                  {t("Пациенты не найдены")}
                 </td>
               </tr>
             )}
@@ -116,7 +118,7 @@ export default function Patients() {
       {total > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-sm text-slate-400">
-            {from}–{to} из {total}
+            {t("{from}–{to} из {total}", { from, to, total })}
           </span>
           <div className="flex gap-2">
             <Button
@@ -124,14 +126,14 @@ export default function Patients() {
               disabled={page === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
             >
-              ← Назад
+              ← {t("Назад")}
             </Button>
             <Button
               variant="secondary"
               disabled={!hasNext}
               onClick={() => setPage((p) => p + 1)}
             >
-              Следующие {PATIENTS_PAGE_SIZE} →
+              {t("Следующие {n}", { n: PATIENTS_PAGE_SIZE })} →
             </Button>
           </div>
         </div>
@@ -154,6 +156,7 @@ function PatientForm({
   patient: Patient | null;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const save = useSavePatient();
   const [fullName, setFullName] = useState(patient?.full_name ?? "");
   const [phone, setPhone] = useState(patient?.phone ?? "");
@@ -198,25 +201,25 @@ function PatientForm({
 
   return (
     <Modal
-      title={patient ? "Изменить пациента" : "Новый пациент"}
+      title={patient ? t("Изменить пациента") : t("Новый пациент")}
       onClose={onClose}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
-            Отмена
+            {t("Отмена")}
           </Button>
           <Button onClick={onSubmit} disabled={save.isPending}>
-            Сохранить
+            {t("Сохранить")}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="ФИО">
+        <Field label={t("ФИО")}>
           <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
         </Field>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="ИИН (12 цифр)">
+          <Field label={t("ИИН (12 цифр)")}>
             <Input
               value={iin}
               inputMode="numeric"
@@ -224,18 +227,18 @@ function PatientForm({
               onChange={(e) => onIinChange(e.target.value)}
             />
           </Field>
-          <Field label="Пол">
+          <Field label={t("Пол")}>
             <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
-              <option value="">- не указан -</option>
-              <option value="male">{GENDER_LABELS.male}</option>
-              <option value="female">{GENDER_LABELS.female}</option>
+              <option value="">{t("- не указан -")}</option>
+              <option value="male">{t(GENDER_LABELS.male)}</option>
+              <option value="female">{t(GENDER_LABELS.female)}</option>
             </Select>
           </Field>
         </div>
-        <Field label="Телефон">
+        <Field label={t("Телефон")}>
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
         </Field>
-        <Field label="Дата рождения">
+        <Field label={t("Дата рождения")}>
           <div className="flex items-center gap-2">
             <DateInput
               value={birthDate ?? ""}
@@ -246,12 +249,12 @@ function PatientForm({
             <AgeCategoryBadge birthDate={birthDate} />
           </div>
         </Field>
-        <Field label="Заметки">
+        <Field label={t("Заметки")}>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         {error && (
           <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
-            {error}
+            {t(error)}
           </div>
         )}
       </div>

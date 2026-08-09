@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, Input } from "./ui";
 import { PickerField } from "./PickerDrawer";
+import { useT } from "../lib/i18n";
 
 // Значение шторки - локальные datetime-local строки "YYYY-MM-DDTHH:MM",
 // как у прежних DateTimeInput, чтобы остальной код не менялся.
@@ -52,6 +53,7 @@ export default function TimePickerDrawer({
   onApply: (range: TimeRange) => void;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const initial = value.start ? new Date(value.start) : new Date();
   const [monthDate, setMonthDate] = useState(
     () => new Date(initial.getFullYear(), initial.getMonth(), 1)
@@ -90,7 +92,7 @@ export default function TimePickerDrawer({
   }
 
   const dayLabel = day
-    ? `${Number(day.slice(8, 10))} ${MONTHS[Number(day.slice(5, 7)) - 1]}`
+    ? `${Number(day.slice(8, 10))} ${t(MONTHS[Number(day.slice(5, 7)) - 1])}`
     : "";
 
   return (
@@ -101,12 +103,12 @@ export default function TimePickerDrawer({
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <h3 className="font-semibold text-ink">
-            {step === "date" ? "Дата приёма" : "Время приёма"}
+            {step === "date" ? t("Дата приёма") : t("Время приёма")}
           </h3>
           <button
             onClick={onClose}
             className="text-2xl leading-none text-slate-400 hover:text-slate-600"
-            aria-label="Закрыть"
+            aria-label={t("Закрыть")}
           >
             ×
           </button>
@@ -130,12 +132,12 @@ export default function TimePickerDrawer({
               </button>
 
               <TimeSection
-                label="Начало"
+                label={t("Начало")}
                 value={startTime}
                 onPick={pickStart}
               />
               <TimeSection
-                label={endTouched ? "Окончание" : "Окончание (+1 час)"}
+                label={endTouched ? t("Окончание") : t("Окончание (+1 час)")}
                 value={endTime}
                 onPick={pickEnd}
               />
@@ -146,12 +148,12 @@ export default function TimePickerDrawer({
         <div className="space-y-2 border-t border-slate-100 p-3">
           {error && (
             <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
-              {error}
+              {t(error)}
             </div>
           )}
           {step === "time" && (
             <Button className="w-full" onClick={apply}>
-              ОК
+              {t("ОК")}
             </Button>
           )}
         </div>
@@ -174,6 +176,7 @@ function MonthGrid({
   selected: string;
   onPick: (value: string) => void;
 }) {
+  const { t } = useT();
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -187,17 +190,17 @@ function MonthGrid({
         <button
           onClick={() => onMonthChange(new Date(year, month - 1, 1))}
           className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
-          aria-label="Предыдущий месяц"
+          aria-label={t("Предыдущий месяц")}
         >
           ←
         </button>
         <span className="text-sm font-semibold capitalize text-ink">
-          {MONTHS[month]} {year}
+          {t(MONTHS[month])} {year}
         </span>
         <button
           onClick={() => onMonthChange(new Date(year, month + 1, 1))}
           className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
-          aria-label="Следующий месяц"
+          aria-label={t("Следующий месяц")}
         >
           →
         </button>
@@ -211,7 +214,7 @@ function MonthGrid({
               i >= 5 ? "text-slate-400" : "text-slate-500"
             }`}
           >
-            {w}
+            {t(w)}
           </span>
         ))}
         {Array.from({ length: firstWeekday }).map((_, i) => (
@@ -263,6 +266,7 @@ export function DatePickerDrawer({
   onApply: (date: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const initial = value ? new Date(value + "T00:00:00") : new Date();
   const [monthDate, setMonthDate] = useState(
     () => new Date(initial.getFullYear(), initial.getMonth(), 1)
@@ -275,11 +279,11 @@ export function DatePickerDrawer({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h3 className="font-semibold text-ink">{title}</h3>
+          <h3 className="font-semibold text-ink">{t(title)}</h3>
           <button
             onClick={onClose}
             className="text-2xl leading-none text-slate-400 hover:text-slate-600"
-            aria-label="Закрыть"
+            aria-label={t("Закрыть")}
           >
             ×
           </button>
@@ -313,15 +317,16 @@ export function DateField({
   placeholder?: string;
   drawerTitle?: string;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const label = value
-    ? `${Number(value.slice(8, 10))} ${MONTHS[Number(value.slice(5, 7)) - 1]} ${value.slice(0, 4)}`
+    ? `${Number(value.slice(8, 10))} ${t(MONTHS[Number(value.slice(5, 7)) - 1])} ${value.slice(0, 4)}`
     : "";
   return (
     <>
       <PickerField
         value={label}
-        placeholder={placeholder}
+        placeholder={t(placeholder)}
         onClick={() => setOpen(true)}
       />
       {open && (

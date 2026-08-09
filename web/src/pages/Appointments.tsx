@@ -19,6 +19,7 @@ import { PickerField } from "../components/PickerDrawer";
 import TimePickerDrawer, { DateField } from "../components/TimePickerDrawer";
 import { formatMoney } from "../lib/money";
 import { useAuth } from "../auth/AuthContext";
+import { useT, dateLocale } from "../lib/i18n";
 
 // Локальная дата "YYYY-MM-DD" без UTC-сдвига (toISOString уехал бы на день
 // назад вечером в часовых поясах восточнее Гринвича).
@@ -33,6 +34,7 @@ const MONTH_LABELS = [
 ];
 
 export default function AppointmentsPage() {
+  const { t } = useT();
   const { user, readOnly } = useAuth();
   const isAdmin = (user?.role === "owner" || user?.role === "admin") && !readOnly;
 
@@ -116,7 +118,7 @@ export default function AppointmentsPage() {
     : appointments;
 
   async function cancel(a: Appointment) {
-    if (!confirm(`Отменить запись пациента ${a.patient_name}?`)) return;
+    if (!confirm(t("Отменить запись пациента {name}?", { name: a.patient_name }))) return;
     try {
       await saveApptTop.mutateAsync({
         id: a.id,
@@ -137,9 +139,14 @@ export default function AppointmentsPage() {
   async function remove(a: Appointment) {
     if (
       !confirm(
-        `Удалить запись пациента ${a.patient_name} от ${formatDate(a.start_time)} безвозвратно?\n\n` +
-          `Она исчезнет из календаря и истории пациента вместе с пробитыми услугами. ` +
-          `Чтобы просто пометить приём несостоявшимся, используйте «Отменить».`
+        t("Удалить запись пациента {name} от {date} безвозвратно?", {
+          name: a.patient_name,
+          date: formatDate(a.start_time),
+        }) +
+          "\n\n" +
+          t(
+            "Она исчезнет из календаря и истории пациента вместе с пробитыми услугами. Чтобы просто пометить приём несостоявшимся, используйте «Отменить»."
+          )
       )
     )
       return;
@@ -153,9 +160,9 @@ export default function AppointmentsPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">Записи</h1>
+        <h1 className="text-2xl font-bold">{t("Записи")}</h1>
         {!readOnly && (
-          <Button onClick={() => setCreating(true)}>Новая запись</Button>
+          <Button onClick={() => setCreating(true)}>{t("Новая запись")}</Button>
         )}
       </div>
 
@@ -171,23 +178,23 @@ export default function AppointmentsPage() {
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
-            Диапазон
+            {t("Диапазон")}
           </button>
           <div className="flex items-center gap-4">
             <button
               onClick={() => shiftMonth(-1)}
               className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
-              aria-label="Предыдущий месяц"
+              aria-label={t("Предыдущий месяц")}
             >
               ←
             </button>
             <span className="min-w-[9rem] text-center text-sm font-semibold capitalize text-ink">
-              {MONTH_LABELS[monthDate.getMonth()]} {monthDate.getFullYear()}
+              {t(MONTH_LABELS[monthDate.getMonth()])} {monthDate.getFullYear()}
             </span>
             <button
               onClick={() => shiftMonth(1)}
               className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-ink"
-              aria-label="Следующий месяц"
+              aria-label={t("Следующий месяц")}
             >
               →
             </button>
@@ -198,10 +205,10 @@ export default function AppointmentsPage() {
         {rangeMode && (
           <p className="text-center text-xs text-slate-400">
             {rangeEnd
-              ? "Диапазон выбран. Клик по дню начнёт новый."
+              ? t("Диапазон выбран. Клик по дню начнёт новый.")
               : selectedDay
-                ? "Теперь выберите последний день диапазона"
-                : "Выберите первый день диапазона"}
+                ? t("Теперь выберите последний день диапазона")
+                : t("Выберите первый день диапазона")}
           </p>
         )}
         <div className="flex gap-1 overflow-x-auto pb-1">
@@ -241,7 +248,7 @@ export default function AppointmentsPage() {
           onChange={(e) => setDoctorFilter(e.target.value ? Number(e.target.value) : null)}
           className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand"
         >
-          <option value="">Все врачи</option>
+          <option value="">{t("Все врачи")}</option>
           {doctors.map((d) => (
             <option key={d.id} value={d.id}>{d.full_name}</option>
           ))}
@@ -251,22 +258,22 @@ export default function AppointmentsPage() {
           onChange={(e) => setStatusFilter(e.target.value as AppointmentStatus | "")}
           className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand"
         >
-          <option value="">Все статусы</option>
+          <option value="">{t("Все статусы")}</option>
           {(Object.entries(STATUS_LABELS) as [AppointmentStatus, string][]).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
+            <option key={k} value={k}>{t(v)}</option>
           ))}
         </select>
         <span className="ml-auto self-center text-sm text-slate-400">
-          {filtered.length} записей
+          {t("{n} записей", { n: filtered.length })}
         </span>
       </div>
 
       {/* Список */}
       {isLoading ? (
-        <p className="text-sm text-slate-400">Загрузка…</p>
+        <p className="text-sm text-slate-400">{t("Загрузка…")}</p>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-          Записей не найдено
+          {t("Записей не найдено")}
         </div>
       ) : (
         <div className="space-y-2">
@@ -319,6 +326,7 @@ function AppointmentRow({
   onCancel: () => void;
   onDelete: () => void;
 }) {
+  const { t, lang } = useT();
   const [open, setOpen] = useState(false);
   const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
   const [billing, setBilling] = useState(false);
@@ -360,9 +368,9 @@ function AppointmentRow({
           {formatDate(a.start_time)}
         </span>
         <span className="font-semibold tabular-nums text-brand w-28 shrink-0">
-          {startDate.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}
+          {startDate.toLocaleTimeString(dateLocale(lang), { hour: "2-digit", minute: "2-digit" })}
           {" - "}
-          {endDate.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}
+          {endDate.toLocaleTimeString(dateLocale(lang), { hour: "2-digit", minute: "2-digit" })}
         </span>
         <span className="font-medium">{a.patient_name}</span>
         <span className="text-sm text-slate-400">{a.doctor_name}</span>
@@ -380,44 +388,44 @@ function AppointmentRow({
       {open && (
         <div className="border-t border-slate-100 px-4 pb-4 pt-3 space-y-3">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 text-sm">
-            <Info label="Пациент" value={a.patient_name} />
-            <Info label="Телефон" value={a.patient_phone || "-"} />
-            <Info label="Врач" value={a.doctor_name} />
-            <Info label="Дата" value={formatDate(a.start_time)} />
-            <Info label="Начало" value={startDate.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} />
-            <Info label="Окончание" value={endDate.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })} />
-            {a.diagnosis && <Info label="Диагноз" value={a.diagnosis} wide />}
-            {a.description && <Info label="Описание" value={a.description} wide />}
-            {a.next_visit_date && <Info label="Следующий приём" value={formatDate(a.next_visit_date)} wide />}
+            <Info label={t("Пациент")} value={a.patient_name} />
+            <Info label={t("Телефон")} value={a.patient_phone || "-"} />
+            <Info label={t("Врач")} value={a.doctor_name} />
+            <Info label={t("Дата")} value={formatDate(a.start_time)} />
+            <Info label={t("Начало")} value={startDate.toLocaleTimeString(dateLocale(lang), { hour: "2-digit", minute: "2-digit" })} />
+            <Info label={t("Окончание")} value={endDate.toLocaleTimeString(dateLocale(lang), { hour: "2-digit", minute: "2-digit" })} />
+            {a.diagnosis && <Info label={t("Диагноз")} value={a.diagnosis} wide />}
+            {a.description && <Info label={t("Описание")} value={a.description} wide />}
+            {a.next_visit_date && <Info label={t("Следующий приём")} value={formatDate(a.next_visit_date)} wide />}
           </div>
           {!readOnly && (
             <div className="flex flex-wrap gap-2 pt-1">
               <Button variant="secondary" className="py-1 px-3 text-xs" onClick={onEdit}>
-                Редактировать
+                {t("Редактировать")}
               </Button>
               {a.status !== "completed" && (
                 <Button className="py-1 px-3 text-xs" onClick={markCompleted} disabled={saveAppt.isPending}>
-                  {saveAppt.isPending ? "Сохранение…" : "Завершить"}
+                  {saveAppt.isPending ? t("Сохранение…") : t("Завершить")}
                 </Button>
               )}
               {isAdmin && (
                 <Button variant="secondary" className="py-1 px-3 text-xs" onClick={() => setBilling(true)}>
-                  Услуги и стоимость
+                  {t("Услуги и стоимость")}
                 </Button>
               )}
               <Button variant="secondary" className="py-1 px-3 text-xs" onClick={() => setSchedulingFollowUp(true)}>
-                {a.next_visit_date ? "Изменить след. приём" : "Следующий приём"}
+                {a.next_visit_date ? t("Изменить след. приём") : t("Следующий приём")}
               </Button>
               {isAdmin && a.status !== "cancelled" && (
                 <Button variant="secondary" className="py-1 px-3 text-xs" onClick={onCancel}>
-                  Отменить
+                  {t("Отменить")}
                 </Button>
               )}
               {/* Отменённая запись остаётся в календаре серой. Удаление стирает
                   её насовсем - вместе с пробитыми услугами. */}
               {isAdmin && (
                 <Button variant="danger" className="py-1 px-3 text-xs" onClick={onDelete}>
-                  Удалить
+                  {t("Удалить")}
                 </Button>
               )}
             </div>
@@ -452,6 +460,7 @@ function AppointmentEditModal({
   doctors: Doctor[];
   onClose: () => void;
 }) {
+  const { t, lang } = useT();
   const { user } = useAuth();
   const isAdmin = user?.role === "owner" || user?.role === "admin";
 
@@ -514,32 +523,32 @@ function AppointmentEditModal({
 
   return (
     <Modal
-      title="Редактировать запись"
+      title={t("Редактировать запись")}
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
-          <Button onClick={submit} disabled={busy}>{busy ? "Сохранение…" : "Сохранить"}</Button>
+          <Button variant="secondary" onClick={onClose}>{t("Отмена")}</Button>
+          <Button onClick={submit} disabled={busy}>{busy ? t("Сохранение…") : t("Сохранить")}</Button>
         </>
       }
     >
       <div className="space-y-4">
         {isAdmin ? (
-          <Field label="Пациент">
+          <Field label={t("Пациент")}>
             <PickerField
-              value={patientId === "new" ? "Новый пациент" : patientName}
-              placeholder="Выберите пациента"
+              value={patientId === "new" ? t("Новый пациент") : patientName}
+              placeholder={t("Выберите пациента")}
               onClick={() => setPickingPatient(true)}
             />
           </Field>
         ) : (
-          <div className="text-sm text-slate-500">Пациент: <strong className="text-ink">{appointment.patient_name}</strong></div>
+          <div className="text-sm text-slate-500">{t("Пациент")}: <strong className="text-ink">{appointment.patient_name}</strong></div>
         )}
 
         {patientId === "new" && (
           <div className="grid grid-cols-2 gap-3 rounded-xl bg-brand-bg p-3">
-            <Field label="ФИО"><Input value={newPatientName} onChange={(e) => setNewPatientName(e.target.value)} /></Field>
-            <Field label="ИИН (12 цифр)">
+            <Field label={t("ФИО")}><Input value={newPatientName} onChange={(e) => setNewPatientName(e.target.value)} /></Field>
+            <Field label={t("ИИН (12 цифр)")}>
               <Input
                 value={newPatientIin}
                 inputMode="numeric"
@@ -548,63 +557,63 @@ function AppointmentEditModal({
               />
               {newPatientInfo && (
                 <p className="mt-1 text-xs text-slate-400">
-                  Дата рождения: {formatDate(newPatientInfo.birthDate)} ·{" "}
-                  {ageCategory(newPatientInfo.birthDate)} ·{" "}
-                  {GENDER_LABELS[newPatientInfo.gender]}
+                  {t("Дата рождения")}: {formatDate(newPatientInfo.birthDate)} ·{" "}
+                  {t(ageCategory(newPatientInfo.birthDate) ?? "")} ·{" "}
+                  {t(GENDER_LABELS[newPatientInfo.gender])}
                 </p>
               )}
             </Field>
-            <Field label="Телефон"><Input value={newPatientPhone} onChange={(e) => setNewPatientPhone(e.target.value)} placeholder="+7…" /></Field>
+            <Field label={t("Телефон")}><Input value={newPatientPhone} onChange={(e) => setNewPatientPhone(e.target.value)} placeholder="+7…" /></Field>
           </div>
         )}
 
-        <Field label="Врач">
+        <Field label={t("Врач")}>
           <Select value={String(doctorId)} onChange={(e) => setDoctorId(Number(e.target.value))}>
             {doctors.filter((d) => d.is_active || d.id === doctorId).map((d) => (
               <option key={d.id} value={d.id}>{d.full_name}</option>
             ))}
           </Select>
         </Field>
-        <Field label="Дата и время">
+        <Field label={t("Дата и время")}>
           <PickerField
             value={
               start
-                ? `${new Date(start).toLocaleDateString("ru", { day: "numeric", month: "long" })}, ${start.slice(11, 16)} – ${end.slice(11, 16)}`
+                ? `${new Date(start).toLocaleDateString(dateLocale(lang), { day: "numeric", month: "long" })}, ${start.slice(11, 16)} – ${end.slice(11, 16)}`
                 : ""
             }
-            placeholder="Выбрать дату и время"
+            placeholder={t("Выбрать дату и время")}
             onClick={() => setPickingTime(true)}
           />
         </Field>
-        <Field label="Статус">
+        <Field label={t("Статус")}>
           <Select value={status} onChange={(e) => setStatus(e.target.value as AppointmentStatus)}>
             {(Object.entries(STATUS_LABELS) as [AppointmentStatus, string][]).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
+              <option key={k} value={k}>{t(v)}</option>
             ))}
           </Select>
         </Field>
-        <Field label="Диагноз">
+        <Field label={t("Диагноз")}>
           <Input
             value={diagnosis}
             onChange={(e) => setDiagnosis(e.target.value)}
-            placeholder="(желательно)"
+            placeholder={t("(желательно)")}
           />
         </Field>
-        <Field label="Описание приёма">
+        <Field label={t("Описание приёма")}>
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="(не обязательно)"
+            placeholder={t("(не обязательно)")}
           />
         </Field>
-        <Field label="Следующий приём">
+        <Field label={t("Следующий приём")}>
           <DateField
             value={nextVisit}
             onChange={setNextVisit}
             drawerTitle="Дата следующего приёма"
           />
         </Field>
-        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>}
       </div>
 
       {pickingPatient && (

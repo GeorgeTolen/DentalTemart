@@ -8,6 +8,7 @@ import {
 } from "../api/hooks";
 import { errorMessage } from "../api/client";
 import type { Doctor, ScheduleEntry } from "../lib/types";
+import { useT } from "../lib/i18n";
 import { Button, Field, Input, Modal, Select } from "./ui";
 
 // Один модал на всё: профиль врача, его аккаунт (логин+пароль сразу при
@@ -37,6 +38,7 @@ export default function DoctorModal({
   doctor: Doctor | null;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const save = useSaveDoctor();
   const saveSchedule = useSaveSchedule();
   const { data: doctors = [] } = useDoctors();
@@ -135,29 +137,29 @@ export default function DoctorModal({
 
   return (
     <Modal
-      title={doctor ? "Редактировать врача" : "Новый врач"}
+      title={doctor ? t("Редактировать врача") : t("Новый врач")}
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
-          <Button onClick={submit} disabled={busy}>{busy ? "Сохранение…" : "Сохранить"}</Button>
+          <Button variant="secondary" onClick={onClose}>{t("Отмена")}</Button>
+          <Button onClick={submit} disabled={busy}>{busy ? t("Сохранение…") : t("Сохранить")}</Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="ФИО *">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Иванов Иван Иванович" />
+        <Field label={t("ФИО *")}>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Иванов Иван Иванович")} />
         </Field>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Должность / специализация">
-            <Input value={spec} onChange={(e) => setSpec(e.target.value)} placeholder="Терапевт, хирург…" />
+          <Field label={t("Должность / специализация")}>
+            <Input value={spec} onChange={(e) => setSpec(e.target.value)} placeholder={t("Терапевт, хирург…")} />
           </Field>
-          <Field label="Телефон">
+          <Field label={t("Телефон")}>
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" />
           </Field>
         </div>
 
-        <Field label="Цвет в календаре (уникальный для каждого врача)">
+        <Field label={t("Цвет в календаре (уникальный для каждого врача)")}>
           <div className="flex flex-wrap gap-2">
             {availableColors.map((c) => (
               <button
@@ -173,29 +175,29 @@ export default function DoctorModal({
 
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4" />
-          Активен (отображается при выборе врача)
+          {t("Активен (отображается при выборе врача)")}
         </label>
 
         {/* Аккаунт врача */}
         <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
-          <p className="text-sm font-medium text-slate-600">Аккаунт врача (личный кабинет)</p>
+          <p className="text-sm font-medium text-slate-600">{t("Аккаунт врача (личный кабинет)")}</p>
           {hasLinkedAccount ? (
             <>
               <div className="rounded-xl bg-white px-3 py-2 text-sm">
-                Логин: <strong className="text-ink">{doctor?.user_email || "-"}</strong>
+                {t("Логин:")} <strong className="text-ink">{doctor?.user_email || "-"}</strong>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Новый пароль (не меняется, если пусто)">
+                <Field label={t("Новый пароль (не меняется, если пусто)")}>
                   <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
                 </Field>
-                <Field label="Подтверждение пароля">
+                <Field label={t("Подтверждение пароля")}>
                   <Input type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} />
                 </Field>
               </div>
             </>
           ) : (
             <>
-              <Field label="Email (логин)">
+              <Field label={t("Email (логин)")}>
                 <Input
                   type="email"
                   value={accountEmail}
@@ -205,20 +207,20 @@ export default function DoctorModal({
                 />
               </Field>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Пароль (минимум 6 символов)">
+                <Field label={t("Пароль (минимум 6 символов)")}>
                   <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={linkUserId !== ""} />
                 </Field>
-                <Field label="Подтверждение пароля">
+                <Field label={t("Подтверждение пароля")}>
                   <Input type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} disabled={linkUserId !== ""} />
                 </Field>
               </div>
               {unlinkedUsers.length > 0 && (
-                <Field label="…или привяжите существующий аккаунт">
+                <Field label={t("…или привяжите существующий аккаунт")}>
                   <Select
                     value={String(linkUserId)}
                     onChange={(e) => setLinkUserId(e.target.value ? Number(e.target.value) : "")}
                   >
-                    <option value="">- создать новый (поля выше) -</option>
+                    <option value="">{t("- создать новый (поля выше) -")}</option>
                     {unlinkedUsers.map((u) => (
                       <option key={u.id} value={u.id}>{u.full_name} · {u.email}</option>
                     ))}
@@ -231,7 +233,7 @@ export default function DoctorModal({
 
         {/* График работы */}
         <div className="border-t border-slate-100 pt-4">
-          <p className="mb-3 text-sm font-medium text-slate-600">График работы</p>
+          <p className="mb-3 text-sm font-medium text-slate-600">{t("График работы")}</p>
           <div className="space-y-2">
             {WEEKDAYS.map((d) => {
               const entry = entries[d.value];
@@ -239,7 +241,7 @@ export default function DoctorModal({
                 <div key={d.value} className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2">
                   <label className="flex w-36 cursor-pointer items-center gap-2 text-sm">
                     <input type="checkbox" checked={!!entry} onChange={(e) => toggleDay(d.value, e.target.checked)} className="h-4 w-4" />
-                    {d.label}
+                    {t(d.label)}
                   </label>
                   {entry ? (
                     <div className="flex items-center gap-2">
@@ -248,7 +250,7 @@ export default function DoctorModal({
                       <input type="time" value={entry.end_time} onChange={(e) => setTimeField(d.value, "end_time", e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
                     </div>
                   ) : (
-                    <span className="text-sm text-slate-300">выходной</span>
+                    <span className="text-sm text-slate-300">{t("выходной")}</span>
                   )}
                 </div>
               );
@@ -256,7 +258,7 @@ export default function DoctorModal({
           </div>
         </div>
 
-        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>}
       </div>
     </Modal>
   );

@@ -4,9 +4,11 @@ import { errorMessage } from "../api/client";
 import type { Service } from "../lib/types";
 import { formatAmount, formatMoney, parseMoneyInput } from "../lib/money";
 import { Button, Field, Input, Modal, Textarea } from "../components/ui";
+import { useT } from "../lib/i18n";
 
 // Прайс клиники. Ведут владелец и менеджер: из него набирается стоимость приёма.
 export default function Services() {
+  const { t } = useT();
   const { data: services = [], isLoading } = useServices();
   const del = useDeleteService();
   const [editing, setEditing] = useState<Service | "new" | null>(null);
@@ -15,10 +17,11 @@ export default function Services() {
   async function onDelete(s: Service) {
     if (
       !confirm(
-        `Удалить услугу «${s.name}» из прайса?\n\n` +
-          `Уже пробитые приёмы не изменятся - в них сохранены название и цена ` +
-          `на момент оказания. Чтобы просто убрать услугу из списка выбора, ` +
-          `снимите отметку «Активна».`
+        t("Удалить услугу «{name}» из прайса?", { name: s.name }) +
+          "\n\n" +
+          t(
+            "Уже пробитые приёмы не изменятся - в них сохранены название и цена на момент оказания. Чтобы просто убрать услугу из списка выбора, снимите отметку «Активна»."
+          )
       )
     )
       return;
@@ -34,32 +37,32 @@ export default function Services() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Услуги</h1>
+          <h1 className="text-2xl font-bold">{t("Услуги")}</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Прайс вашей клиники. Из него набирается стоимость приёма.
+            {t("Прайс вашей клиники. Из него набирается стоимость приёма.")}
           </p>
         </div>
-        <Button onClick={() => setEditing("new")}>+ Услуга</Button>
+        <Button onClick={() => setEditing("new")}>{t("+ Услуга")}</Button>
       </div>
 
       {error && (
-        <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+        <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>
       )}
 
       {isLoading ? (
-        <p className="text-sm text-slate-400">Загрузка…</p>
+        <p className="text-sm text-slate-400">{t("Загрузка…")}</p>
       ) : services.length === 0 ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-          Услуг пока нет - добавьте первую.
+          {t("Услуг пока нет - добавьте первую.")}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-slate-500">
               <tr>
-                <th className="px-5 py-3 font-medium">Услуга</th>
-                <th className="px-5 py-3 font-medium">Цена</th>
-                <th className="px-5 py-3 font-medium">Статус</th>
+                <th className="px-5 py-3 font-medium">{t("Услуга")}</th>
+                <th className="px-5 py-3 font-medium">{t("Цена")}</th>
+                <th className="px-5 py-3 font-medium">{t("Статус")}</th>
                 <th className="px-5 py-3" />
               </tr>
             </thead>
@@ -85,7 +88,7 @@ export default function Services() {
                           : "bg-slate-100 text-slate-500"
                       }`}
                     >
-                      {s.is_active ? "Активна" : "Скрыта"}
+                      {s.is_active ? t("Активна") : t("Скрыта")}
                     </span>
                   </td>
                   <td className="px-5 py-3">
@@ -94,13 +97,13 @@ export default function Services() {
                         onClick={() => setEditing(s)}
                         className="text-brand hover:underline"
                       >
-                        Изменить
+                        {t("Изменить")}
                       </button>
                       <button
                         onClick={() => onDelete(s)}
                         className="text-red-500 hover:underline"
                       >
-                        Удалить
+                        {t("Удалить")}
                       </button>
                     </div>
                   </td>
@@ -128,6 +131,7 @@ function ServiceModal({
   service: Service | null;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const save = useSaveService();
   const [name, setName] = useState(service?.name ?? "");
   const [price, setPrice] = useState(service?.price ?? 0);
@@ -154,37 +158,37 @@ function ServiceModal({
 
   return (
     <Modal
-      title={service ? "Изменить услугу" : "Новая услуга"}
+      title={service ? t("Изменить услугу") : t("Новая услуга")}
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Отмена</Button>
+          <Button variant="secondary" onClick={onClose}>{t("Отмена")}</Button>
           <Button onClick={submit} disabled={save.isPending}>
-            {save.isPending ? "Сохранение…" : "Сохранить"}
+            {save.isPending ? t("Сохранение…") : t("Сохранить")}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Название *">
+        <Field label={t("Название *")}>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Удаление зуба"
+            placeholder={t("Удаление зуба")}
           />
         </Field>
-        <Field label="Цена, ₸">
+        <Field label={t("Цена, ₸")}>
           <Input
             inputMode="numeric"
             value={formatAmount(price)}
             onChange={(e) => setPrice(parseMoneyInput(e.target.value))}
           />
         </Field>
-        <Field label="Описание">
+        <Field label={t("Описание")}>
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Что входит в услугу, для каких случаев (не обязательно)"
+            placeholder={t("Что входит в услугу, для каких случаев (не обязательно)")}
           />
         </Field>
         <label className="flex items-center gap-2 text-sm">
@@ -194,16 +198,15 @@ function ServiceModal({
             onChange={(e) => setIsActive(e.target.checked)}
             className="h-4 w-4"
           />
-          Активна (доступна при расчёте стоимости)
+          {t("Активна (доступна при расчёте стоимости)")}
         </label>
         {service && (
           <p className="text-xs text-slate-400">
-            Изменение цены действует только на будущие приёмы: в уже пробитых
-            сохранена цена на момент оказания.
+            {t("Изменение цены действует только на будущие приёмы: в уже пробитых сохранена цена на момент оказания.")}
           </p>
         )}
         {error && (
-          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+          <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>
         )}
       </div>
     </Modal>

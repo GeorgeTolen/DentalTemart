@@ -34,6 +34,7 @@ import { ClockIcon } from "./icons";
 import { Avatar } from "./Avatar";
 import AppointmentBillModal from "./AppointmentBillModal";
 import { useAuth } from "../auth/AuthContext";
+import { useT, dateLocale } from "../lib/i18n";
 
 interface Props {
   doctors: Doctor[];
@@ -78,6 +79,7 @@ function EditCard({
   initialEnd,
   onClose,
 }: Props) {
+  const { t, lang } = useT();
   const { user, readOnly } = useAuth();
   const isManager = user?.role === "owner" || user?.role === "admin";
   const saveAppt = useSaveAppointment();
@@ -136,7 +138,7 @@ function EditCard({
 
   // «12 августа, 10:00 – 11:00» для шапки карточки.
   const timeLabel = start
-    ? `${new Date(start).toLocaleDateString("ru", { day: "numeric", month: "long" })}, ${start.slice(11, 16)} – ${end.slice(11, 16)}`
+    ? `${new Date(start).toLocaleDateString(dateLocale(lang), { day: "numeric", month: "long" })}, ${start.slice(11, 16)} – ${end.slice(11, 16)}`
     : "";
 
   // «Завершить» прямо из карточки: администратору сразу открывается расчёт
@@ -166,7 +168,8 @@ function EditCard({
   async function onSubmit() {
     setError("");
     if (!doctorId) return setError("Выберите врача");
-    if (!start || !end) return setError("Укажите время начала и окончания");
+    if (!start || !end)
+      return setError("Укажите время начала и окончания");
     const dateErr = validateAppointmentDate(start);
     if (dateErr) return setError(dateErr);
 
@@ -213,7 +216,7 @@ function EditCard({
 
   async function onCancel() {
     if (!existing) return;
-    if (!confirm("Отменить запись?")) return;
+    if (!confirm(t("Отменить запись?"))) return;
     try {
       await saveAppt.mutateAsync({
         id: existing.id,
@@ -234,22 +237,22 @@ function EditCard({
 
   return (
     <Modal
-      title={existing ? "Карточка приёма" : "Новая запись"}
+      title={t(existing ? "Карточка приёма" : "Новая запись")}
       onClose={onClose}
       footer={
         <>
           {existing && existing.status !== "cancelled" && (
             <Button variant="secondary" onClick={onCancel} className="mr-auto">
-              Отменить запись
+              {t("Отменить запись")}
             </Button>
           )}
           {existing && existing.status !== "cancelled" && !readOnly && (
             <Button variant="success" onClick={complete} disabled={busy}>
-              Завершить
+              {t("Завершить")}
             </Button>
           )}
           <Button onClick={onSubmit} disabled={busy}>
-            {busy ? "Сохранение…" : "Сохранить"}
+            {busy ? t("Сохранение…") : t("Сохранить")}
           </Button>
         </>
       }
@@ -260,35 +263,35 @@ function EditCard({
           <button
             type="button"
             onClick={() => setPickingTime(true)}
-            title="Изменить дату и время"
+            title={t("Изменить дату и время")}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-dark hover:underline"
           >
             <ClockIcon className="h-4 w-4" />
-            {timeLabel || "Выбрать дату и время"}
+            {timeLabel || t("Выбрать дату и время")}
           </button>
           <span className="ml-auto">
             <StatusBadge status={status} />
           </span>
         </div>
 
-        <Field label="Пациент">
+        <Field label={t("Пациент")}>
           <PickerField
-            value={patientId === "new" ? "Новый пациент" : patientName}
-            placeholder="Выберите пациента"
+            value={patientId === "new" ? t("Новый пациент") : patientName}
+            placeholder={t("Выберите пациента")}
             onClick={() => setPickingPatient(true)}
           />
         </Field>
 
         {patientId === "new" && (
           <div className="grid grid-cols-1 gap-3 rounded-xl bg-brand-bg p-3 sm:grid-cols-2">
-            <Field label="ФИО пациента">
+            <Field label={t("ФИО пациента")}>
               <Input
                 value={newPatientName}
                 onChange={(e) => setNewPatientName(e.target.value)}
-                placeholder="Иванов Иван"
+                placeholder={t("Иванов Иван")}
               />
             </Field>
-            <Field label="ИИН (12 цифр)">
+            <Field label={t("ИИН (12 цифр)")}>
               <Input
                 value={newPatientIin}
                 inputMode="numeric"
@@ -296,17 +299,17 @@ function EditCard({
                 onChange={(e) =>
                   setNewPatientIin(e.target.value.replace(/\D/g, "").slice(0, 12))
                 }
-                placeholder="Если уже есть - подставится пациент"
+                placeholder={t("Если уже есть - подставится пациент")}
               />
               {newPatientInfo && (
                 <p className="mt-1 text-xs text-slate-400">
-                  Дата рождения: {formatDate(newPatientInfo.birthDate)} ·{" "}
-                  {ageCategory(newPatientInfo.birthDate)} ·{" "}
-                  {GENDER_LABELS[newPatientInfo.gender]}
+                  {t("Дата рождения")}: {formatDate(newPatientInfo.birthDate)} ·{" "}
+                  {t(ageCategory(newPatientInfo.birthDate) ?? "")} ·{" "}
+                  {t(GENDER_LABELS[newPatientInfo.gender])}
                 </p>
               )}
             </Field>
-            <Field label="Телефон">
+            <Field label={t("Телефон")}>
               <Input
                 value={newPatientPhone}
                 onChange={(e) => setNewPatientPhone(e.target.value)}
@@ -316,7 +319,7 @@ function EditCard({
           </div>
         )}
 
-        <Field label="Врач">
+        <Field label={t("Врач")}>
           <PickerField
             value={
               selectedDoctor
@@ -325,7 +328,7 @@ function EditCard({
                   : selectedDoctor.full_name
                 : ""
             }
-            placeholder="Выберите врача"
+            placeholder={t("Выберите врача")}
             onClick={() => setPickingDoctor(true)}
           />
         </Field>
@@ -333,50 +336,50 @@ function EditCard({
         {/* Статус выбирается только у существующей записи: новая всегда
             «Запланирован», лишний селект при создании только путает. */}
         {existing && (
-          <Field label="Статус">
+          <Field label={t("Статус")}>
             <Select
               value={status}
               onChange={(e) => setStatus(e.target.value as AppointmentStatus)}
             >
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABELS[s]}
+                  {t(STATUS_LABELS[s])}
                 </option>
               ))}
             </Select>
           </Field>
         )}
 
-        <Field label="Диагноз">
+        <Field label={t("Диагноз")}>
           <Input
             value={diagnosis}
             onChange={(e) => setDiagnosis(e.target.value)}
-            placeholder="(желательно)"
+            placeholder={t("(желательно)")}
           />
         </Field>
 
-        <Field label="Описание приёма">
+        <Field label={t("Описание приёма")}>
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="(не обязательно)"
+            placeholder={t("(не обязательно)")}
           />
         </Field>
 
         {/* Дата следующего приёма заполняется позже, при работе с записью. */}
         {existing && (
-          <Field label="Дата следующего приёма">
+          <Field label={t("Дата следующего приёма")}>
             <DateField
               value={nextVisit ?? ""}
               onChange={setNextVisit}
-              drawerTitle="Дата следующего приёма"
+              drawerTitle={t("Дата следующего приёма")}
             />
           </Field>
         )}
 
         {error && (
           <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
-            {error}
+            {t(error)}
           </div>
         )}
       </div>
@@ -449,6 +452,7 @@ export function PatientPicker({
   onNew?: () => void;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const [input, setInput] = useState("");
   const search = useDebounced(input);
   const { data, isFetching } = usePatients(search);
@@ -457,8 +461,8 @@ export function PatientPicker({
 
   return (
     <PickerDrawer
-      title="Пациент"
-      placeholder="ФИО, телефон или ИИН…"
+      title={t("Пациент")}
+      placeholder={t("ФИО, телефон или ИИН…")}
       search={input}
       onSearch={setInput}
       loading={isFetching && patients.length === 0}
@@ -468,7 +472,7 @@ export function PatientPicker({
       footer={
         onNew && (
           <Button variant="secondary" className="w-full" onClick={onNew}>
-            + Новый пациент
+            + {t("Новый пациент")}
           </Button>
         )
       }
@@ -484,7 +488,10 @@ export function PatientPicker({
       ))}
       {total > patients.length && (
         <p className="px-3 py-2 text-xs text-slate-400">
-          Показаны первые {patients.length} из {total} - уточните поиск.
+          {t("Показаны первые {shown} из {total} - уточните поиск.", {
+            shown: patients.length,
+            total,
+          })}
         </p>
       )}
     </PickerDrawer>
@@ -503,6 +510,7 @@ function DoctorPicker({
   onPick: (d: Doctor) => void;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const [search, setSearch] = useState("");
   const q = search.trim().toLowerCase();
   const filtered = q
@@ -515,8 +523,8 @@ function DoctorPicker({
 
   return (
     <PickerDrawer
-      title="Врач"
-      placeholder="ФИО или направление…"
+      title={t("Врач")}
+      placeholder={t("ФИО или направление…")}
       search={search}
       onSearch={setSearch}
       isEmpty={filtered.length === 0}
@@ -546,6 +554,7 @@ function CompletedCard({
   existing,
   onClose,
 }: Props & { existing: Appointment }) {
+  const { t } = useT();
   const saveAppt = useSaveAppointment();
   const deleteAppt = useDeleteAppointment();
 
@@ -610,7 +619,7 @@ function CompletedCard({
   }
 
   async function onDelete() {
-    if (!confirm("Удалить запись?")) return;
+    if (!confirm(t("Удалить запись?"))) return;
     try {
       await deleteAppt.mutateAsync(existing.id);
       onClose();
@@ -621,18 +630,18 @@ function CompletedCard({
 
   return (
     <Modal
-      title="Карточка приёма"
+      title={t("Карточка приёма")}
       onClose={onClose}
       footer={
         <>
           <Button variant="danger" onClick={onDelete} className="mr-auto">
-            Удалить
+            {t("Удалить")}
           </Button>
           <Button variant="secondary" onClick={onClose}>
-            Закрыть
+            {t("Закрыть")}
           </Button>
           <Button onClick={scheduleFollowUp} disabled={busy}>
-            {busy ? "Сохранение…" : "Записать на след. приём"}
+            {busy ? t("Сохранение…") : t("Записать на след. приём")}
           </Button>
         </>
       }
@@ -644,33 +653,36 @@ function CompletedCard({
             <span className="font-semibold">{existing.patient_name}</span>
             <StatusBadge status={existing.status} />
           </div>
-          <Row label="Врач" value={existing.doctor_name} />
-          <Row label="Время" value={formatDateTime(existing.start_time)} />
-          <Row label="Диагноз" value={existing.diagnosis || "-"} />
+          <Row label={t("Врач")} value={existing.doctor_name} />
+          <Row label={t("Время")} value={formatDateTime(existing.start_time)} />
+          <Row label={t("Диагноз")} value={existing.diagnosis || "-"} />
           {existing.description && (
             <div>
-              <div className="text-slate-400">Описание</div>
+              <div className="text-slate-400">{t("Описание")}</div>
               <div className="whitespace-pre-wrap">{existing.description}</div>
             </div>
           )}
           <p className="pt-1 text-xs text-slate-400">
-            Приём завершён - данные приёма изменить нельзя. Можно записать
-            пациента на следующий приём.
+            {t(
+              "Приём завершён - данные приёма изменить нельзя. Можно записать пациента на следующий приём."
+            )}
           </p>
         </div>
 
         {/* Follow-up scheduler. */}
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-ink">Следующий приём</h3>
+          <h3 className="text-sm font-semibold text-ink">
+            {t("Следующий приём")}
+          </h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Дата">
+            <Field label={t("Дата")}>
               <DateField
                 value={nextDate}
                 onChange={setNextDate}
-                drawerTitle="Дата следующего приёма"
+                drawerTitle={t("Дата следующего приёма")}
               />
             </Field>
-            <Field label="Время">
+            <Field label={t("Время")}>
               <Input
                 type="time"
                 value={nextTime}
@@ -679,7 +691,7 @@ function CompletedCard({
             </Field>
           </div>
 
-          <Field label="Врач (по умолчанию - тот же)">
+          <Field label={t("Врач (по умолчанию - тот же)")}>
             <Select
               value={String(nextDoctorId)}
               onChange={(e) => setNextDoctorId(Number(e.target.value))}
@@ -693,17 +705,17 @@ function CompletedCard({
             </Select>
           </Field>
 
-          <Field label="Заметка к следующему приёму">
+          <Field label={t("Заметка к следующему приёму")}>
             <Textarea
               value={nextNote}
               onChange={(e) => setNextNote(e.target.value)}
-              placeholder="Напр.: в след. раз поменять обезболивающее"
+              placeholder={t("Напр.: в след. раз поменять обезболивающее")}
             />
           </Field>
 
           {error && (
             <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
-              {error}
+              {t(error)}
             </div>
           )}
         </div>
