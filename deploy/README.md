@@ -106,14 +106,62 @@ cd /opt/temart
 docker compose -f docker-compose.prod.yml logs -f backend   # логи
 docker compose -f docker-compose.prod.yml ps                # статус
 
-# Бэкап базы (положите в cron):
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U temart temart | gzip > backup-$(date +%F).sql.gz
-
-# Восстановление:
-gunzip -c backup-YYYY-MM-DD.sql.gz | \
-  docker compose -f docker-compose.prod.yml exec -T postgres psql -U temart -d temart
 ```
 
 Данные (БД, загруженные файлы, TLS-сертификаты) живут в docker volume и
 переживают перезапуски/обновления.
+
+## Резервные копии
+
+Ставятся сами при деплое: CI кладёт на сервер `/opt/temart/backup.sh` и
+`restore.sh` и заводит задание cron на **03:00 каждый день**. Копии — в
+`/opt/temart/backups`, хранятся 14 дней:
+
+| Файл | Что внутри |
+|---|---|
+| `db-ГГГГ-ММ-ДД-ЧЧММ.dump` | вся база: пациенты, приёмы, услуги, журнал |
+| `uploads-ГГГГ-ММ-ДД-ЧЧММ.tgz` | файлы медкарты: снимки и аватарки |
+
+```bash
+# Сделать копию прямо сейчас
+/opt/temart/backup.sh
+
+# Что уже накопилось и когда был последний запуск
+ls -lh /opt/temart/backups
+tail /opt/temart/backups/backup.log
+
+# Восстановиться (заменяет текущие данные, поэтому просит подтверждение)
+CONFIRM=yes /opt/temart/restore.sh /opt/temart/backups/db-2026-08-11-0300.dump \
+                                   /opt/temart/backups/uploads-2026-08-11-0300.tgz
+```
+
+Сколько дней хранить — переменная `KEEP_DAYS` (по умолчанию 14):
+`KEEP_DAYS=30 /opt/temart/backup.sh`.
+
+### Копия вне сервера
+
+Копии лежат на том же VPS. Это спасает от ошибочного удаления данных, но не от
+потери самого сервера. Раз в неделю забирайте свежий дамп к себе:
+
+```bash
+scp root@92-38-48-238:/opt/temart/backups/db-*.dump ./
+scp root@92-38-48-238:/opt/temart/backups/uploads-*.tgz ./
+```
+
+Файлы содержат медицинские данные пациентов — храните их на защищённом диске,
+не в общих папках и не в мессенджерах.
+
+### Проверка восстановления
+
+Копия, которую ни разу не разворачивали, — это ещё не бэкап. Раз в несколько
+месяцев поднимайте дамп в отдельной базе и убеждайтесь, что данные на месте:
+
+```bash
+cd /opt/temart
+docker compose exec -T postgres createdb -U temart temart_check
+docker compose exec -T postgres pg_restore -U temart -d temart_check --no-owner \
+  < backups/db-2026-08-11-0300.dump
+docker compose exec -T postgres psql -U temart -d temart_check \
+  -c 'SELECT count(*) FROM patients;'
+docker compose exec -T postgres dropdb -U temart temart_check
+```

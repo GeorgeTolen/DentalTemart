@@ -49,6 +49,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -62,3 +64,38 @@ jobs:
             docker compose pull
             docker compose up -d
             docker image prune -f
+
+      # Скрипты бэкапа кладём на сервер тем же ключом, что и деплой: файлы
+      # едут в base64 через env, чтобы не заводить ещё один action.
+      - name: Pack backup scripts
+        id: pack
+        run: |
+          echo "backup=$(base64 -w0 deploy/backup.sh)" >> "$GITHUB_OUTPUT"
+          echo "restore=$(base64 -w0 deploy/restore.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Install backup scripts and cron
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          BACKUP_B64: ${{ steps.pack.outputs.backup }}
+          RESTORE_B64: ${{ steps.pack.outputs.restore }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: BACKUP_B64,RESTORE_B64
+          script: |
+            set -e
+            cd /opt/temart
+            mkdir -p backups
+            echo "$BACKUP_B64" | base64 -d > backup.sh
+            echo "$RESTORE_B64" | base64 -d > restore.sh
+            chmod +x backup.sh restore.sh
+            # Ежедневный бэкап в 03:00 по времени сервера. Ставим один раз:
+            # повторный деплой не должен плодить копии задания.
+            if ! crontab -l 2>/dev/null | grep -q '/opt/temart/backup.sh'; then
+              (crontab -l 2>/dev/null; echo '0 3 * * * /opt/temart/backup.sh >> /opt/temart/backups/backup.log 2>&1') | crontab -
+              echo "cron с ежедневным бэкапом установлен"
+            fi
+            # Первый бэкап сразу, чтобы копия была уже сегодня.
+            ./backup.sh
