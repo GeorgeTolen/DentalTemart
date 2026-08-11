@@ -141,6 +141,8 @@ func (h *Handlers) CreateClinic(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.OwnerName = normalizeName(req.OwnerName)
+	req.Phone = normalizePhone(req.Phone)
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return
@@ -262,6 +264,7 @@ func (h *Handlers) UpdateClinic(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.Phone = normalizePhone(req.Phone)
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return
@@ -402,6 +405,7 @@ func (h *Handlers) AddClinicOwner(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.FullName = normalizeName(req.FullName)
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return

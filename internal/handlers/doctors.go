@@ -26,6 +26,12 @@ type doctorRequest struct {
 	AccountPassword string `json:"account_password" validate:"omitempty,min=6"`
 }
 
+// normalize приводит ФИО и телефон к единому виду до валидации.
+func (req *doctorRequest) normalize() {
+	req.FullName = normalizeName(req.FullName)
+	req.Phone = normalizePhone(req.Phone)
+}
+
 func (req doctorRequest) color() string {
 	if req.Color == "" {
 		return "#3B82F6"
@@ -115,6 +121,7 @@ func (h *Handlers) CreateDoctor(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.normalize()
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return
@@ -221,6 +228,7 @@ func (h *Handlers) UpdateDoctor(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.normalize()
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return
@@ -394,6 +402,7 @@ func (h *Handlers) UpdateDoctorProfile(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.Phone = normalizePhone(req.Phone)
 	if req.ExperienceYears < 0 || req.ExperienceYears > 80 {
 		httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "стаж должен быть от 0 до 80 лет"))
 		return

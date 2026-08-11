@@ -76,6 +76,7 @@ func (h *Handlers) CreatePlatformAdmin(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.FullName = normalizeName(req.FullName)
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return
@@ -127,6 +128,7 @@ func (h *Handlers) UpdatePlatformAdmin(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.FullName = normalizeName(req.FullName)
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return

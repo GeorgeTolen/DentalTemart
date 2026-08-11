@@ -90,6 +90,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.FullName = normalizeName(req.FullName)
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return
@@ -145,6 +146,7 @@ func (h *Handlers) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.FullName = normalizeName(req.FullName)
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return

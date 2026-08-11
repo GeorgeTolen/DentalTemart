@@ -22,6 +22,13 @@ type patientRequest struct {
 	Gender    string `json:"gender"` // male | female | ""
 }
 
+// normalize приводит ФИО и телефон к единому виду до валидации: строка из
+// одних пробелов после этого станет пустой, и required честно сработает.
+func (req *patientRequest) normalize() {
+	req.FullName = normalizeName(req.FullName)
+	req.Phone = normalizePhone(req.Phone)
+}
+
 // iinRe matches a Kazakhstani ИИН: exactly 12 digits.
 var iinRe = regexp.MustCompile(`^\d{12}$`)
 
@@ -169,6 +176,7 @@ func (h *Handlers) CreatePatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.normalize()
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return
@@ -288,6 +296,7 @@ func (h *Handlers) UpdatePatient(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
+	req.normalize()
 	if err := h.validateStruct(req); err != nil {
 		httpx.Fail(w, err)
 		return
