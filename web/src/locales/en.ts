@@ -99,12 +99,11 @@ export const en: Record<string, string> = {
   "Снимки": "Scans",
   "Снимков пока нет": "No scans yet",
   "Добавить снимок": "Add scan",
-  "Описание не заполнено": "No description yet",
+  "Добавить описание": "Add description",
+  "Описаний пока нет": "No descriptions yet",
+  "Введите текст описания": "Enter the description text",
   "Аллергии, хронические болезни, особенности лечения…":
     "Allergies, chronic conditions, treatment specifics…",
-  "Описание может редактировать только клиника, которая завела карточку.":
-    "Only the clinic that created the card can edit the description.",
-  "Ранее добавленные записи «Аллергия»": "Previously added “Allergy” records",
   "С даты": "From date",
   "По дату": "To date",
   "Сбросить": "Reset",

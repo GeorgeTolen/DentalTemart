@@ -29,6 +29,9 @@ var validRecordTypes = map[string]bool{
 	"xray":    true,
 	"allergy": true,
 	"scan3d":  true,
+	// note — запись хронологии описаний пациента: текст без файла, дату
+	// проставляет created_at.
+	"note": true,
 }
 
 var imageExts = map[string]bool{

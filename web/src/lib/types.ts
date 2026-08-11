@@ -89,7 +89,7 @@ export interface Doctor {
   rating_count: number;
 }
 
-export type PatientRecordType = "xray" | "allergy" | "scan3d";
+export type PatientRecordType = "xray" | "allergy" | "scan3d" | "note";
 
 export interface PatientRecord {
   id: number;
@@ -110,6 +110,7 @@ export const RECORD_TYPE_LABELS: Record<PatientRecordType, string> = {
   xray: "Рентген",
   allergy: "Аллергия",
   scan3d: "3D снимок",
+  note: "Описание",
 };
 
 export type Gender = "male" | "female" | "";

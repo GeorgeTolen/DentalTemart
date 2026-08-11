@@ -460,10 +460,6 @@ function PatientRecordsSection({ patient }: { patient: Patient }) {
     }
   }
 
-  // Записи «Аллергия» больше не заводятся - вместо них общее описание. Уже
-  // существующие показываем под описанием, чтобы ничего не потерялось.
-  const legacyAllergies = records.filter((r) => r.type === "allergy");
-
   return (
     <div>
       <div className="mb-3 flex items-center justify-between flex-wrap gap-3">
@@ -486,27 +482,21 @@ function PatientRecordsSection({ patient }: { patient: Patient }) {
         ))}
       </div>
 
-      {/* Порядок нужен только снимкам: описание - один текст, сортировать нечего. */}
-      {tab === "scans" && (
-        <div className="mb-3">
-          <SortToggle value={sort} onChange={setSort} />
-        </div>
-      )}
+      <div className="mb-3">
+        <SortToggle value={sort} onChange={setSort} />
+      </div>
 
       {tab === "description" ? (
-        <>
-          <PatientDescription patient={patient} />
-          {legacyAllergies.length > 0 && (
-            <div className="mt-3 space-y-3">
-              <div className="text-xs text-slate-400">
-                {t("Ранее добавленные записи «Аллергия»")}
-              </div>
-              {legacyAllergies.map((r) => (
-                <RecordCard key={r.id} record={r} onDelete={onDelete} />
-              ))}
-            </div>
+        <PatientDescriptions
+          patient={patient}
+          records={sortList(
+            records.filter((r) => r.type === "note" || r.type === "allergy"),
+            sort,
+            (r) => r.created_at
           )}
-        </>
+          isLoading={isLoading}
+          onDelete={onDelete}
+        />
       ) : isLoading ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
           {t("Загрузка…")}
@@ -566,83 +556,106 @@ function PatientRecordsSection({ patient }: { patient: Patient }) {
 // Общее описание пациента: аллергии, хронические болезни, особенности.
 // Хранится в поле notes карточки, поэтому править его может только клиника,
 // которая карточку завела (остальным сервер ответит 403).
-function PatientDescription({ patient }: { patient: Patient }) {
+/**
+ * Хронология описаний пациента: каждое дополнение - отдельная запись со своей
+ * датой (её ставит сервер в момент добавления), автором и клиникой. Старые
+ * записи не переписываются: врач видит, что и когда было отмечено.
+ */
+function PatientDescriptions({
+  patient,
+  records,
+  isLoading,
+  onDelete,
+}: {
+  patient: Patient;
+  records: PatientRecord[];
+  isLoading: boolean;
+  onDelete: (id: number) => void;
+}) {
   const { t } = useT();
   const { readOnly } = useAuth();
-  const save = useSavePatient();
-  const [text, setText] = useState(patient.notes ?? "");
-  // Обычное состояние - чтение: поле ввода появляется только по «Изменить» и
-  // после сохранения снова сворачивается в текст.
-  const [editing, setEditing] = useState(false);
+  const save = useSavePatientRecord();
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState("");
   const [error, setError] = useState("");
-  const canEdit = !readOnly && patient.is_own;
 
   async function submit() {
+    if (!text.trim()) {
+      setError("Введите текст описания");
+      return;
+    }
     setError("");
     try {
-      // Сервер перезаписывает карточку целиком - передаём остальные поля как есть.
+      // Дата не спрашивается: created_at на сервере и есть момент добавления.
       await save.mutateAsync({
-        id: patient.id,
-        full_name: patient.full_name,
-        phone: patient.phone,
-        iin: patient.iin,
-        gender: patient.gender,
-        birth_date: patient.birth_date,
-        notes: text,
+        patientId: patient.id,
+        type: "note",
+        title: "",
+        note: text.trim(),
       });
-      setEditing(false);
+      setText("");
+      setAdding(false);
     } catch (e) {
       setError(errorMessage(e));
     }
   }
 
   function cancel() {
-    setText(patient.notes ?? "");
+    setText("");
     setError("");
-    setEditing(false);
-  }
-
-  if (!editing) {
-    return (
-      <div className="rounded-2xl bg-white p-6 shadow-sm">
-        {text ? (
-          <p className="whitespace-pre-wrap text-sm text-slate-600">{text}</p>
-        ) : (
-          <p className="text-center text-sm text-slate-400">{t("Описание не заполнено")}</p>
-        )}
-        {canEdit && (
-          <Button variant="secondary" className="mt-4" onClick={() => setEditing(true)}>
-            {t("Изменить")}
-          </Button>
-        )}
-        {!patient.is_own && (
-          <p className="mt-3 text-xs text-slate-400">
-            {t("Описание может редактировать только клиника, которая завела карточку.")}
-          </p>
-        )}
-      </div>
-    );
+    setAdding(false);
   }
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      {/* rows, а не className: Textarea подставляет свои классы, и переданный
-          className затёр бы оформление поля целиком. */}
-      <Textarea
-        value={text}
-        rows={8}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={t("Аллергии, хронические болезни, особенности лечения…")}
-      />
-      <div className="mt-3 flex items-center gap-3">
-        <Button onClick={submit} disabled={save.isPending}>
-          {save.isPending ? t("Сохранение…") : t("Сохранить")}
-        </Button>
-        <Button variant="secondary" onClick={cancel} disabled={save.isPending}>
-          {t("Отмена")}
-        </Button>
-        {error && <span className="text-sm text-red-600">{t(error)}</span>}
-      </div>
+    <div className="space-y-3">
+      {!readOnly &&
+        (adding ? (
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            {/* rows, а не className: Textarea подставляет свои классы, и
+                переданный className затёр бы оформление поля целиком. */}
+            <Textarea
+              value={text}
+              rows={6}
+              autoFocus
+              onChange={(e) => setText(e.target.value)}
+              placeholder={t("Аллергии, хронические болезни, особенности лечения…")}
+            />
+            <div className="mt-3 flex items-center gap-3">
+              <Button onClick={submit} disabled={save.isPending}>
+                {save.isPending ? t("Сохранение…") : t("Сохранить")}
+              </Button>
+              <Button variant="secondary" onClick={cancel} disabled={save.isPending}>
+                {t("Отмена")}
+              </Button>
+              {error && <span className="text-sm text-red-600">{t(error)}</span>}
+            </div>
+          </div>
+        ) : (
+          <Button onClick={() => setAdding(true)}>+ {t("Добавить описание")}</Button>
+        ))}
+
+      {/* Заметка из карточки пациента - до того, как описания стали
+          хронологией. Даты у неё нет, поэтому показываем отдельно. */}
+      {patient.notes && (
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="text-xs text-slate-400">{t("Заметки")}</div>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{patient.notes}</p>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
+          {t("Загрузка…")}
+        </div>
+      ) : records.length === 0 ? (
+        !patient.notes && (
+          <div className="rounded-2xl bg-white p-10 text-center text-sm text-slate-400 shadow-sm">
+            {t("Описаний пока нет")}
+          </div>
+        )
+      ) : (
+        records.map((r) => <RecordCard key={r.id} record={r} onDelete={onDelete} />)
+      )}
     </div>
   );
 }
@@ -775,6 +788,7 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
   const [iin, setIin] = useState(patient.iin ?? "");
   const [gender, setGender] = useState<Gender>(patient.gender ?? "");
   const [birthDate, setBirthDate] = useState(patient.birth_date?.split("T")[0] ?? "");
+  const [notes, setNotes] = useState(patient.notes ?? "");
   const [error, setError] = useState("");
 
   // ИИН кодирует дату рождения и пол - при вводе 12 цифр заполняем пустые поля.
@@ -800,7 +814,7 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
         iin,
         gender,
         birth_date: birthDate,
-        notes: patient.notes ?? "",
+        notes,
       });
       onClose();
     } catch (e) { setError(errorMessage(e)); }
@@ -843,8 +857,11 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
             <AgeCategoryBadge birthDate={birthDate} />
           </div>
         </Field>
-        {/* Описание пациента правится во вкладке «Описание» медкарты - здесь
-            только паспортные поля, notes уходит на сервер без изменений. */}
+        {/* Короткая заметка карточки. Развёрнутые описания с датами живут во
+            вкладке «Описание» медкарты. */}
+        <Field label={t("Заметки")}>
+          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>}
       </div>
     </Modal>
