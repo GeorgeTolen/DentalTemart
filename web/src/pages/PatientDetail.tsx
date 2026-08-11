@@ -31,7 +31,14 @@ import AppointmentBillModal from "../components/AppointmentBillModal";
 import { Avatar, AvatarUpload } from "../components/Avatar";
 import { PaperclipIcon } from "../components/icons";
 import { formatMoney } from "../lib/money";
-import type { Appointment, AppointmentStatus, Gender, PatientRecordType } from "../lib/types";
+import type {
+  Appointment,
+  AppointmentStatus,
+  Gender,
+  Patient,
+  PatientRecord,
+  PatientRecordType,
+} from "../lib/types";
 import { STATUS_LABELS, RECORD_TYPE_LABELS, GENDER_LABELS } from "../lib/types";
 import {
   usePatientRecords,
@@ -137,12 +144,6 @@ export default function PatientDetail() {
           </div>
         </div>
 
-        {patient.notes && (
-          <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            <span className="font-medium text-slate-500">{t("Заметки")}: </span>
-            {patient.notes}
-          </div>
-        )}
       </div>
 
       {/* Ближайшая и последняя записи */}
@@ -169,8 +170,8 @@ export default function PatientDetail() {
       {/* История приёмов */}
       <TreatmentHistorySection history={history} />
 
-      {/* Медицинские записи: рентген, аллергия, 3D снимок */}
-      {patientId && <PatientRecordsSection patientId={patientId} />}
+      {/* Медкарта: описание пациента и снимки */}
+      {patientId && <PatientRecordsSection patient={patient} />}
 
       {editingPatient && (
         <PatientEditModal patient={patient} onClose={() => setEditingPatient(false)} />
@@ -227,7 +228,7 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-lg font-semibold">{t("История лечения")}</h2>
+        <h2 className="text-lg font-semibold">{t("Медицинская карта пациента")}</h2>
         <div className="flex flex-wrap items-end gap-2">
           <Field label={t("С даты")}>
             <DateInput value={dateFrom} onChange={changeFrom} />
@@ -427,119 +428,258 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
   );
 }
 
-const RECORD_TABS: PatientRecordType[] = ["xray", "allergy", "scan3d"];
+// Снимки разложены по видам внутри одной вкладки: рентген и 3D - это одно и
+// то же по смыслу («картинка к карте»), различается только формат файла.
+const SCAN_TYPES: PatientRecordType[] = ["xray", "scan3d"];
 
-function PatientRecordsSection({ patientId }: { patientId: number }) {
+function PatientRecordsSection({ patient }: { patient: Patient }) {
   const { t } = useT();
   const { readOnly } = useAuth();
-  const [tab, setTab] = useState<PatientRecordType>("xray");
-  const [adding, setAdding] = useState(false);
-  const { data: records = [], isLoading } = usePatientRecords(patientId, tab);
+  const [tab, setTab] = useState<"description" | "scans">("description");
+  // Тип снимка, который сейчас добавляют; null - окно закрыто.
+  const [adding, setAdding] = useState<PatientRecordType | null>(null);
+  const { data: records = [], isLoading } = usePatientRecords(patient.id);
   const deleteRecord = useDeletePatientRecord();
 
   async function onDelete(recordId: number) {
     if (!confirm(t("Удалить запись?"))) return;
     try {
-      await deleteRecord.mutateAsync({ patientId, recordId });
+      await deleteRecord.mutateAsync({ patientId: patient.id, recordId });
     } catch (e) {
       alert(errorMessage(e));
     }
   }
 
+  // Записи «Аллергия» больше не заводятся - вместо них общее описание. Уже
+  // существующие показываем под описанием, чтобы ничего не потерялось.
+  const legacyAllergies = records.filter((r) => r.type === "allergy");
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-lg font-semibold">{t("Медицинские записи")}</h2>
-        {!readOnly && (
-          <Button onClick={() => setAdding(true)}>+ {t("Добавить запись")}</Button>
-        )}
       </div>
       <div className="mb-3 flex gap-1 rounded-2xl bg-slate-100 p-1 w-fit">
-        {RECORD_TABS.map((tabType) => (
+        {([
+          { key: "description", label: "Описание" },
+          { key: "scans", label: "Снимки" },
+        ] as const).map((item) => (
           <button
-            key={tabType}
-            onClick={() => setTab(tabType)}
+            key={item.key}
+            onClick={() => setTab(item.key)}
             className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-              tab === tabType ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:text-ink"
+              tab === item.key ? "bg-white text-ink shadow-sm" : "text-slate-500 hover:text-ink"
             }`}
           >
-            {t(RECORD_TYPE_LABELS[tabType])}
+            {t(item.label)}
           </button>
         ))}
       </div>
 
-      {isLoading ? (
-        <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">{t("Загрузка…")}</div>
-      ) : records.length === 0 ? (
+      {tab === "description" ? (
+        <>
+          <PatientDescription patient={patient} />
+          {legacyAllergies.length > 0 && (
+            <div className="mt-3 space-y-3">
+              <div className="text-xs text-slate-400">
+                {t("Ранее добавленные записи «Аллергия»")}
+              </div>
+              {legacyAllergies.map((r) => (
+                <RecordCard key={r.id} record={r} onDelete={onDelete} />
+              ))}
+            </div>
+          )}
+        </>
+      ) : isLoading ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
-          {t("Записей пока нет")}
+          {t("Загрузка…")}
         </div>
       ) : (
-        <div className="space-y-3">
-          {records.map((r) => (
-            <div key={r.id} className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  {r.title && <div className="font-semibold text-ink">{r.title}</div>}
-                  {r.note && <div className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{r.note}</div>}
-                  <div className="mt-2 text-xs text-slate-400">
-                    {formatDateTime(r.created_at)}{r.created_by_name && ` · ${r.created_by_name}`}
-                    {!r.is_own && r.clinic_name && (
-                      <span
-                        className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-slate-500"
-                        title={t("Запись сделала другая клиника платформы")}
-                      >
-                        {r.clinic_name}
-                      </span>
-                    )}
+        <div className="space-y-6">
+          {SCAN_TYPES.map((type) => {
+            const group = records.filter((r) => r.type === type);
+            return (
+              <div key={type}>
+                <h3 className="mb-2 text-sm font-semibold text-slate-500">
+                  {t(RECORD_TYPE_LABELS[type])}
+                </h3>
+                {group.length === 0 ? (
+                  <div className="rounded-2xl bg-white p-6 text-center text-sm text-slate-400 shadow-sm">
+                    {t("Снимков пока нет")}
                   </div>
-                  {r.file_url && (
-                    <a
-                      href={r.file_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-2 inline-block text-sm text-brand hover:underline"
-                    >
-                      <PaperclipIcon className="mr-1 inline h-4 w-4 align-text-bottom" />
-                      {r.file_name || t("Открыть файл")}
-                    </a>
-                  )}
-                </div>
-                {/* Удалять можно только записи своей клиники - медкарта общая,
-                    но хозяин у каждой записи один. */}
-                {!readOnly && r.is_own && (
-                  <button
-                    onClick={() => onDelete(r.id)}
-                    className="shrink-0 text-sm text-red-500 hover:underline"
+                ) : (
+                  <div className="space-y-3">
+                    {group.map((r) => (
+                      <RecordCard key={r.id} record={r} onDelete={onDelete} />
+                    ))}
+                  </div>
+                )}
+                {/* Кнопка добавления своя у каждого вида: тип снимка не
+                    приходится выбирать вручную. */}
+                {!readOnly && (
+                  <Button
+                    variant="secondary"
+                    className="mt-2"
+                    onClick={() => setAdding(type)}
                   >
-                    {t("Удалить")}
-                  </button>
+                    + {t("Добавить снимок")}
+                  </Button>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {adding && (
-        <AddRecordModal patientId={patientId} defaultType={tab} onClose={() => setAdding(false)} />
+        <AddRecordModal
+          patientId={patient.id}
+          type={adding}
+          onClose={() => setAdding(null)}
+        />
       )}
+    </div>
+  );
+}
+
+// Общее описание пациента: аллергии, хронические болезни, особенности.
+// Хранится в поле notes карточки, поэтому править его может только клиника,
+// которая карточку завела (остальным сервер ответит 403).
+function PatientDescription({ patient }: { patient: Patient }) {
+  const { t } = useT();
+  const { readOnly } = useAuth();
+  const save = useSavePatient();
+  const [text, setText] = useState(patient.notes ?? "");
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const canEdit = !readOnly && patient.is_own;
+
+  async function submit() {
+    setError("");
+    setSaved(false);
+    try {
+      // Сервер перезаписывает карточку целиком - передаём остальные поля как есть.
+      await save.mutateAsync({
+        id: patient.id,
+        full_name: patient.full_name,
+        phone: patient.phone,
+        iin: patient.iin,
+        gender: patient.gender,
+        birth_date: patient.birth_date,
+        notes: text,
+      });
+      setSaved(true);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  if (!canEdit) {
+    return (
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        {patient.notes ? (
+          <p className="whitespace-pre-wrap text-sm text-slate-600">{patient.notes}</p>
+        ) : (
+          <p className="text-center text-sm text-slate-400">{t("Описание не заполнено")}</p>
+        )}
+        {!patient.is_own && (
+          <p className="mt-3 text-xs text-slate-400">
+            {t("Описание может редактировать только клиника, которая завела карточку.")}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl bg-white p-6 shadow-sm">
+      {/* rows, а не className: Textarea подставляет свои классы, и переданный
+          className затёр бы оформление поля целиком. */}
+      <Textarea
+        value={text}
+        rows={8}
+        onChange={(e) => {
+          setText(e.target.value);
+          setSaved(false);
+        }}
+        placeholder={t("Аллергии, хронические болезни, особенности лечения…")}
+      />
+      <div className="mt-3 flex items-center gap-3">
+        <Button onClick={submit} disabled={save.isPending}>
+          {save.isPending ? t("Сохранение…") : t("Сохранить")}
+        </Button>
+        {saved && <span className="text-sm text-green-600">{t("Описание сохранено")}</span>}
+        {error && <span className="text-sm text-red-600">{t(error)}</span>}
+      </div>
+    </div>
+  );
+}
+
+function RecordCard({
+  record: r,
+  onDelete,
+}: {
+  record: PatientRecord;
+  onDelete: (id: number) => void;
+}) {
+  const { t } = useT();
+  const { readOnly } = useAuth();
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {r.title && <div className="font-semibold text-ink">{r.title}</div>}
+          {r.note && <div className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{r.note}</div>}
+          <div className="mt-2 text-xs text-slate-400">
+            {formatDateTime(r.created_at)}{r.created_by_name && ` · ${r.created_by_name}`}
+            {!r.is_own && r.clinic_name && (
+              <span
+                className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-slate-500"
+                title={t("Запись сделала другая клиника платформы")}
+              >
+                {r.clinic_name}
+              </span>
+            )}
+          </div>
+          {r.file_url && (
+            <a
+              href={r.file_url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-block text-sm text-brand hover:underline"
+            >
+              <PaperclipIcon className="mr-1 inline h-4 w-4 align-text-bottom" />
+              {r.file_name || t("Открыть файл")}
+            </a>
+          )}
+        </div>
+        {/* Удалять можно только записи своей клиники - медкарта общая,
+            но хозяин у каждой записи один. */}
+        {!readOnly && r.is_own && (
+          <button
+            onClick={() => onDelete(r.id)}
+            className="shrink-0 text-sm text-red-500 hover:underline"
+          >
+            {t("Удалить")}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 function AddRecordModal({
   patientId,
-  defaultType,
+  type,
   onClose,
 }: {
   patientId: number;
-  defaultType: PatientRecordType;
+  // Тип задаётся кнопкой, из которой открыли окно, - выбирать его не нужно.
+  type: PatientRecordType;
   onClose: () => void;
 }) {
   const { t } = useT();
   const save = useSavePatientRecord();
-  const [type, setType] = useState<PatientRecordType>(defaultType);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -560,7 +700,7 @@ function AddRecordModal({
 
   return (
     <Modal
-      title={t("Новая медицинская запись")}
+      title={`${t("Добавить снимок")} · ${t(RECORD_TYPE_LABELS[type])}`}
       onClose={onClose}
       footer={
         <>
@@ -570,16 +710,9 @@ function AddRecordModal({
       }
     >
       <div className="space-y-4">
-        <Field label={t("Тип записи")}>
-          <Select value={type} onChange={(e) => setType(e.target.value as PatientRecordType)}>
-            {RECORD_TABS.map((recordType) => (
-              <option key={recordType} value={recordType}>{t(RECORD_TYPE_LABELS[recordType])}</option>
-            ))}
-          </Select>
-        </Field>
         <Field label={t("Заголовок")}><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("Напр.: Снимок зуба 16")} /></Field>
         <Field label={t("Заметка")}><Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("Описание, заключение...")} /></Field>
-        <Field label={type === "allergy" ? t("Файл (необязательно)") : t("Файл (изображение или 3D-модель)")}>
+        <Field label={t("Файл (изображение или 3D-модель)")}>
           <input
             type="file"
             accept={type === "scan3d" ? "image/*,.stl,.obj,.glb,.gltf" : "image/*"}
@@ -610,7 +743,6 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
   const [iin, setIin] = useState(patient.iin ?? "");
   const [gender, setGender] = useState<Gender>(patient.gender ?? "");
   const [birthDate, setBirthDate] = useState(patient.birth_date?.split("T")[0] ?? "");
-  const [notes, setNotes] = useState(patient.notes ?? "");
   const [error, setError] = useState("");
 
   // ИИН кодирует дату рождения и пол - при вводе 12 цифр заполняем пустые поля.
@@ -629,7 +761,15 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
     const birthErr = validateBirthDate(birthDate);
     if (birthErr) { setError(birthErr); return; }
     try {
-      await save.mutateAsync({ id: patient.id, full_name: name, phone, iin, gender, birth_date: birthDate, notes });
+      await save.mutateAsync({
+        id: patient.id,
+        full_name: name,
+        phone,
+        iin,
+        gender,
+        birth_date: birthDate,
+        notes: patient.notes ?? "",
+      });
       onClose();
     } catch (e) { setError(errorMessage(e)); }
   }
@@ -671,7 +811,8 @@ function PatientEditModal({ patient, onClose }: { patient: { id: number; full_na
             <AgeCategoryBadge birthDate={birthDate} />
           </div>
         </Field>
-        <Field label={t("Заметки")}><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        {/* Описание пациента правится во вкладке «Описание» медкарты - здесь
+            только паспортные поля, notes уходит на сервер без изменений. */}
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{t(error)}</div>}
       </div>
     </Modal>

@@ -214,7 +214,12 @@ export function useSavePatient() {
       if (id) return (await api.put<Patient>(`/patients/${id}`, body)).data;
       return (await api.post<Patient>("/patients", body)).data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["patients"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      // Карточка пациента живёт под своим ключом - без этого открытая
+      // страница показывала бы данные до правки.
+      qc.invalidateQueries({ queryKey: ["patient"] });
+    },
   });
 }
 
