@@ -3,6 +3,7 @@ import { useEvents } from "../api/hooks";
 import { formatDateTime } from "../lib/datetime";
 import type { ClinicEvent } from "../lib/types";
 import { Button } from "../components/ui";
+import { SortToggle, type SortOrder } from "../components/SortToggle";
 import { useT } from "../lib/i18n";
 
 // Как показывать тип действия: цвет по «тяжести», чтобы удаления бросались
@@ -34,18 +35,29 @@ function actionBadge(action: string) {
  */
 export default function Events() {
   const { t } = useT();
-  const [before, setBefore] = useState(0);
+  const [cursor, setCursor] = useState(0);
+  // Порядок задаёт сервер: журнал листается курсором, и развернуть его на
+  // клиенте значило бы перевернуть только загруженный кусок.
+  const [sort, setSort] = useState<SortOrder>("new");
   // Накопленные страницы: «Показать ещё» добавляет снизу, а не заменяет экран.
   const [loaded, setLoaded] = useState<ClinicEvent[]>([]);
-  const { data, isLoading } = useEvents(before);
+  const { data, isLoading } = useEvents(cursor, sort);
 
   // Первая страница живёт в data, остальные - в loaded.
-  const items = before === 0 ? (data?.items ?? []) : [...loaded, ...(data?.items ?? [])];
-  const nextBefore = data?.next_before ?? 0;
+  const items = cursor === 0 ? (data?.items ?? []) : [...loaded, ...(data?.items ?? [])];
+  const nextCursor = data?.next_cursor ?? 0;
 
   function showMore() {
     setLoaded(items);
-    setBefore(nextBefore);
+    setCursor(nextCursor);
+  }
+
+  // Смена порядка начинает журнал заново - иначе к новому порядку приклеились
+  // бы страницы, набранные в старом.
+  function changeSort(v: SortOrder) {
+    setSort(v);
+    setLoaded([]);
+    setCursor(0);
   }
 
   return (
@@ -56,6 +68,8 @@ export default function Events() {
           {t("Что происходило в клинике: записи, пациенты, врачи, прайс и учётные записи.")}
         </p>
       </div>
+
+      <SortToggle value={sort} onChange={changeSort} />
 
       {isLoading && items.length === 0 ? (
         <p className="text-sm text-slate-400">{t("Загрузка…")}</p>
@@ -99,7 +113,7 @@ export default function Events() {
             </table>
           </div>
 
-          {nextBefore > 0 && (
+          {nextCursor > 0 && (
             <div className="flex justify-center">
               <Button variant="secondary" onClick={showMore} disabled={isLoading}>
                 {isLoading ? t("Загрузка…") : t("Показать ещё")}

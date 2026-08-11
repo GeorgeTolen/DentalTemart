@@ -16,6 +16,7 @@ import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import AppointmentBillModal from "../components/AppointmentBillModal";
 import AppointmentModal, { PatientPicker } from "../components/AppointmentModal";
 import { PickerField } from "../components/PickerDrawer";
+import { SortToggle, sortList, type SortOrder } from "../components/SortToggle";
 import TimePickerDrawer, { DateField } from "../components/TimePickerDrawer";
 import { formatMoney } from "../lib/money";
 import { useAuth } from "../auth/AuthContext";
@@ -53,6 +54,9 @@ export default function AppointmentsPage() {
   const [rangeMode, setRangeMode] = useState(false);
   const [doctorFilter, setDoctorFilter] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | "">("");
+  // По умолчанию «сначала старые»: расписание дня привычнее читать сверху вниз
+  // от утра к вечеру, а сервер и так отдаёт записи по возрастанию времени.
+  const [sort, setSort] = useState<SortOrder>("old");
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -116,6 +120,8 @@ export default function AppointmentsPage() {
   const filtered = statusFilter
     ? appointments.filter((a) => a.status === statusFilter)
     : appointments;
+  // Список за день приходит целиком, поэтому порядок меняем на клиенте.
+  const sorted = sortList(filtered, sort, (a) => a.start_time);
 
   async function cancel(a: Appointment) {
     if (!confirm(t("Отменить запись пациента {name}?", { name: a.patient_name }))) return;
@@ -263,6 +269,7 @@ export default function AppointmentsPage() {
             <option key={k} value={k}>{t(v)}</option>
           ))}
         </select>
+        <SortToggle value={sort} onChange={setSort} />
         <span className="ml-auto self-center text-sm text-slate-400">
           {t("{n} записей", { n: filtered.length })}
         </span>
@@ -271,13 +278,13 @@ export default function AppointmentsPage() {
       {/* Список */}
       {isLoading ? (
         <p className="text-sm text-slate-400">{t("Загрузка…")}</p>
-      ) : filtered.length === 0 ? (
+      ) : sorted.length === 0 ? (
         <div className="rounded-2xl bg-white p-10 text-center text-slate-400 shadow-sm">
           {t("Записей не найдено")}
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((a) => (
+          {sorted.map((a) => (
             <AppointmentRow
               key={a.id}
               appointment={a}

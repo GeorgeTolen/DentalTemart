@@ -5,11 +5,17 @@ import type { Service } from "../lib/types";
 import { formatAmount, formatMoney, parseMoneyInput } from "../lib/money";
 import { Button, Field, Input, Modal, Textarea } from "../components/ui";
 import { useT } from "../lib/i18n";
+import { SortToggle, sortList, type SortOrder } from "../components/SortToggle";
 
 // Прайс клиники. Ведут владелец и менеджер: из него набирается стоимость приёма.
 export default function Services() {
   const { t } = useT();
-  const { data: services = [], isLoading } = useServices();
+  const { data: rawServices = [], isLoading } = useServices();
+  // Прайс приходит целиком - порядок переключаем на клиенте. Дефолт «по имени»
+  // повторяет порядок сервера (активные, затем по названию).
+  const [sort, setSort] = useState<SortOrder>("name");
+  // Даты создания у услуги нет, новизну задаёт растущий id.
+  const services = sortList(rawServices, sort, (s) => s.id, (s) => s.name);
   const del = useDeleteService();
   const [editing, setEditing] = useState<Service | "new" | null>(null);
   const [error, setError] = useState("");
@@ -42,7 +48,10 @@ export default function Services() {
             {t("Прайс вашей клиники. Из него набирается стоимость приёма.")}
           </p>
         </div>
-        <Button onClick={() => setEditing("new")}>{t("+ Услуга")}</Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <SortToggle value={sort} onChange={setSort} withName />
+          <Button onClick={() => setEditing("new")}>{t("+ Услуга")}</Button>
+        </div>
       </div>
 
       {error && (

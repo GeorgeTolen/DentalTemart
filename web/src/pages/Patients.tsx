@@ -7,6 +7,7 @@ import { GENDER_LABELS } from "../lib/types";
 import { Button, Field, Input, Modal, Select, Textarea } from "../components/ui";
 import { Avatar } from "../components/Avatar";
 import { useDebounced } from "../components/PickerDrawer";
+import { SortToggle, type SortOrder } from "../components/SortToggle";
 import { useAuth } from "../auth/AuthContext";
 import { DateInput } from "../components/DateInputs";
 import { AgeCategoryBadge } from "../components/AgeCategoryBadge";
@@ -23,16 +24,18 @@ export default function Patients() {
   const [input, setInput] = useState("");
   const search = useDebounced(input);
   const [page, setPage] = useState(0);
-  const { data, isLoading } = usePatients(search, page);
+  // База листается страницами, поэтому порядок задаёт сервер.
+  const [sort, setSort] = useState<SortOrder>("name");
+  const { data, isLoading } = usePatients(search, page, sort);
   const patients = data?.items ?? [];
   const total = data?.total ?? 0;
   const [editing, setEditing] = useState<Patient | "new" | null>(null);
 
-  // Новый поисковый запрос - снова с первой страницы, иначе можно оказаться на
-  // пустой третьей странице узкой выборки.
+  // Новый поисковый запрос или порядок - снова с первой страницы, иначе можно
+  // оказаться на пустой третьей странице узкой выборки.
   useEffect(() => {
     setPage(0);
-  }, [search]);
+  }, [search, sort]);
 
   const from = total === 0 ? 0 : page * PATIENTS_PAGE_SIZE + 1;
   const to = Math.min(total, (page + 1) * PATIENTS_PAGE_SIZE);
@@ -57,6 +60,8 @@ export default function Patients() {
           {t("База пациентов общая для всех клиник платформы.")}
         </p>
       </div>
+
+      <SortToggle value={sort} onChange={setSort} withName />
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
         <table className="w-full text-sm">

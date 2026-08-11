@@ -177,12 +177,16 @@ WHERE (
     OR p.phone ILIKE $1::text || '%'
     OR p.iin LIKE $1::text || '%'
   )
-ORDER BY p.full_name
-LIMIT $3 OFFSET $2
+ORDER BY
+    CASE WHEN $2::text = 'new' THEN p.created_at END DESC,
+    CASE WHEN $2::text = 'old' THEN p.created_at END ASC,
+    p.full_name
+LIMIT $4 OFFSET $3
 `
 
 type ListPatientsParams struct {
 	Search     pgtype.Text `json:"search"`
+	Sort       string      `json:"sort"`
 	PageOffset int32       `json:"page_offset"`
 	PageSize   int32       `json:"page_size"`
 }
@@ -207,8 +211,16 @@ type ListPatientsRow struct {
 // Matches when the search term is a prefix of any word in the name, a prefix
 // of the phone number, or a prefix of the IIN. Ищет по всей платформе.
 // Постранично: база общая и растёт, выгружать её целиком нельзя.
+// sort: name (по алфавиту), new (сначала новые карточки), old (сначала старые).
+// Неподходящие ветки CASE дают NULL и не влияют на порядок, поэтому запрос
+// остаётся одним и сортировка не размножает копии запроса.
 func (q *Queries) ListPatients(ctx context.Context, arg ListPatientsParams) ([]ListPatientsRow, error) {
-	rows, err := q.db.Query(ctx, listPatients, arg.Search, arg.PageOffset, arg.PageSize)
+	rows, err := q.db.Query(ctx, listPatients,
+		arg.Search,
+		arg.Sort,
+		arg.PageOffset,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}

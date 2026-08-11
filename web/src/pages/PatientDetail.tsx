@@ -30,6 +30,7 @@ import ScheduleFollowUpModal from "../components/ScheduleFollowUpModal";
 import AppointmentBillModal from "../components/AppointmentBillModal";
 import { Avatar, AvatarUpload } from "../components/Avatar";
 import { PaperclipIcon } from "../components/icons";
+import { SortToggle, sortList, type SortOrder } from "../components/SortToggle";
 import { formatMoney } from "../lib/money";
 import type {
   Appointment,
@@ -190,8 +191,8 @@ const HISTORY_FILTERS: { key: AppointmentStatus | "all"; label: string }[] = [
   { key: "cancelled", label: "Отменённые" },
 ];
 
-// Сколько приёмов видно в свёрнутой истории: свежие сверху, остальное - по
-// кнопке «Показать всю историю».
+// Сколько приёмов видно в свёрнутой истории: первые в выбранном порядке,
+// остальное - по кнопке «Показать всю историю».
 const HISTORY_PREVIEW_COUNT = 3;
 
 function TreatmentHistorySection({ history }: { history: Appointment[] }) {
@@ -200,6 +201,8 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showAll, setShowAll] = useState(false);
+  // Свежие приёмы сверху - в карточке чаще смотрят последнее лечение.
+  const [sort, setSort] = useState<SortOrder>("new");
 
   // Выбор одной даты сразу даёт период в один день: вторая граница
   // подставляется той же датой (и поправляется, если диапазон перевёрнут).
@@ -212,16 +215,20 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
     if (v && (!dateFrom || v < dateFrom)) setDateFrom(v);
   }
 
-  const filtered = history.filter((a) => {
-    if (statusFilter !== "all" && a.status !== statusFilter) return false;
-    const day = a.start_time.slice(0, 10);
-    if (dateFrom && day < dateFrom) return false;
-    if (dateTo && day > dateTo) return false;
-    return true;
-  });
+  // Сортируем до обрезки, иначе свёрнутая история показывала бы три приёма из
+  // порядка сервера, а не из выбранного пользователем.
+  const filtered = sortList(
+    history.filter((a) => {
+      if (statusFilter !== "all" && a.status !== statusFilter) return false;
+      const day = a.start_time.slice(0, 10);
+      if (dateFrom && day < dateFrom) return false;
+      if (dateTo && day > dateTo) return false;
+      return true;
+    }),
+    sort,
+    (a) => a.start_time
+  );
 
-  // История отсортирована свежие-сверху, поэтому «3 последних приёма» - это
-  // просто первые три записи.
   const visible = showAll ? filtered : filtered.slice(0, HISTORY_PREVIEW_COUNT);
   const hiddenCount = filtered.length - visible.length;
 
@@ -230,6 +237,7 @@ function TreatmentHistorySection({ history }: { history: Appointment[] }) {
       <div className="mb-3 flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-lg font-semibold">{t("Медицинская карта пациента")}</h2>
         <div className="flex flex-wrap items-end gap-2">
+          <SortToggle value={sort} onChange={setSort} />
           <Field label={t("С даты")}>
             <DateInput value={dateFrom} onChange={changeFrom} />
           </Field>
@@ -436,6 +444,8 @@ function PatientRecordsSection({ patient }: { patient: Patient }) {
   const { t } = useT();
   const { readOnly } = useAuth();
   const [tab, setTab] = useState<"description" | "scans">("description");
+  // Свежие снимки сверху: к последним обращаются чаще, чем к архивным.
+  const [sort, setSort] = useState<SortOrder>("new");
   // Тип снимка, который сейчас добавляют; null - окно закрыто.
   const [adding, setAdding] = useState<PatientRecordType | null>(null);
   const { data: records = [], isLoading } = usePatientRecords(patient.id);
@@ -476,6 +486,13 @@ function PatientRecordsSection({ patient }: { patient: Patient }) {
         ))}
       </div>
 
+      {/* Порядок нужен только снимкам: описание - один текст, сортировать нечего. */}
+      {tab === "scans" && (
+        <div className="mb-3">
+          <SortToggle value={sort} onChange={setSort} />
+        </div>
+      )}
+
       {tab === "description" ? (
         <>
           <PatientDescription patient={patient} />
@@ -497,7 +514,11 @@ function PatientRecordsSection({ patient }: { patient: Patient }) {
       ) : (
         <div className="space-y-6">
           {SCAN_TYPES.map((type) => {
-            const group = records.filter((r) => r.type === type);
+            const group = sortList(
+              records.filter((r) => r.type === type),
+              sort,
+              (r) => r.created_at
+            );
             return (
               <div key={type}>
                 <h3 className="mb-2 text-sm font-semibold text-slate-500">
@@ -550,13 +571,14 @@ function PatientDescription({ patient }: { patient: Patient }) {
   const { readOnly } = useAuth();
   const save = useSavePatient();
   const [text, setText] = useState(patient.notes ?? "");
-  const [saved, setSaved] = useState(false);
+  // Обычное состояние - чтение: поле ввода появляется только по «Изменить» и
+  // после сохранения снова сворачивается в текст.
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const canEdit = !readOnly && patient.is_own;
 
   async function submit() {
     setError("");
-    setSaved(false);
     try {
       // Сервер перезаписывает карточку целиком - передаём остальные поля как есть.
       await save.mutateAsync({
@@ -568,19 +590,30 @@ function PatientDescription({ patient }: { patient: Patient }) {
         birth_date: patient.birth_date,
         notes: text,
       });
-      setSaved(true);
+      setEditing(false);
     } catch (e) {
       setError(errorMessage(e));
     }
   }
 
-  if (!canEdit) {
+  function cancel() {
+    setText(patient.notes ?? "");
+    setError("");
+    setEditing(false);
+  }
+
+  if (!editing) {
     return (
       <div className="rounded-2xl bg-white p-6 shadow-sm">
-        {patient.notes ? (
-          <p className="whitespace-pre-wrap text-sm text-slate-600">{patient.notes}</p>
+        {text ? (
+          <p className="whitespace-pre-wrap text-sm text-slate-600">{text}</p>
         ) : (
           <p className="text-center text-sm text-slate-400">{t("Описание не заполнено")}</p>
+        )}
+        {canEdit && (
+          <Button variant="secondary" className="mt-4" onClick={() => setEditing(true)}>
+            {t("Изменить")}
+          </Button>
         )}
         {!patient.is_own && (
           <p className="mt-3 text-xs text-slate-400">
@@ -598,17 +631,16 @@ function PatientDescription({ patient }: { patient: Patient }) {
       <Textarea
         value={text}
         rows={8}
-        onChange={(e) => {
-          setText(e.target.value);
-          setSaved(false);
-        }}
+        onChange={(e) => setText(e.target.value)}
         placeholder={t("Аллергии, хронические болезни, особенности лечения…")}
       />
       <div className="mt-3 flex items-center gap-3">
         <Button onClick={submit} disabled={save.isPending}>
           {save.isPending ? t("Сохранение…") : t("Сохранить")}
         </Button>
-        {saved && <span className="text-sm text-green-600">{t("Описание сохранено")}</span>}
+        <Button variant="secondary" onClick={cancel} disabled={save.isPending}>
+          {t("Отмена")}
+        </Button>
         {error && <span className="text-sm text-red-600">{t(error)}</span>}
       </div>
     </div>

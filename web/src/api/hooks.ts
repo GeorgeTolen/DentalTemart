@@ -4,6 +4,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { api } from "./client";
+import type { SortOrder } from "../components/SortToggle";
 import type {
   AdminStats,
   Appointment,
@@ -175,13 +176,13 @@ export function useSaveSchedule() {
 export const PATIENTS_PAGE_SIZE = 10;
 
 // Отдаёт одну страницу общей базы пациентов. `page` - с нуля.
-export function usePatients(search: string, page = 0) {
+export function usePatients(search: string, page = 0, sort: SortOrder = "name") {
   return useQuery({
-    queryKey: ["patients", search, page],
+    queryKey: ["patients", search, page, sort],
     queryFn: async () =>
       (
         await api.get<PatientsPage>("/patients", {
-          params: { search, offset: page * PATIENTS_PAGE_SIZE },
+          params: { search, sort, offset: page * PATIENTS_PAGE_SIZE },
         })
       ).data,
     // Пока грузится следующая страница, показываем прежнюю - список не мигает.
@@ -434,13 +435,13 @@ export function useRateAppointment() {
 
 // Листается курсором `before`: события пишутся непрерывно, и по смещению
 // страницы бы дублировались.
-export function useEvents(before: number) {
+export function useEvents(cursor: number, sort: SortOrder = "new") {
   return useQuery({
-    queryKey: ["events", before],
+    queryKey: ["events", cursor, sort],
     queryFn: async () =>
       (
         await api.get<EventsPage>("/events", {
-          params: before ? { before } : undefined,
+          params: cursor ? { cursor, sort } : { sort },
         })
       ).data,
     // Без placeholderData: страницы накапливаются на стороне экрана, и показ
@@ -541,11 +542,18 @@ export function useDeleteArchivedAppointments() {
   });
 }
 
-export function useArchivedAppointments(status: "completed" | "cancelled") {
+export function useArchivedAppointments(
+  status: "completed" | "cancelled",
+  sort: SortOrder = "new"
+) {
   return useQuery({
-    queryKey: ["archive-list", status],
+    queryKey: ["archive-list", status, sort],
     queryFn: async () =>
-      (await api.get<Appointment[]>("/appointments/archive/list", { params: { status } })).data,
+      (
+        await api.get<Appointment[]>("/appointments/archive/list", {
+          params: { status, sort },
+        })
+      ).data,
   });
 }
 

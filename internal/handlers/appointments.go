@@ -374,7 +374,11 @@ func (h *Handlers) ListArchivedAppointments(w http.ResponseWriter, r *http.Reque
 		httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "status должен быть completed или cancelled"))
 		return
 	}
-	rows, err := h.q.ListAppointmentsByStatus(r.Context(), sqlc.ListAppointmentsByStatusParams{ClinicID: clinicID, Status: status})
+	rows, err := h.q.ListAppointmentsByStatus(r.Context(), sqlc.ListAppointmentsByStatusParams{
+		ClinicID: clinicID,
+		Status:   status,
+		Sort:     sortParam(r, "new", "old"),
+	})
 	if err != nil {
 		httpx.Fail(w, err)
 		return

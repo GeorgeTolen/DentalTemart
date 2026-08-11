@@ -8,6 +8,7 @@ import {
 import { errorMessage } from "../api/client";
 import { formatDate, formatDateTime } from "../lib/datetime";
 import { Button } from "../components/ui";
+import { SortToggle, type SortOrder } from "../components/SortToggle";
 import { useT } from "../lib/i18n";
 
 type ArchiveTab = "completed" | "cancelled";
@@ -21,7 +22,10 @@ const ARCHIVE_TABS: { key: ArchiveTab; label: string }[] = [
 export default function Archive() {
   const { t } = useT();
   const [tab, setTab] = useState<ArchiveTab>("completed");
-  const { data: appointments = [], isLoading } = useArchivedAppointments(tab);
+  // Порядок серверный: архив обрезается по 500 записей, и разворот на клиенте
+  // показывал бы «старые» лишь внутри последней сотни-другой.
+  const [sort, setSort] = useState<SortOrder>("new");
+  const { data: appointments = [], isLoading } = useArchivedAppointments(tab, sort);
   const { data: countData } = useArchivedCount();
   const deleteArchived = useDeleteArchivedAppointments();
   const { refetch: refetchStats } = useAdminStats();
@@ -63,6 +67,8 @@ export default function Archive() {
           </button>
         ))}
       </div>
+
+      <SortToggle value={sort} onChange={setSort} />
 
       {isLoading ? (
         <p className="text-sm text-slate-400">{t("Загрузка…")}</p>

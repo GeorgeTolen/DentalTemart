@@ -78,6 +78,9 @@ type Querier interface {
 	// Вся история пациента по всем клиникам платформы. Суммы — только по приёмам
 	// клиники-читателя: деньги чужой клиники не показываем.
 	ListAppointmentsByPatient(ctx context.Context, arg ListAppointmentsByPatientParams) ([]ListAppointmentsByPatientRow, error)
+	// sort=old — сначала самые ранние приёмы; иначе (new) — самые свежие. Порядок
+	// задаётся до LIMIT, иначе «сначала старые» показывал бы старые только внутри
+	// последних 500 записей.
 	ListAppointmentsByStatus(ctx context.Context, arg ListAppointmentsByStatusParams) ([]ListAppointmentsByStatusRow, error)
 	// Пациенты общие для платформы, поэтому приём и карточка пациента могут
 	// принадлежать разным клиникам — join по patient_id без сверки clinic_id.
@@ -97,7 +100,8 @@ type Querier interface {
 	ListDoctors(ctx context.Context, clinicID int64) ([]ListDoctorsRow, error)
 	// Курсор по id, а не OFFSET: события пишутся непрерывно, и при листании
 	// по смещению уже показанные строки уезжали бы вниз и дублировались.
-	// before = 0 — первая страница.
+	// cursor = 0 — первая страница. При sort=old листаем вперёд по возрастанию id,
+	// при sort=new (по умолчанию) — назад по убыванию.
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]Event, error)
 	// Медкарта пациента общая для платформы: снимки и аллергии, заведённые одной
 	// клиникой, видит и лечащий врач другой. Название клиники показываем, чтобы
@@ -109,6 +113,9 @@ type Querier interface {
 	// Matches when the search term is a prefix of any word in the name, a prefix
 	// of the phone number, or a prefix of the IIN. Ищет по всей платформе.
 	// Постранично: база общая и растёт, выгружать её целиком нельзя.
+	// sort: name (по алфавиту), new (сначала новые карточки), old (сначала старые).
+	// Неподходящие ветки CASE дают NULL и не влияют на порядок, поэтому запрос
+	// остаётся одним и сортировка не размножает копии запроса.
 	ListPatients(ctx context.Context, arg ListPatientsParams) ([]ListPatientsRow, error)
 	// Прайс услуг и оказанные услуги приёма. Всё строго внутри клиники: деньги —
 	// единственное, что общая база пациентов не делает публичным.

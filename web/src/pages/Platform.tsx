@@ -21,14 +21,20 @@ import type { Clinic, ClinicUser, PlatformAdmin } from "../lib/types";
 import { ROLE_LABELS } from "../lib/types";
 import { formatMoney } from "../lib/money";
 import { Button, Field, Input, Modal } from "../components/ui";
+import { SortToggle, sortList, type SortOrder } from "../components/SortToggle";
 
 type PlatformTab = "clinics" | "admins";
 
 export default function Platform() {
   const { user, logout, enterSupport } = useAuth();
   const { data: stats } = usePlatformStats();
-  const { data: clinics = [], isLoading } = useClinics();
+  const { data: rawClinics = [], isLoading } = useClinics();
   const [tab, setTab] = useState<PlatformTab>("clinics");
+  // Клиники приходят целиком (created_at DESC) - порядок меняем на клиенте.
+  const [clinicSort, setClinicSort] = useState<SortOrder>("new");
+  // В типе Clinic нет created_at, поэтому новизну задаёт растущий id - он даёт
+  // тот же порядок, что и дата создания.
+  const clinics = sortList(rawClinics, clinicSort, (c) => c.id, (c) => c.name);
   const [editing, setEditing] = useState<Clinic | "new" | null>(null);
   const [addingOwner, setAddingOwner] = useState<Clinic | null>(null);
   const [managingUsers, setManagingUsers] = useState<Clinic | null>(null);
@@ -135,9 +141,12 @@ export default function Platform() {
 
         {tab === "clinics" && (
           <>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="text-2xl font-bold text-ink">Клиники</h1>
-            <Button onClick={() => setEditing("new")}>+ Новая клиника</Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <SortToggle value={clinicSort} onChange={setClinicSort} withName />
+              <Button onClick={() => setEditing("new")}>+ Новая клиника</Button>
+            </div>
           </div>
 
           {isLoading ? (
@@ -398,8 +407,12 @@ function ClinicAccessModal({
 // --- Администраторы платформы ---------------------------------------------
 
 function PlatformAdmins() {
-  const { data: admins = [], isLoading } = usePlatformAdmins();
+  const { data: rawAdmins = [], isLoading } = usePlatformAdmins();
   const del = useDeletePlatformAdmin();
+  // Свой порядок, независимый от списка клиник: дефолт повторяет сервер -
+  // свежие учётки сверху.
+  const [sort, setSort] = useState<SortOrder>("new");
+  const admins = sortList(rawAdmins, sort, (a) => a.created_at, (a) => a.full_name);
   const [editing, setEditing] = useState<PlatformAdmin | "new" | null>(null);
   const [error, setError] = useState("");
 
@@ -415,7 +428,7 @@ function PlatformAdmins() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-ink">Администраторы платформы</h1>
           <p className="mt-1 text-sm text-slate-400">
@@ -423,7 +436,10 @@ function PlatformAdmins() {
             «Вход для администратора платформы».
           </p>
         </div>
-        <Button onClick={() => setEditing("new")}>+ Администратор</Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <SortToggle value={sort} onChange={setSort} withName />
+          <Button onClick={() => setEditing("new")}>+ Администратор</Button>
+        </div>
       </div>
 
       {error && (

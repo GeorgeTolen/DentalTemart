@@ -51,6 +51,19 @@ func optionalDoctorID(r *http.Request) (pgtype.Int8, error) {
 	return pgtype.Int8{Int64: id, Valid: true}, nil
 }
 
+// sortParam reads the ?sort= list order. Допустимые значения перечисляет
+// вызывающий; первое из них — значение по умолчанию, оно же ответ на мусор в
+// параметре (сортировка не тот случай, где стоит ронять запрос ошибкой).
+func sortParam(r *http.Request, allowed ...string) string {
+	raw := r.URL.Query().Get("sort")
+	for _, a := range allowed {
+		if raw == a {
+			return raw
+		}
+	}
+	return allowed[0]
+}
+
 // maxAge is the oldest plausible age for a birth date.
 const maxAge = 125
 

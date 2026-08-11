@@ -99,7 +99,6 @@ export const en: Record<string, string> = {
   "Снимки": "Scans",
   "Снимков пока нет": "No scans yet",
   "Добавить снимок": "Add scan",
-  "Описание сохранено": "Description saved",
   "Описание не заполнено": "No description yet",
   "Аллергии, хронические болезни, особенности лечения…":
     "Allergies, chronic conditions, treatment specifics…",
@@ -109,6 +108,9 @@ export const en: Record<string, string> = {
   "С даты": "From date",
   "По дату": "To date",
   "Сбросить": "Reset",
+  "Сначала новые": "Newest first",
+  "Сначала старые": "Oldest first",
+  "По имени": "By name",
   "Все": "All",
   "Запланированные": "Scheduled",
   "Завершённые": "Completed",

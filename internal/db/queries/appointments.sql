@@ -134,5 +134,10 @@ FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
 WHERE a.clinic_id = sqlc.arg('clinic_id') AND a.status = sqlc.arg('status')
-ORDER BY a.start_time DESC
+-- sort=old — сначала самые ранние приёмы; иначе (new) — самые свежие. Порядок
+-- задаётся до LIMIT, иначе «сначала старые» показывал бы старые только внутри
+-- последних 500 записей.
+ORDER BY
+    CASE WHEN sqlc.arg('sort')::text = 'old' THEN a.start_time END ASC,
+    a.start_time DESC
 LIMIT 500;

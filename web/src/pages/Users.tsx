@@ -5,6 +5,7 @@ import type { ClinicUser, Role } from "../lib/types";
 import { ROLE_LABELS } from "../lib/types";
 import { Button, Field, Input, Modal, Select } from "../components/ui";
 import { useT } from "../lib/i18n";
+import { SortToggle, sortList, type SortOrder } from "../components/SortToggle";
 
 // Roles a clinic owner can assign (superadmin is platform-only).
 const ROLES: Role[] = ["owner", "admin", "doctor"];
@@ -12,7 +13,12 @@ const ROLES: Role[] = ["owner", "admin", "doctor"];
 // Учётные записи сотрудников клиники. Доступно только владельцу.
 export default function Users() {
   const { t } = useT();
-  const { data: users = [], isLoading } = useUsers();
+  const { data: rawUsers = [], isLoading } = useUsers();
+  // Список сотрудников грузится целиком - сортируем на клиенте. Дефолт
+  // повторяет порядок сервера: свежие учётки сверху.
+  const [sort, setSort] = useState<SortOrder>("new");
+  // Даты создания в ClinicUser нет, новизну задаёт растущий id.
+  const users = sortList(rawUsers, sort, (u) => u.id, (u) => u.full_name);
   const deleteUser = useDeleteUser();
   const [editing, setEditing] = useState<ClinicUser | null | "new">(null);
   const [error, setError] = useState("");
@@ -35,7 +41,10 @@ export default function Users() {
             {t("Учётные записи сотрудников клиники и их роли.")}
           </p>
         </div>
-        <Button onClick={() => setEditing("new")}>{t("+ Добавить")}</Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <SortToggle value={sort} onChange={setSort} withName />
+          <Button onClick={() => setEditing("new")}>{t("+ Добавить")}</Button>
+        </div>
       </div>
 
       {error && (

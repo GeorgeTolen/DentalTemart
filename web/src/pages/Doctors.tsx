@@ -8,18 +8,24 @@ import { Avatar } from "../components/Avatar";
 import { DoctorProfileCard, DoctorProfileModal } from "./DoctorCabinet";
 import { useT, yearsText, ratingsText } from "../lib/i18n";
 import { useAuth } from "../auth/AuthContext";
+import { SortToggle, sortList, type SortOrder } from "../components/SortToggle";
 
 export default function Doctors() {
   const { t, lang } = useT();
   const { user, readOnly } = useAuth();
   const canManage = user?.role !== "doctor" && !readOnly;
   const { data: allDoctors = [] } = useDoctors();
+  // Список приходит целиком, поэтому порядок меняем на клиенте. По умолчанию
+  // алфавит - в этом порядке сервер и отдаёт врачей.
+  const [sort, setSort] = useState<SortOrder>("name");
   // Врач смотрит на коллег - себя в этом списке видеть незачем, его профиль
   // живёт в личном кабинете.
-  const doctors =
+  const visible =
     user?.role === "doctor"
       ? allDoctors.filter((d) => d.user_id !== user.id)
       : allDoctors;
+  // Даты создания у врача нет, поэтому новизну задаёт id: он растёт.
+  const doctors = sortList(visible, sort, (d) => d.id, (d) => d.full_name);
   const del = useDeleteDoctor();
   const [editing, setEditing] = useState<Doctor | "new" | null>(null);
   const [viewing, setViewing] = useState<Doctor | null>(null);
@@ -44,9 +50,12 @@ export default function Doctors() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{t("Врачи")}</h1>
-        {canManage && <Button onClick={() => setEditing("new")}>{t("Новый врач")}</Button>}
+        <div className="flex flex-wrap items-center gap-3">
+          <SortToggle value={sort} onChange={setSort} withName />
+          {canManage && <Button onClick={() => setEditing("new")}>{t("Новый врач")}</Button>}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

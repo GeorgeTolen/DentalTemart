@@ -84,12 +84,14 @@ type eventDTO struct {
 
 type eventsResponse struct {
 	Items []eventDTO `json:"items"`
-	// NextBefore — курсор для следующей страницы; 0 означает «больше нечего».
-	NextBefore int64 `json:"next_before"`
+	// NextCursor — курсор для следующей страницы; 0 означает «больше нечего».
+	// При сортировке «сначала новые» это id последнего показанного события и
+	// листаем назад, при «сначала старые» — вперёд.
+	NextCursor int64 `json:"next_cursor"`
 }
 
-// ListEvents returns the clinic's action journal, newest first. Пагинация
-// курсором: ?before=<id последней показанной записи>.
+// ListEvents returns the clinic's action journal. Пагинация курсором:
+// ?cursor=<id последней показанной записи>, порядок — ?sort=new|old.
 func (h *Handlers) ListEvents(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireManager(r.Context()); err != nil {
 		httpx.Fail(w, err)
@@ -100,16 +102,17 @@ func (h *Handlers) ListEvents(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, err)
 		return
 	}
-	var before int64
-	if raw := r.URL.Query().Get("before"); raw != "" {
+	var cursor int64
+	if raw := r.URL.Query().Get("cursor"); raw != "" {
 		if v, err := strconv.ParseInt(raw, 10, 64); err == nil && v > 0 {
-			before = v
+			cursor = v
 		}
 	}
 
 	rows, err := h.q.ListEvents(r.Context(), sqlc.ListEventsParams{
 		ClinicID: clinicID,
-		Before:   before,
+		Cursor:   cursor,
+		Sort:     sortParam(r, "new", "old"),
 		PageSize: eventsPageSize,
 	})
 	if err != nil {
@@ -129,7 +132,7 @@ func (h *Handlers) ListEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	// Курсор отдаём только когда страница полная — иначе это был последний экран.
 	if len(rows) == eventsPageSize {
-		resp.NextBefore = rows[len(rows)-1].ID
+		resp.NextCursor = rows[len(rows)-1].ID
 	}
 	httpx.JSON(w, http.StatusOK, resp)
 }

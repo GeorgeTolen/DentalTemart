@@ -74,6 +74,7 @@ func (h *Handlers) ListPatients(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.q.ListPatients(r.Context(), sqlc.ListPatientsParams{
 		Search:     arg,
+		Sort:       sortParam(r, "name", "new", "old"),
 		PageSize:   patientsPageSize,
 		PageOffset: offset,
 	})

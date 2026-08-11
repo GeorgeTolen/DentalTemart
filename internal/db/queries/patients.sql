@@ -14,7 +14,13 @@ WHERE (
     OR p.phone ILIKE sqlc.narg('search')::text || '%'
     OR p.iin LIKE sqlc.narg('search')::text || '%'
   )
-ORDER BY p.full_name
+-- sort: name (по алфавиту), new (сначала новые карточки), old (сначала старые).
+-- Неподходящие ветки CASE дают NULL и не влияют на порядок, поэтому запрос
+-- остаётся одним и сортировка не размножает копии запроса.
+ORDER BY
+    CASE WHEN sqlc.arg('sort')::text = 'new' THEN p.created_at END DESC,
+    CASE WHEN sqlc.arg('sort')::text = 'old' THEN p.created_at END ASC,
+    p.full_name
 LIMIT sqlc.arg('page_size') OFFSET sqlc.arg('page_offset');
 
 -- name: CountPatients :one

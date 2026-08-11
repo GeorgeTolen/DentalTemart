@@ -181,7 +181,7 @@ export interface ClinicEvent {
 export interface EventsPage {
   items: ClinicEvent[];
   // 0 - больше страниц нет.
-  next_before: number;
+  next_cursor: number;
 }
 
 export interface RevenueBucket {

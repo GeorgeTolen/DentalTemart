@@ -341,13 +341,16 @@ FROM appointments a
 JOIN patients p ON p.id = a.patient_id
 JOIN doctors  d ON d.id = a.doctor_id AND d.clinic_id = a.clinic_id
 WHERE a.clinic_id = $1 AND a.status = $2
-ORDER BY a.start_time DESC
+ORDER BY
+    CASE WHEN $3::text = 'old' THEN a.start_time END ASC,
+    a.start_time DESC
 LIMIT 500
 `
 
 type ListAppointmentsByStatusParams struct {
 	ClinicID int64  `json:"clinic_id"`
 	Status   string `json:"status"`
+	Sort     string `json:"sort"`
 }
 
 type ListAppointmentsByStatusRow struct {
@@ -373,8 +376,11 @@ type ListAppointmentsByStatusRow struct {
 	Total           int64       `json:"total"`
 }
 
+// sort=old — сначала самые ранние приёмы; иначе (new) — самые свежие. Порядок
+// задаётся до LIMIT, иначе «сначала старые» показывал бы старые только внутри
+// последних 500 записей.
 func (q *Queries) ListAppointmentsByStatus(ctx context.Context, arg ListAppointmentsByStatusParams) ([]ListAppointmentsByStatusRow, error) {
-	rows, err := q.db.Query(ctx, listAppointmentsByStatus, arg.ClinicID, arg.Status)
+	rows, err := q.db.Query(ctx, listAppointmentsByStatus, arg.ClinicID, arg.Status, arg.Sort)
 	if err != nil {
 		return nil, err
 	}

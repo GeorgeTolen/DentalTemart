@@ -38,22 +38,35 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 const listEvents = `-- name: ListEvents :many
 SELECT id, clinic_id, user_id, user_name, action, message, created_at FROM events
 WHERE clinic_id = $1
-  AND ($2::bigint = 0 OR id < $2::bigint)
-ORDER BY id DESC
-LIMIT $3
+  AND (
+    $2::bigint = 0
+    OR ($3::text = 'old' AND id > $2::bigint)
+    OR ($3::text <> 'old' AND id < $2::bigint)
+  )
+ORDER BY
+    CASE WHEN $3::text = 'old' THEN id END ASC,
+    id DESC
+LIMIT $4
 `
 
 type ListEventsParams struct {
-	ClinicID int64 `json:"clinic_id"`
-	Before   int64 `json:"before"`
-	PageSize int32 `json:"page_size"`
+	ClinicID int64  `json:"clinic_id"`
+	Cursor   int64  `json:"cursor"`
+	Sort     string `json:"sort"`
+	PageSize int32  `json:"page_size"`
 }
 
 // Курсор по id, а не OFFSET: события пишутся непрерывно, и при листании
 // по смещению уже показанные строки уезжали бы вниз и дублировались.
-// before = 0 — первая страница.
+// cursor = 0 — первая страница. При sort=old листаем вперёд по возрастанию id,
+// при sort=new (по умолчанию) — назад по убыванию.
 func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]Event, error) {
-	rows, err := q.db.Query(ctx, listEvents, arg.ClinicID, arg.Before, arg.PageSize)
+	rows, err := q.db.Query(ctx, listEvents,
+		arg.ClinicID,
+		arg.Cursor,
+		arg.Sort,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
