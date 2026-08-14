@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, Input } from "./ui";
 import { PickerField } from "./PickerDrawer";
+import { WORKDAY_START, WORKDAY_END } from "../lib/datetime";
 import { useT } from "../lib/i18n";
 
 // Значение шторки - локальные datetime-local строки "YYYY-MM-DDTHH:MM",
@@ -16,9 +17,9 @@ const MONTHS = [
   "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь",
 ];
 
-// Чипы времени: рабочий день клиники 08:00–19:30 с шагом полчаса.
+// Чипы времени: рабочий день клиники 09:00–17:30 с шагом полчаса.
 const TIME_CHIPS: string[] = [];
-for (let h = 8; h < 20; h++) {
+for (let h = WORKDAY_START; h < WORKDAY_END; h++) {
   TIME_CHIPS.push(`${String(h).padStart(2, "0")}:00`);
   TIME_CHIPS.push(`${String(h).padStart(2, "0")}:30`);
 }

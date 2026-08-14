@@ -193,8 +193,8 @@ export default function CalendarPage() {
             center: "title",
             right: "timeGridWeek,timeGridDay",
           }}
-          slotMinTime="08:00:00"
-          slotMaxTime="20:00:00"
+          slotMinTime="09:00:00"
+          slotMaxTime="18:00:00"
           // По умолчанию FullCalendar пишет на оси только час («8»); просим
           // полное время, чтобы читалось как «08:00».
           slotLabelFormat={{

@@ -250,7 +250,7 @@ function FlowStep2({ patient, onNext, onBack, setError }: {
   const saveAppt = useSaveAppointment();
 
   const [doctorId, setDoctorId] = useState<number | "">(activeDoctors[0]?.id ?? "");
-  // По умолчанию - ближайшее время сегодня (рабочий день 8:00–20:00), приём 30 мин.
+  // По умолчанию - ближайшее время сегодня (рабочий день 9:00–18:00), приём 30 мин.
   const [start, setStart] = useState(() => defaultAppointmentStart());
   const [end, setEnd] = useState(() => addMinutesToLocalInput(defaultAppointmentStart(), 30));
 

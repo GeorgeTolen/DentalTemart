@@ -31,12 +31,12 @@ export function ageCategory(birthDate: string | null): "Детский" | "Вз�
 }
 
 // Working hours of the clinic day used for default appointment times.
-const WORKDAY_START = 8;
-const WORKDAY_END = 20;
+export const WORKDAY_START = 9;
+export const WORKDAY_END = 18;
 
 // defaultAppointmentStart returns a "YYYY-MM-DDTHH:MM" value for a new
 // appointment: today, rounded up to the next half-hour, clamped to the
-// 08:00–20:00 working window (past 20:00 → next day 08:00).
+// 09:00–18:00 working window (past 18:00 → next day 09:00).
 export function defaultAppointmentStart(): string {
   const d = new Date();
   d.setSeconds(0, 0);

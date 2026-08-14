@@ -106,7 +106,7 @@ function EditCard({
   const [pickingDoctor, setPickingDoctor] = useState(false);
   const [pickingTime, setPickingTime] = useState(false);
   // Новая запись по умолчанию начинается сегодня, в ближайшее рабочее время
-  // (8:00–20:00), длится час. Правится через шторку с календарём.
+  // (9:00–18:00), длится час. Правится через шторку с календарём.
   const [start, setStart] = useState(
     existing
       ? isoToLocalInput(existing.start_time)
