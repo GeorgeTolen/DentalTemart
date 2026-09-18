@@ -7,10 +7,6 @@ SELECT c.*,
 FROM clinics c
 ORDER BY c.created_at DESC;
 
--- name: ListActiveClinics :many
--- Public list used by the login clinic picker (only non-sensitive fields).
-SELECT id, name, slug FROM clinics WHERE is_active = true ORDER BY name;
-
 -- name: GetClinic :one
 SELECT * FROM clinics WHERE id = $1;
 

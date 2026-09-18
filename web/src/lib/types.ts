@@ -24,13 +24,6 @@ export interface ClinicUser {
   clinic_id: number | null;
 }
 
-// Minimal, public clinic shape for the login picker.
-export interface PublicClinic {
-  id: number;
-  name: string;
-  slug: string;
-}
-
 // Full clinic shape for the platform admin panel.
 export interface Clinic {
   id: number;
@@ -65,6 +58,9 @@ export interface PlatformStats {
   total_doctors: number;
   total_appointments: number;
   total_revenue: number;
+  // Занято данными: база и файлы медкарты, байты.
+  db_size_bytes: number;
+  uploads_size_bytes: number;
 }
 
 export interface Doctor {

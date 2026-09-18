@@ -97,37 +97,6 @@ func (q *Queries) GetClinicBySlug(ctx context.Context, lower string) (Clinic, er
 	return i, err
 }
 
-const listActiveClinics = `-- name: ListActiveClinics :many
-SELECT id, name, slug FROM clinics WHERE is_active = true ORDER BY name
-`
-
-type ListActiveClinicsRow struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-}
-
-// Public list used by the login clinic picker (only non-sensitive fields).
-func (q *Queries) ListActiveClinics(ctx context.Context) ([]ListActiveClinicsRow, error) {
-	rows, err := q.db.Query(ctx, listActiveClinics)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListActiveClinicsRow{}
-	for rows.Next() {
-		var i ListActiveClinicsRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listClinics = `-- name: ListClinics :many
 SELECT c.id, c.name, c.slug, c.address, c.phone, c.is_active, c.created_at, c.access_expires_at,
        (SELECT count(*) FROM users u    WHERE u.clinic_id = c.id AND u.role = 'owner')::bigint AS owner_count,

@@ -279,6 +279,41 @@ func (q *Queries) ListUsersByClinic(ctx context.Context, clinicID pgtype.Int8) (
 	return items, nil
 }
 
+const listUsersByEmail = `-- name: ListUsersByEmail :many
+SELECT id, full_name, email, password_hash, role, created_at, clinic_id, token_version FROM users WHERE lower(email) = lower($1) ORDER BY clinic_id NULLS FIRST, id
+`
+
+// Вход без выбора клиники: один email может быть заведён в нескольких клиниках
+// (уникальность — в пределах клиники), поэтому берём все и сверяем пароль.
+func (q *Queries) ListUsersByEmail(ctx context.Context, lower string) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersByEmail, lower)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.FullName,
+			&i.Email,
+			&i.PasswordHash,
+			&i.Role,
+			&i.CreatedAt,
+			&i.ClinicID,
+			&i.TokenVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateSuperadmin = `-- name: UpdateSuperadmin :one
 UPDATE users SET full_name = $2, email = $3
 WHERE id = $1 AND clinic_id IS NULL AND role = 'superadmin'

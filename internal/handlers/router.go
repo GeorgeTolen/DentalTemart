@@ -34,9 +34,10 @@ func (h *Handlers) Router() http.Handler {
 
 	r.Route("/api", func(r chi.Router) {
 		// Public endpoints.
-		r.Get("/clinics", h.ListPublicClinics)          // login clinic picker
-		r.Post("/auth/login", h.Login)                  // clinic user login
-		r.Post("/auth/platform/login", h.PlatformLogin) // platform superadmin login
+		// Один вход для всех: по email и паролю сервер сам находит клинику
+		// (или панель платформы). Публичного списка клиник нет - названия чужих
+		// клиник посторонним видеть незачем.
+		r.Post("/auth/login", h.Login)
 		r.Post("/auth/logout", h.Logout)
 		r.Post("/auth/refresh", h.Refresh)
 

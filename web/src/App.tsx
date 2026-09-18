@@ -4,7 +4,6 @@ import { useAuth } from "./auth/AuthContext";
 import { useT } from "./lib/i18n";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
-import PlatformLogin from "./pages/PlatformLogin";
 import Platform from "./pages/Platform";
 import Calendar from "./pages/Calendar";
 import Patients from "./pages/Patients";
@@ -39,7 +38,6 @@ export default function App() {
   if (!user) {
     return (
       <Routes>
-        <Route path="/platform-login" element={<PlatformLogin />} />
         <Route path="*" element={<Login />} />
       </Routes>
     );
@@ -80,7 +78,6 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Navigate to="/" replace />} />
-      <Route path="/platform-login" element={<Navigate to="/" replace />} />
       <Route element={<Layout />}>
         <Route index element={<Calendar />} />
         <Route path="/patients" element={<Patients />} />

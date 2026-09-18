@@ -71,8 +71,6 @@ type Querier interface {
 	// Platform admin login: superadmins are not attached to any clinic.
 	GetSuperadminByEmail(ctx context.Context, lower string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
-	// Public list used by the login clinic picker (only non-sensitive fields).
-	ListActiveClinics(ctx context.Context) ([]ListActiveClinicsRow, error)
 	// --- Услуги, оказанные в приёме ---------------------------------------------
 	ListAppointmentServices(ctx context.Context, arg ListAppointmentServicesParams) ([]ListAppointmentServicesRow, error)
 	// Вся история пациента по всем клиникам платформы. Суммы — только по приёмам
@@ -127,6 +125,9 @@ type Querier interface {
 	// (or linked to the given doctor, so editing keeps showing its own link).
 	ListUnlinkedDoctorUsers(ctx context.Context, arg ListUnlinkedDoctorUsersParams) ([]ListUnlinkedDoctorUsersRow, error)
 	ListUsersByClinic(ctx context.Context, clinicID pgtype.Int8) ([]ListUsersByClinicRow, error)
+	// Вход без выбора клиники: один email может быть заведён в нескольких клиниках
+	// (уникальность — в пределах клиники), поэтому берём все и сверяем пароль.
+	ListUsersByEmail(ctx context.Context, lower string) ([]User, error)
 	// Выработка врачей. Исполнитель берётся из позиции, а если он не указан — из
 	// врача приёма, иначе выработка «потерялась бы».
 	RevenueByDoctor(ctx context.Context, arg RevenueByDoctorParams) ([]RevenueByDoctorRow, error)

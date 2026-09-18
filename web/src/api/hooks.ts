@@ -20,7 +20,6 @@ import type {
   PatientRecordType,
   PlatformAdmin,
   PlatformStats,
-  PublicClinic,
   RevenueStats,
   ScheduleEntry,
   Service,
@@ -567,15 +566,6 @@ export function useAdminStats() {
 }
 
 // --- Platform (superadmin): clinics & global stats ---
-
-// Public list for the login clinic picker.
-export function usePublicClinics() {
-  return useQuery({
-    queryKey: ["public-clinics"],
-    retry: false,
-    queryFn: async () => (await api.get<PublicClinic[]>("/clinics")).data,
-  });
-}
 
 export function usePlatformStats() {
   return useQuery({

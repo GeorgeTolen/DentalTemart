@@ -56,3 +56,8 @@ DELETE FROM users WHERE id = $1 AND clinic_id = $2;
 -- name: UpdateUserPassword :exec
 -- Bumping token_version invalidates the user's existing access/refresh tokens.
 UPDATE users SET password_hash = $2, token_version = token_version + 1 WHERE id = $1;
+
+-- name: ListUsersByEmail :many
+-- Вход без выбора клиники: один email может быть заведён в нескольких клиниках
+-- (уникальность — в пределах клиники), поэтому берём все и сверяем пароль.
+SELECT * FROM users WHERE lower(email) = lower($1) ORDER BY clinic_id NULLS FIRST, id;

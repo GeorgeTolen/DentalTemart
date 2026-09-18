@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"temart/internal/auth"
 	"temart/internal/db/sqlc"
@@ -15,14 +14,24 @@ import (
 )
 
 type loginRequest struct {
-	ClinicID int64  `json:"clinic_id" validate:"required"`
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required"`
+	// ClinicID уточняет вход, когда один и тот же email с одним паролем заведён
+	// в нескольких клиниках: nil — ещё не выбирали, 0 — панель платформы.
+	ClinicID *int64 `json:"clinic_id"`
 }
 
-type platformLoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+// loginChoice — одна из клиник, куда подходят введённые email и пароль.
+// Показывается только самому владельцу учёток, поэтому названия не утекают.
+type loginChoice struct {
+	ClinicID   int64  `json:"clinic_id"`
+	ClinicName string `json:"clinic_name"`
+}
+
+// loginChoicesResponse отдаётся вместо сессии, когда подходящих учёток
+// несколько и надо выбрать клинику.
+type loginChoicesResponse struct {
+	Choose []loginChoice `json:"choose"`
 }
 
 // userDTO is the compact user shape used by the clinic user-management panel.
@@ -63,8 +72,14 @@ func (h *Handlers) meFromUser(r *http.Request, u sqlc.User) meDTO {
 	return dto
 }
 
-// Login authenticates a clinic user by clinic + email + password and sets
-// httpOnly auth cookies.
+// platformChoiceName — подпись панели платформы в списке выбора при входе.
+const platformChoiceName = "Панель платформы"
+
+// Login authenticates by email + password alone: клинику заранее не выбирают.
+// Учётку ищем во всех клиниках и среди администраторов платформы; подходит
+// та, у которой сошёлся пароль. Если таких несколько (человек заведён в двух
+// клиниках с одним паролем) — отдаём список только его клиник и ждём выбор
+// в следующем запросе с clinic_id.
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := httpx.Decode(r, &req); err != nil {
@@ -76,76 +91,79 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clinic, err := h.q.GetClinic(r.Context(), req.ClinicID)
+	candidates, err := h.q.ListUsersByEmail(r.Context(), req.Email)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			httpx.Fail(w, httpx.NewError(http.StatusUnauthorized, "клиника не найдена"))
-			return
-		}
 		httpx.Fail(w, err)
 		return
 	}
-	if !clinic.IsActive {
+
+	type match struct {
+		user     sqlc.User
+		clinicID int64 // 0 — панель платформы
+		name     string
+	}
+	var matches []match
+	inactive := false
+	for _, u := range candidates {
+		if !auth.CheckPassword(u.PasswordHash, req.Password) {
+			continue
+		}
+		if !u.ClinicID.Valid {
+			// Учётка без клиники — только администратор платформы.
+			if u.Role != "superadmin" {
+				continue
+			}
+			if req.ClinicID != nil && *req.ClinicID != 0 {
+				continue
+			}
+			matches = append(matches, match{user: u, clinicID: 0, name: platformChoiceName})
+			continue
+		}
+		cid := u.ClinicID.Int64
+		if req.ClinicID != nil && *req.ClinicID != cid {
+			continue
+		}
+		clinic, err := h.q.GetClinic(r.Context(), cid)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
+			httpx.Fail(w, err)
+			return
+		}
+		if !clinic.IsActive {
+			inactive = true
+			continue
+		}
+		matches = append(matches, match{user: u, clinicID: cid, name: clinic.Name})
+	}
+
+	switch {
+	case len(matches) == 0 && inactive:
+		// Пароль верный, но клинику отключили — честнее сказать это, чем
+		// «неверный пароль».
 		httpx.Fail(w, httpx.NewError(http.StatusForbidden, "клиника временно недоступна"))
 		return
-	}
-
-	user, err := h.q.GetClinicUserByEmail(r.Context(), sqlc.GetClinicUserByEmailParams{
-		ClinicID: pgtype.Int8{Int64: req.ClinicID, Valid: true},
-		Lower:    req.Email,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			httpx.Fail(w, httpx.NewError(http.StatusUnauthorized, "неверный email или пароль"))
-			return
-		}
-		httpx.Fail(w, err)
-		return
-	}
-	if !auth.CheckPassword(user.PasswordHash, req.Password) {
+	case len(matches) == 0:
+		// Одно сообщение и для «нет такого email», и для «не тот пароль»:
+		// иначе по ответу можно перебирать, какие адреса заведены в системе.
 		httpx.Fail(w, httpx.NewError(http.StatusUnauthorized, "неверный email или пароль"))
 		return
-	}
-
-	if err := h.setAuthCookies(w, user.ID, req.ClinicID, user.TokenVersion, user.Role); err != nil {
-		httpx.Fail(w, err)
-		return
-	}
-	httpx.JSON(w, http.StatusOK, h.meFromUser(r, user))
-}
-
-// PlatformLogin authenticates the platform superadmin (separate login for the
-// person who manages all clinics). No clinic is involved.
-func (h *Handlers) PlatformLogin(w http.ResponseWriter, r *http.Request) {
-	var req platformLoginRequest
-	if err := httpx.Decode(r, &req); err != nil {
-		httpx.Fail(w, err)
-		return
-	}
-	if err := h.validateStruct(req); err != nil {
-		httpx.Fail(w, err)
-		return
-	}
-
-	user, err := h.q.GetSuperadminByEmail(r.Context(), req.Email)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			httpx.Fail(w, httpx.NewError(http.StatusUnauthorized, "неверный email или пароль"))
-			return
+	case len(matches) > 1:
+		resp := loginChoicesResponse{Choose: make([]loginChoice, 0, len(matches))}
+		for _, m := range matches {
+			resp.Choose = append(resp.Choose, loginChoice{ClinicID: m.clinicID, ClinicName: m.name})
 		}
-		httpx.Fail(w, err)
-		return
-	}
-	if !auth.CheckPassword(user.PasswordHash, req.Password) {
-		httpx.Fail(w, httpx.NewError(http.StatusUnauthorized, "неверный email или пароль"))
+		httpx.JSON(w, http.StatusOK, resp)
 		return
 	}
 
-	if err := h.setAuthCookies(w, user.ID, 0, user.TokenVersion, user.Role); err != nil {
+	m := matches[0]
+	if err := h.setAuthCookies(w, m.user.ID, m.clinicID, m.user.TokenVersion, m.user.Role); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, h.meFromUser(r, user))
+	httpx.JSON(w, http.StatusOK, h.meFromUser(r, m.user))
 }
 
 // Logout clears the auth cookies.

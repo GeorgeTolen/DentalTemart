@@ -15,13 +15,20 @@ import {
 } from "../api/client";
 import type { User } from "../lib/types";
 
+// Клиника, куда подходят введённые email и пароль (ответ сервера при
+// неоднозначном входе). clinic_id 0 - панель платформы.
+export interface LoginChoice {
+  clinic_id: number;
+  clinic_name: string;
+}
+
 interface AuthState {
   user: User | null;
   loading: boolean;
-  // Clinic user login: pick a clinic, then sign in with email + password.
-  login: (clinicId: number, email: string, password: string) => Promise<void>;
-  // Platform superadmin login (separate, no clinic).
-  platformLogin: (email: string, password: string) => Promise<void>;
+  // Вход по email и паролю: сервер сам находит клинику или панель платформы.
+  // Если учётка с таким паролем есть в нескольких клиниках, возвращает их
+  // список - и вход повторяют с выбранным clinicId (0 - панель платформы).
+  login: (email: string, password: string, clinicId?: number) => Promise<LoginChoice[] | null>;
   logout: () => Promise<void>;
   // Режим поддержки: администратор платформы смотрит данные клиники, не меняя их.
   supportClinic: SupportClinic | null;
@@ -78,20 +85,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     qc.clear();
   }
 
-  async function login(clinicId: number, email: string, password: string) {
-    const res = await api.post<User>("/auth/login", {
-      clinic_id: clinicId,
+  async function login(email: string, password: string, clinicId?: number) {
+    const res = await api.post<User | { choose: LoginChoice[] }>("/auth/login", {
       email,
       password,
+      ...(clinicId !== undefined ? { clinic_id: clinicId } : {}),
     });
+    if ("choose" in res.data) return res.data.choose;
     resetSession();
     setUser(res.data);
-  }
-
-  async function platformLogin(email: string, password: string) {
-    const res = await api.post<User>("/auth/platform/login", { email, password });
-    resetSession();
-    setUser(res.data);
+    return null;
   }
 
   async function logout() {
@@ -118,7 +121,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         login,
-        platformLogin,
         logout,
         supportClinic,
         enterSupport,

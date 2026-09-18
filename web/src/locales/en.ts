@@ -196,17 +196,11 @@ export const en: Record<string, string> = {
 
   // Login, personal cabinet, shared elements
   "CRM для стоматологических клиник": "CRM for dental clinics",
-  "Выберите вашу клинику": "Choose your clinic",
-  "Поиск клиники…": "Search clinic…",
-  "Загрузка клиник…": "Loading clinics…",
-  "Не удалось загрузить список клиник.": "Failed to load the list of clinics.",
-  "Пока нет ни одной клиники. Обратитесь к администратору платформы.":
-    "There are no clinics yet. Contact the platform administrator.",
-  "Клиника не найдена": "Clinic not found",
-  "Вход для администратора платформы": "Platform administrator sign in",
-  "← выбрать другую клинику": "← choose another clinic",
-  "Клиника": "Clinic",
   "Пароль": "Password",
+  "Выберите, куда войти": "Choose where to sign in",
+  "Этот email и пароль подходят к нескольким клиникам.": "This email and password match several clinics.",
+  "← войти под другим аккаунтом": "← sign in with another account",
+  "Панель платформы": "Platform panel",
   "Войти": "Sign in",
   "Вход…": "Signing in…",
   "Не удалось войти": "Could not sign in",

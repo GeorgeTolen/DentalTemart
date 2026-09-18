@@ -25,6 +25,18 @@ import { SortToggle, sortList, type SortOrder } from "../components/SortToggle";
 
 type PlatformTab = "clinics" | "admins";
 
+// «56 КБ», «1,3 МБ» - для плитки с занятым местом.
+function formatBytes(n: number): string {
+  const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
+  let v = n;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${i === 0 ? v : v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
+}
+
 export default function Platform() {
   const { user, logout, enterSupport } = useAuth();
   const { data: stats } = usePlatformStats();
@@ -67,6 +79,11 @@ export default function Platform() {
     { label: "Врачей", value: String(stats?.total_doctors ?? 0) },
     { label: "Приёмов", value: String(stats?.total_appointments ?? 0) },
     { label: "Выручка всех клиник", value: formatMoney(stats?.total_revenue ?? 0) },
+    // Сколько места занимают данные: база + файлы медкарты (снимки, аватарки).
+    {
+      label: "Занято данными (база + файлы)",
+      value: `${formatBytes(stats?.db_size_bytes ?? 0)} + ${formatBytes(stats?.uploads_size_bytes ?? 0)}`,
+    },
   ];
 
   return (

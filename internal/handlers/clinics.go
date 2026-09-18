@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"errors"
+	"io/fs"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -55,28 +57,6 @@ func toClinicDTO(c sqlc.Clinic) clinicDTO {
 		AccessExpiresAt: expires,
 		Frozen:          frozen,
 	}
-}
-
-// publicClinicDTO is the minimal, unauthenticated view for the login picker.
-type publicClinicDTO struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-}
-
-// ListPublicClinics returns active clinics for the login clinic picker. Public
-// (no auth): only non-sensitive fields are exposed.
-func (h *Handlers) ListPublicClinics(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.q.ListActiveClinics(r.Context())
-	if err != nil {
-		httpx.Fail(w, err)
-		return
-	}
-	out := make([]publicClinicDTO, 0, len(rows))
-	for _, c := range rows {
-		out = append(out, publicClinicDTO{ID: c.ID, Name: c.Name, Slug: c.Slug})
-	}
-	httpx.JSON(w, http.StatusOK, out)
 }
 
 // ListClinics returns all clinics with counts (platform admin only).
@@ -445,6 +425,10 @@ type platformStatsDTO struct {
 	TotalAppointments int64 `json:"total_appointments"`
 	// Выручка всех клиник вместе, тенге.
 	TotalRevenue int64 `json:"total_revenue"`
+	// Сколько места занимают данные: база (pg_database_size) и файлы медкарты
+	// на диске. Байты - форматирует интерфейс.
+	DbSizeBytes      int64 `json:"db_size_bytes"`
+	UploadsSizeBytes int64 `json:"uploads_size_bytes"`
 }
 
 // PlatformStats returns global cross-clinic statistics (platform admin only).
@@ -461,9 +445,10 @@ func (h *Handlers) PlatformStats(w http.ResponseWriter, r *http.Request) {
 			(SELECT count(*) FROM users WHERE clinic_id IS NOT NULL)::bigint,
 			(SELECT count(*) FROM patients)::bigint,
 			(SELECT count(*) FROM doctors)::bigint,
-			(SELECT count(*) FROM appointments)::bigint
+			(SELECT count(*) FROM appointments)::bigint,
+			pg_database_size(current_database())::bigint
 	`)
-	if err := row.Scan(&s.TotalClinics, &s.ActiveClinics, &s.TotalUsers, &s.TotalPatients, &s.TotalDoctors, &s.TotalAppointments); err != nil {
+	if err := row.Scan(&s.TotalClinics, &s.ActiveClinics, &s.TotalUsers, &s.TotalPatients, &s.TotalDoctors, &s.TotalAppointments, &s.DbSizeBytes); err != nil {
 		httpx.Fail(w, err)
 		return
 	}
@@ -473,7 +458,24 @@ func (h *Handlers) PlatformStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.TotalRevenue = revenue
+	s.UploadsSizeBytes = dirSize(uploadsDir)
 	httpx.JSON(w, http.StatusOK, s)
+}
+
+// dirSize суммирует размер файлов в каталоге. Ошибки (нет каталога, нет прав
+// на отдельный файл) не роняют статистику - такой файл просто не считается.
+func dirSize(root string) int64 {
+	var total int64
+	_ = filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if info, ierr := d.Info(); ierr == nil {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
 }
 
 // slugify converts a clinic name (Latin or Cyrillic) into a url-safe short id.

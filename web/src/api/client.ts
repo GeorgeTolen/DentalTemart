@@ -73,11 +73,10 @@ api.interceptors.request.use((config) => {
 export const UNAUTHORIZED_EVENT = "temart:unauthorized";
 
 // A request is an "auth call" (where a 401 is a normal answer and must NOT
-// trigger a refresh/reset) when it targets an /auth/ endpoint or the public
-// clinic picker. Note: matched precisely so /platform/clinics still refreshes.
+// trigger a refresh/reset) when it targets an /auth/ endpoint.
 function isAuthCall(url: string): boolean {
   const path = url.split("?")[0];
-  return path.startsWith("/auth/") || path === "/clinics";
+  return path.startsWith("/auth/");
 }
 
 // A single in-flight refresh shared by all 401'd requests, so a burst of
