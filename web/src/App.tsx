@@ -15,6 +15,8 @@ import Stats from "./pages/Stats";
 import Users from "./pages/Users";
 import Archive from "./pages/Archive";
 import Events from "./pages/Events";
+import Requests from "./pages/Requests";
+import Integrations from "./pages/Integrations";
 import AppointmentsPage from "./pages/Appointments";
 import DoctorCabinet from "./pages/DoctorCabinet";
 import OwnerCabinet from "./pages/OwnerCabinet";
@@ -95,6 +97,10 @@ export default function App() {
         <Route path="/admin/stats" element={managed(<Stats />)} />
         <Route path="/admin/archive" element={managed(<Archive />)} />
         <Route path="/admin/events" element={managed(<Events />)} />
+        <Route path="/admin/requests" element={managed(<Requests />)} />
+        {/* Ссылку на запись видят все сотрудники клиники (её копируют с
+            ресепшена); настройки внутри страницы показываются владельцу. */}
+        <Route path="/admin/booking" element={<Integrations />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

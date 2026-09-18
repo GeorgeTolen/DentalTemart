@@ -15,7 +15,7 @@ import (
 const createClinic = `-- name: CreateClinic :one
 INSERT INTO clinics (name, slug, address, phone, is_active)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at
+RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at, map_url, online_booking, greenapi_instance, greenapi_token
 `
 
 type CreateClinicParams struct {
@@ -44,6 +44,10 @@ func (q *Queries) CreateClinic(ctx context.Context, arg CreateClinicParams) (Cli
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.AccessExpiresAt,
+		&i.MapUrl,
+		&i.OnlineBooking,
+		&i.GreenapiInstance,
+		&i.GreenapiToken,
 	)
 	return i, err
 }
@@ -58,7 +62,7 @@ func (q *Queries) DeleteClinic(ctx context.Context, id int64) error {
 }
 
 const getClinic = `-- name: GetClinic :one
-SELECT id, name, slug, address, phone, is_active, created_at, access_expires_at FROM clinics WHERE id = $1
+SELECT id, name, slug, address, phone, is_active, created_at, access_expires_at, map_url, online_booking, greenapi_instance, greenapi_token FROM clinics WHERE id = $1
 `
 
 func (q *Queries) GetClinic(ctx context.Context, id int64) (Clinic, error) {
@@ -73,12 +77,16 @@ func (q *Queries) GetClinic(ctx context.Context, id int64) (Clinic, error) {
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.AccessExpiresAt,
+		&i.MapUrl,
+		&i.OnlineBooking,
+		&i.GreenapiInstance,
+		&i.GreenapiToken,
 	)
 	return i, err
 }
 
 const getClinicBySlug = `-- name: GetClinicBySlug :one
-SELECT id, name, slug, address, phone, is_active, created_at, access_expires_at FROM clinics WHERE lower(slug) = lower($1)
+SELECT id, name, slug, address, phone, is_active, created_at, access_expires_at, map_url, online_booking, greenapi_instance, greenapi_token FROM clinics WHERE lower(slug) = lower($1)
 `
 
 func (q *Queries) GetClinicBySlug(ctx context.Context, lower string) (Clinic, error) {
@@ -93,12 +101,16 @@ func (q *Queries) GetClinicBySlug(ctx context.Context, lower string) (Clinic, er
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.AccessExpiresAt,
+		&i.MapUrl,
+		&i.OnlineBooking,
+		&i.GreenapiInstance,
+		&i.GreenapiToken,
 	)
 	return i, err
 }
 
 const listClinics = `-- name: ListClinics :many
-SELECT c.id, c.name, c.slug, c.address, c.phone, c.is_active, c.created_at, c.access_expires_at,
+SELECT c.id, c.name, c.slug, c.address, c.phone, c.is_active, c.created_at, c.access_expires_at, c.map_url, c.online_booking, c.greenapi_instance, c.greenapi_token,
        (SELECT count(*) FROM users u    WHERE u.clinic_id = c.id AND u.role = 'owner')::bigint AS owner_count,
        (SELECT count(*) FROM patients p WHERE p.clinic_id = c.id)::bigint AS patient_count,
        (SELECT count(*) FROM doctors d  WHERE d.clinic_id = c.id)::bigint AS doctor_count
@@ -107,17 +119,21 @@ ORDER BY c.created_at DESC
 `
 
 type ListClinicsRow struct {
-	ID              int64       `json:"id"`
-	Name            string      `json:"name"`
-	Slug            string      `json:"slug"`
-	Address         pgtype.Text `json:"address"`
-	Phone           pgtype.Text `json:"phone"`
-	IsActive        bool        `json:"is_active"`
-	CreatedAt       time.Time   `json:"created_at"`
-	AccessExpiresAt *time.Time  `json:"access_expires_at"`
-	OwnerCount      int64       `json:"owner_count"`
-	PatientCount    int64       `json:"patient_count"`
-	DoctorCount     int64       `json:"doctor_count"`
+	ID               int64       `json:"id"`
+	Name             string      `json:"name"`
+	Slug             string      `json:"slug"`
+	Address          pgtype.Text `json:"address"`
+	Phone            pgtype.Text `json:"phone"`
+	IsActive         bool        `json:"is_active"`
+	CreatedAt        time.Time   `json:"created_at"`
+	AccessExpiresAt  *time.Time  `json:"access_expires_at"`
+	MapUrl           pgtype.Text `json:"map_url"`
+	OnlineBooking    bool        `json:"online_booking"`
+	GreenapiInstance pgtype.Text `json:"greenapi_instance"`
+	GreenapiToken    pgtype.Text `json:"greenapi_token"`
+	OwnerCount       int64       `json:"owner_count"`
+	PatientCount     int64       `json:"patient_count"`
+	DoctorCount      int64       `json:"doctor_count"`
 }
 
 // All clinics with quick aggregate counts, for the platform admin panel.
@@ -139,6 +155,10 @@ func (q *Queries) ListClinics(ctx context.Context) ([]ListClinicsRow, error) {
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.AccessExpiresAt,
+			&i.MapUrl,
+			&i.OnlineBooking,
+			&i.GreenapiInstance,
+			&i.GreenapiToken,
 			&i.OwnerCount,
 			&i.PatientCount,
 			&i.DoctorCount,
@@ -154,7 +174,7 @@ func (q *Queries) ListClinics(ctx context.Context) ([]ListClinicsRow, error) {
 }
 
 const setClinicAccess = `-- name: SetClinicAccess :one
-UPDATE clinics SET access_expires_at = $2 WHERE id = $1 RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at
+UPDATE clinics SET access_expires_at = $2 WHERE id = $1 RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at, map_url, online_booking, greenapi_instance, greenapi_token
 `
 
 type SetClinicAccessParams struct {
@@ -175,23 +195,31 @@ func (q *Queries) SetClinicAccess(ctx context.Context, arg SetClinicAccessParams
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.AccessExpiresAt,
+		&i.MapUrl,
+		&i.OnlineBooking,
+		&i.GreenapiInstance,
+		&i.GreenapiToken,
 	)
 	return i, err
 }
 
 const updateClinic = `-- name: UpdateClinic :one
-UPDATE clinics SET name = $2, slug = $3, address = $4, phone = $5, is_active = $6
+UPDATE clinics
+SET name = $2, slug = $3, address = $4, phone = $5, is_active = $6,
+    map_url = $7, online_booking = $8
 WHERE id = $1
-RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at
+RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at, map_url, online_booking, greenapi_instance, greenapi_token
 `
 
 type UpdateClinicParams struct {
-	ID       int64       `json:"id"`
-	Name     string      `json:"name"`
-	Slug     string      `json:"slug"`
-	Address  pgtype.Text `json:"address"`
-	Phone    pgtype.Text `json:"phone"`
-	IsActive bool        `json:"is_active"`
+	ID            int64       `json:"id"`
+	Name          string      `json:"name"`
+	Slug          string      `json:"slug"`
+	Address       pgtype.Text `json:"address"`
+	Phone         pgtype.Text `json:"phone"`
+	IsActive      bool        `json:"is_active"`
+	MapUrl        pgtype.Text `json:"map_url"`
+	OnlineBooking bool        `json:"online_booking"`
 }
 
 func (q *Queries) UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Clinic, error) {
@@ -202,6 +230,8 @@ func (q *Queries) UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Cli
 		arg.Address,
 		arg.Phone,
 		arg.IsActive,
+		arg.MapUrl,
+		arg.OnlineBooking,
 	)
 	var i Clinic
 	err := row.Scan(
@@ -213,6 +243,75 @@ func (q *Queries) UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Cli
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.AccessExpiresAt,
+		&i.MapUrl,
+		&i.OnlineBooking,
+		&i.GreenapiInstance,
+		&i.GreenapiToken,
+	)
+	return i, err
+}
+
+const updateClinicBookingSettings = `-- name: UpdateClinicBookingSettings :one
+UPDATE clinics SET map_url = $2, online_booking = $3
+WHERE id = $1
+RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at, map_url, online_booking, greenapi_instance, greenapi_token
+`
+
+type UpdateClinicBookingSettingsParams struct {
+	ID            int64       `json:"id"`
+	MapUrl        pgtype.Text `json:"map_url"`
+	OnlineBooking bool        `json:"online_booking"`
+}
+
+// Настройки онлайн-записи, которые правит сам владелец клиники.
+func (q *Queries) UpdateClinicBookingSettings(ctx context.Context, arg UpdateClinicBookingSettingsParams) (Clinic, error) {
+	row := q.db.QueryRow(ctx, updateClinicBookingSettings, arg.ID, arg.MapUrl, arg.OnlineBooking)
+	var i Clinic
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Address,
+		&i.Phone,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.AccessExpiresAt,
+		&i.MapUrl,
+		&i.OnlineBooking,
+		&i.GreenapiInstance,
+		&i.GreenapiToken,
+	)
+	return i, err
+}
+
+const updateClinicGreenAPI = `-- name: UpdateClinicGreenAPI :one
+UPDATE clinics SET greenapi_instance = $2, greenapi_token = $3
+WHERE id = $1
+RETURNING id, name, slug, address, phone, is_active, created_at, access_expires_at, map_url, online_booking, greenapi_instance, greenapi_token
+`
+
+type UpdateClinicGreenAPIParams struct {
+	ID               int64       `json:"id"`
+	GreenapiInstance pgtype.Text `json:"greenapi_instance"`
+	GreenapiToken    pgtype.Text `json:"greenapi_token"`
+}
+
+func (q *Queries) UpdateClinicGreenAPI(ctx context.Context, arg UpdateClinicGreenAPIParams) (Clinic, error) {
+	row := q.db.QueryRow(ctx, updateClinicGreenAPI, arg.ID, arg.GreenapiInstance, arg.GreenapiToken)
+	var i Clinic
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Address,
+		&i.Phone,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.AccessExpiresAt,
+		&i.MapUrl,
+		&i.OnlineBooking,
+		&i.GreenapiInstance,
+		&i.GreenapiToken,
 	)
 	return i, err
 }

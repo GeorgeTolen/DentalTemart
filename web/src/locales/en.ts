@@ -46,6 +46,115 @@ export const en: Record<string, string> = {
   "Завершён": "Completed",
   "Отменён": "Cancelled",
   "Не пришёл": "No-show",
+  "Заявка": "Request",
+  "заявка": "request",
+
+  // Online booking (CRM side)
+  "Заявки": "Requests",
+  "Онлайн-запись": "Online booking",
+  "Новых заявок нет": "No new requests",
+  "Подтвердить": "Approve",
+  "Подтвердить заявку": "Approve request",
+  "Перенести": "Reschedule",
+  "Отклонить": "Decline",
+  "Перенести заявку": "Reschedule request",
+  "Перенести и подтвердить": "Reschedule and approve",
+  "Новое время": "New time",
+  "просил(а)": "asked for",
+  "Отклонить заявку {name}? Клиент получит сообщение.":
+    "Decline the request from {name}? The client will be notified.",
+  "Отклонить заявку? Клиент получит сообщение.":
+    "Decline the request? The client will be notified.",
+  "Клиенты записались сами через ссылку клиники. Подтвердите, перенесите или отклоните - клиенту уйдёт сообщение.":
+    "Clients booked themselves via the clinic link. Approve, reschedule or decline - the client gets a message.",
+  "Заявка с онлайн-записи: клиент ждёт подтверждения. После ответа ему уйдёт сообщение в WhatsApp.":
+    "Online booking request: the client is waiting for confirmation. They will get a WhatsApp message after you respond.",
+  "Клиенты записываются сами по ссылке, а сообщения им уходят с WhatsApp-номера клиники.":
+    "Clients book themselves via a link; messages are sent from the clinic's WhatsApp number.",
+  "Ссылка для записи": "Booking link",
+  "Отправьте её клиентам в WhatsApp, разместите в Instagram или распечатайте QR-код на стойку.":
+    "Send it to clients on WhatsApp, put it on Instagram or print the QR code for the front desk.",
+  "Онлайн-запись выключена: по ссылке клиенты увидят, что запись недоступна.":
+    "Online booking is off: clients will see that booking is unavailable.",
+  "Скопировать": "Copy",
+  "Скопировано ✓": "Copied ✓",
+  "Скопируйте ссылку": "Copy the link",
+  "Открыть": "Open",
+  "Настройки": "Settings",
+  "Принимать заявки онлайн": "Accept online requests",
+  "Ссылка на клинику в 2GIS": "Clinic link in 2GIS",
+  "Уходит клиенту в сообщении о подтверждённой записи вместе с адресом.":
+    "Sent to the client with the confirmation message along with the address.",
+  "Сохранено": "Saved",
+  "WhatsApp клиники": "Clinic WhatsApp",
+  "Подключено": "Connected",
+  "Не подключено": "Not connected",
+  "Подключить WhatsApp": "Connect WhatsApp",
+  "Подключаем…": "Connecting…",
+  "Обновить QR": "Refresh QR",
+  "Отвязать номер": "Unlink number",
+  "Готовим QR-код…": "Preparing the QR code…",
+  "Отсканируйте телефоном клиники. Код обновляется сам.":
+    "Scan with the clinic phone. The code refreshes itself.",
+  "Отвязать WhatsApp-номер клиники? Сообщения клиентам перестанут уходить.":
+    "Unlink the clinic's WhatsApp number? Client messages will stop.",
+  "С этого номера клиентам приходят коды подтверждения и уведомления о записи. Подключите рабочий номер клиники: WhatsApp → Связанные устройства → Привязать устройство → отсканируйте QR-код.":
+    "Clients receive verification codes and booking updates from this number. Connect the clinic's work number: WhatsApp → Linked devices → Link a device → scan the QR code.",
+  "Отправка сообщений выключена на сервере (режим разработки): коды и уведомления пишутся только в лог.":
+    "Message sending is disabled on the server (development mode): codes and notifications only go to the log.",
+  "Сообщения уходят через Green API. Укажите реквизиты инстанса в настройках выше.":
+    "Messages go through Green API. Enter the instance credentials in the settings above.",
+  "Клиент может подключить уведомления в Telegram кнопкой на странице записи. Бот платформы:":
+    "Clients can enable Telegram notifications with a button on the booking page. Platform bot:",
+  "Telegram-бот на платформе пока не настроен.": "The Telegram bot is not configured yet.",
+
+  // Online booking (client page)
+  "Онлайн-запись недоступна": "Online booking unavailable",
+  "Клиника не найдена или запись временно закрыта.": "Clinic not found or booking is temporarily closed.",
+  "Клиника ещё не подключила WhatsApp: код подтверждения может не прийти. Позвоните по телефону клиники.":
+    "The clinic has not connected WhatsApp yet: the code may not arrive. Please call the clinic.",
+  "Любой свободный врач": "Any available doctor",
+  "Подберём того, кто свободен": "We'll pick whoever is free",
+  "На этот день свободного времени нет - выберите другой день или врача.":
+    "No free time on this day - pick another day or doctor.",
+  "Продолжить: {date} в {time}": "Continue: {date} at {time}",
+  "Выберите время": "Choose a time",
+  "Ваше имя": "Your name",
+  "Иван": "John",
+  "Номер WhatsApp": "WhatsApp number",
+  "На этот номер придёт код подтверждения и уведомления о записи.":
+    "The verification code and booking updates will be sent to this number.",
+  "Укажите имя": "Enter your name",
+  "Укажите номер телефона": "Enter your phone number",
+  "Отправляем код…": "Sending the code…",
+  "Получить код в WhatsApp": "Get a code in WhatsApp",
+  "Мы отправили код в WhatsApp на номер {phone}. Введите его ниже.":
+    "We sent a code to {phone} on WhatsApp. Enter it below.",
+  "Режим разработки: код": "Development mode: code",
+  "Введите 4 цифры кода": "Enter the 4-digit code",
+  "Отправляем заявку…": "Sending the request…",
+  "Записаться": "Book",
+  "Отправить код ещё раз через {sec} с": "Resend the code in {sec} s",
+  "Отправить код ещё раз": "Resend the code",
+  "Заявка отправлена": "Request sent",
+  "Клиника подтвердит запись и пришлёт сообщение в WhatsApp.":
+    "The clinic will confirm the booking and message you on WhatsApp.",
+  "ожидает подтверждения": "awaiting confirmation",
+  "Получать уведомления в Telegram": "Get notifications in Telegram",
+  "Открыть статус заявки": "Open request status",
+  "Заявка не найдена": "Request not found",
+  "Проверьте ссылку из сообщения.": "Check the link from the message.",
+  "Записаться заново": "Book again",
+  "Ожидает подтверждения": "Awaiting confirmation",
+  "Подтверждена": "Confirmed",
+  "Приём состоялся": "Visit completed",
+  "Отклонена": "Declined",
+  "Приём не состоялся": "Visit did not take place",
+  "Страница обновится сама, когда клиника ответит.": "This page will refresh itself when the clinic responds.",
+  "Как добраться": "How to get there",
+  "Открыть в 2GIS": "Open in 2GIS",
+  "Позвонить": "Call",
+  "Telegram подключён - уведомления придут и туда.": "Telegram is connected - notifications will arrive there too.",
 
   // Roles
   "Администратор платформы": "Platform administrator",

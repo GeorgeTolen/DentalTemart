@@ -19,6 +19,9 @@ var validStatuses = map[string]bool{
 	"completed": true,
 	"cancelled": true,
 	"no_show":   true,
+	// pending — заявка с онлайн-записи; из CRM её подтверждают или отклоняют
+	// (см. booking_requests.go), но и обычное редактирование ломаться не должно.
+	"pending": true,
 }
 
 type appointmentRequest struct {

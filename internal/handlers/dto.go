@@ -240,22 +240,26 @@ type appointmentDTO struct {
 	// в какой клинике был приём. IsOwn — приём клиники читателя.
 	ClinicName string `json:"clinic_name"`
 	IsOwn      bool   `json:"is_own"`
+	// Source — откуда запись: crm (создана персоналом) или online (заявка
+	// клиента со страницы записи).
+	Source string `json:"source"`
 }
 
 // appointmentJoin captures the fields shared by all joined appointment rows so
 // one conversion function serves the range/patient/get queries.
 type appointmentJoin struct {
-	ID            int64
-	PatientID     int64
-	DoctorID      int64
-	StartTime     time.Time
-	EndTime       time.Time
-	Status        string
-	Diagnosis     pgtype.Text
-	Description   pgtype.Text
-	NextVisitDate *time.Time
-	PatientName   string
-	PatientPhone  pgtype.Text
+	ID              int64
+	PatientID       int64
+	DoctorID        int64
+	StartTime       time.Time
+	EndTime         time.Time
+	Status          string
+	Source          string
+	Diagnosis       pgtype.Text
+	Description     pgtype.Text
+	NextVisitDate   *time.Time
+	PatientName     string
+	PatientPhone    pgtype.Text
 	DoctorName      string
 	DoctorColor     string
 	Total           int64
@@ -282,6 +286,7 @@ func (j appointmentJoin) dto() appointmentDTO {
 		NextVisitDate: dateStr(j.NextVisitDate),
 		ClinicName:    textVal(j.ClinicName),
 		IsOwn:         j.IsOwn,
+		Source:        j.Source,
 	}
 	if j.IsOwn {
 		total := j.Total
@@ -298,7 +303,7 @@ func (j appointmentJoin) dto() appointmentDTO {
 func fromRangeRow(r sqlc.ListAppointmentsInRangeRow) appointmentDTO {
 	return appointmentJoin{
 		ID: r.ID, PatientID: r.PatientID, DoctorID: r.DoctorID,
-		StartTime: r.StartTime, EndTime: r.EndTime, Status: r.Status,
+		StartTime: r.StartTime, EndTime: r.EndTime, Status: r.Status, Source: r.Source,
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
@@ -309,7 +314,7 @@ func fromRangeRow(r sqlc.ListAppointmentsInRangeRow) appointmentDTO {
 func fromPatientRow(r sqlc.ListAppointmentsByPatientRow) appointmentDTO {
 	return appointmentJoin{
 		ID: r.ID, PatientID: r.PatientID, DoctorID: r.DoctorID,
-		StartTime: r.StartTime, EndTime: r.EndTime, Status: r.Status,
+		StartTime: r.StartTime, EndTime: r.EndTime, Status: r.Status, Source: r.Source,
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
@@ -321,7 +326,7 @@ func fromPatientRow(r sqlc.ListAppointmentsByPatientRow) appointmentDTO {
 func fromStatusRow(r sqlc.ListAppointmentsByStatusRow) appointmentDTO {
 	return appointmentJoin{
 		ID: r.ID, PatientID: r.PatientID, DoctorID: r.DoctorID,
-		StartTime: r.StartTime, EndTime: r.EndTime, Status: r.Status,
+		StartTime: r.StartTime, EndTime: r.EndTime, Status: r.Status, Source: r.Source,
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,
@@ -332,7 +337,7 @@ func fromStatusRow(r sqlc.ListAppointmentsByStatusRow) appointmentDTO {
 func fromGetRow(r sqlc.GetAppointmentRow) appointmentDTO {
 	return appointmentJoin{
 		ID: r.ID, PatientID: r.PatientID, DoctorID: r.DoctorID,
-		StartTime: r.StartTime, EndTime: r.EndTime, Status: r.Status,
+		StartTime: r.StartTime, EndTime: r.EndTime, Status: r.Status, Source: r.Source,
 		Diagnosis: r.Diagnosis, Description: r.Description, NextVisitDate: r.NextVisitDate,
 		PatientName: r.PatientName, PatientPhone: r.PatientPhone,
 		DoctorName: r.DoctorName, DoctorColor: r.DoctorColor,

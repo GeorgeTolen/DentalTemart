@@ -9,9 +9,13 @@ import type {
   AdminStats,
   Appointment,
   AppointmentServices,
+  BookingRequests,
   Clinic,
+  ClinicSettings,
   ClinicUser,
   Dashboard,
+  TelegramStatus,
+  WhatsAppStatus,
   Doctor,
   EventsPage,
   Patient,
@@ -333,6 +337,135 @@ export function useDeleteAppointment() {
   });
 }
 
+// --- Заявки с онлайн-записи ---
+
+// Опрашиваем каждые 30 секунд: заявки приходят без участия персонала, и
+// бейдж в меню должен обновляться сам.
+export function useBookingRequests(enabled = true, sort: SortOrder = "old") {
+  return useQuery({
+    queryKey: ["appointments", "requests", sort],
+    enabled,
+    refetchInterval: 30000,
+    queryFn: async () =>
+      (await api.get<BookingRequests>("/appointments/requests", { params: { sort } })).data,
+  });
+}
+
+function invalidateRequests(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["appointments"] });
+  qc.invalidateQueries({ queryKey: ["dashboard"] });
+  qc.invalidateQueries({ queryKey: ["patient-appointments"] });
+}
+
+export function useApproveRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) =>
+      (await api.post<Appointment>(`/appointments/${id}/approve`)).data,
+    onSuccess: () => invalidateRequests(qc),
+  });
+}
+
+export function useRejectRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { id: number; reason?: string }) =>
+      (
+        await api.post<Appointment>(`/appointments/${args.id}/reject`, {
+          reason: args.reason ?? "",
+        })
+      ).data,
+    onSuccess: () => invalidateRequests(qc),
+  });
+}
+
+export function useRescheduleRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      id: number;
+      doctor_id: number;
+      start_time: string;
+      end_time: string;
+    }) => {
+      const { id, ...body } = args;
+      return (await api.post<Appointment>(`/appointments/${id}/reschedule`, body)).data;
+    },
+    onSuccess: () => invalidateRequests(qc),
+  });
+}
+
+// --- Настройки своей клиники и интеграции ---
+
+export function useClinicSettings() {
+  return useQuery({
+    queryKey: ["clinic-settings"],
+    queryFn: async () => (await api.get<ClinicSettings>("/clinic")).data,
+  });
+}
+
+export function useSaveClinicSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      map_url: string;
+      online_booking: boolean;
+      greenapi_instance?: string;
+      greenapi_token?: string;
+    }) => (await api.put<ClinicSettings>("/clinic", body)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clinic-settings"] });
+      qc.invalidateQueries({ queryKey: ["whatsapp-status"] });
+    },
+  });
+}
+
+// Пока номер не подключён, опрашиваем чаще: QR протухает, а после сканирования
+// статус должен смениться сам.
+export function useWhatsAppStatus(enabled = true, fast = false) {
+  return useQuery({
+    queryKey: ["whatsapp-status"],
+    enabled,
+    refetchInterval: fast ? 4000 : 30000,
+    queryFn: async () => (await api.get<WhatsAppStatus>("/integrations/whatsapp")).data,
+  });
+}
+
+export function useWhatsAppStart() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      (await api.post<WhatsAppStatus>("/integrations/whatsapp/start")).data,
+    onSuccess: (data) => qc.setQueryData(["whatsapp-status"], data),
+  });
+}
+
+export function useWhatsAppLogout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => api.post("/integrations/whatsapp/logout"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["whatsapp-status"] }),
+  });
+}
+
+export function useTelegramStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["telegram-status"],
+    enabled,
+    queryFn: async () => (await api.get<TelegramStatus>("/integrations/telegram")).data,
+  });
+}
+
+// Статус WhatsApp клиники глазами платформы (без QR).
+export function usePlatformClinicWhatsApp(clinicId: number | null) {
+  return useQuery({
+    queryKey: ["platform-clinic-whatsapp", clinicId],
+    enabled: clinicId != null,
+    queryFn: async () =>
+      (await api.get<WhatsAppStatus>(`/platform/clinics/${clinicId}/whatsapp`)).data,
+  });
+}
+
 // --- Услуги: прайс клиники ---
 
 export function useServices() {
@@ -588,6 +721,8 @@ export interface ClinicPayload {
   address: string;
   phone: string;
   is_active: boolean;
+  map_url?: string;
+  online_booking?: boolean;
   // Only on create: пробный период в днях (0 - бессрочный доступ).
   trial_days?: number;
   // Only used on create: the clinic's first owner account.

@@ -13,11 +13,17 @@ import (
 	"syscall"
 	"time"
 
+	// Образ alpine без tzdata: часовой пояс клиник (Asia/Almaty) берём из
+	// встроенной базы Go.
+	_ "time/tzdata"
+
 	"temart/internal/auth"
 	"temart/internal/config"
 	"temart/internal/db"
 	"temart/internal/db/sqlc"
 	"temart/internal/handlers"
+	"temart/internal/notify"
+	"temart/internal/notify/telegram"
 )
 
 func main() {
@@ -36,7 +42,8 @@ func run() error {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	if err := db.RunMigrations(cfg.DatabaseURL); err != nil {
 		return err
@@ -54,8 +61,36 @@ func run() error {
 		return err
 	}
 
+	// Уведомления клиентам: провайдер WhatsApp, Telegram-бот и воркер очереди.
+	messenger, err := notify.NewFromConfig(cfg, q)
+	if err != nil {
+		return err
+	}
+	slog.Info("messenger", "provider", cfg.MessengerProvider)
+
+	var bot *telegram.Bot
+	if cfg.TelegramBotToken != "" {
+		bot = telegram.New(cfg.TelegramBotToken)
+	}
+
 	tokens := auth.NewManager(cfg.JWTSecret, cfg.AccessTTL, cfg.RefreshTTL)
-	h := handlers.New(pool, tokens, cfg)
+	h := handlers.New(pool, tokens, cfg, handlers.Deps{
+		Messenger: messenger,
+		Enqueuer:  notify.NewEnqueuer(cfg.PublicBaseURL),
+		Telegram:  bot,
+	})
+
+	var tgSender notify.TelegramSender
+	if bot != nil {
+		bot.OnStart = h.TelegramStart
+		if err := bot.Start(ctx); err != nil {
+			// Бот не должен блокировать запуск CRM: без него просто нет канала.
+			slog.Error("telegram bot failed to start", "err", err)
+		} else {
+			tgSender = bot
+		}
+	}
+	go notify.NewWorker(q, messenger, tgSender).Run(ctx)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -69,8 +104,9 @@ func run() error {
 		signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 		<-stop
 		slog.Info("shutting down")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		cancel()
+		shutdownCtx, scancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer scancel()
 		_ = srv.Shutdown(shutdownCtx)
 	}()
 

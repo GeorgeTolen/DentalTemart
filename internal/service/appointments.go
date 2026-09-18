@@ -16,8 +16,16 @@ import (
 	"temart/internal/httpx"
 )
 
-// StatusCancelled is excluded from overlap checks.
-const StatusCancelled = "cancelled"
+// Статусы записи, на которые опирается логика.
+const (
+	// StatusCancelled is excluded from overlap checks.
+	StatusCancelled = "cancelled"
+	// StatusPending — заявка с онлайн-записи, ждёт подтверждения клиники.
+	// Слот при этом уже занят, чтобы двое не записались на одно время.
+	StatusPending = "pending"
+	// StatusScheduled — подтверждённая запись.
+	StatusScheduled = "scheduled"
+)
 
 // AppointmentService implements appointment business rules over the DB queries.
 type AppointmentService struct {
@@ -45,12 +53,13 @@ type AppointmentInput struct {
 
 // ensureNoOverlap returns a 409 error if the doctor already has an appointment
 // overlapping [start, end). excludeID skips a specific appointment (used on
-// update). Cancelled appointments never conflict.
-func (s *AppointmentService) ensureNoOverlap(ctx context.Context, in AppointmentInput, excludeID int64) error {
+// update). Cancelled appointments never conflict. q может быть привязан к
+// транзакции — тогда проверка идёт внутри неё.
+func ensureNoOverlap(ctx context.Context, q *sqlc.Queries, in AppointmentInput, excludeID int64) error {
 	if in.Status == StatusCancelled {
 		return nil
 	}
-	count, err := s.q.CountOverlappingAppointments(ctx, sqlc.CountOverlappingAppointmentsParams{
+	count, err := q.CountOverlappingAppointments(ctx, sqlc.CountOverlappingAppointmentsParams{
 		ClinicID:  in.ClinicID,
 		DoctorID:  in.DoctorID,
 		ExcludeID: excludeID,
@@ -71,14 +80,14 @@ func (s *AppointmentService) ensureNoOverlap(ctx context.Context, in Appointment
 // clinic's doctor to an appointment and read their data back. The patient only
 // has to exist: карточки пациентов общие для платформы, и записать к себе
 // пациента, заведённого другой клиникой, — это штатный сценарий.
-func (s *AppointmentService) ensureRefsInClinic(ctx context.Context, in AppointmentInput) error {
-	if _, err := s.q.GetPatient(ctx, in.PatientID); err != nil {
+func ensureRefsInClinic(ctx context.Context, q *sqlc.Queries, in AppointmentInput) error {
+	if _, err := q.GetPatient(ctx, in.PatientID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return httpx.NewError(http.StatusBadRequest, "пациент не найден")
 		}
 		return err
 	}
-	if _, err := s.q.GetDoctor(ctx, sqlc.GetDoctorParams{ID: in.DoctorID, ClinicID: in.ClinicID}); err != nil {
+	if _, err := q.GetDoctor(ctx, sqlc.GetDoctorParams{ID: in.DoctorID, ClinicID: in.ClinicID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return httpx.NewError(http.StatusBadRequest, "врач не найден в вашей клинике")
 		}
@@ -92,10 +101,10 @@ func (s *AppointmentService) Create(ctx context.Context, in AppointmentInput, cr
 	if !in.EndTime.After(in.StartTime) {
 		return sqlc.Appointment{}, httpx.NewError(http.StatusBadRequest, "время окончания должно быть позже начала")
 	}
-	if err := s.ensureRefsInClinic(ctx, in); err != nil {
+	if err := ensureRefsInClinic(ctx, s.q, in); err != nil {
 		return sqlc.Appointment{}, err
 	}
-	if err := s.ensureNoOverlap(ctx, in, 0); err != nil {
+	if err := ensureNoOverlap(ctx, s.q, in, 0); err != nil {
 		return sqlc.Appointment{}, err
 	}
 	return s.q.CreateAppointment(ctx, sqlc.CreateAppointmentParams{
@@ -112,15 +121,40 @@ func (s *AppointmentService) Create(ctx context.Context, in AppointmentInput, cr
 	})
 }
 
+// CreateOnline inserts a pending online booking request. q должен быть
+// привязан к транзакции вызывающего: проверка пересечений и вставка идут под
+// advisory-замком врача, взятым в той же транзакции.
+func (s *AppointmentService) CreateOnline(ctx context.Context, q *sqlc.Queries, in AppointmentInput, notifyPhone, publicToken string) (sqlc.Appointment, error) {
+	if !in.EndTime.After(in.StartTime) {
+		return sqlc.Appointment{}, httpx.NewError(http.StatusBadRequest, "время окончания должно быть позже начала")
+	}
+	in.Status = StatusPending
+	if err := ensureRefsInClinic(ctx, q, in); err != nil {
+		return sqlc.Appointment{}, err
+	}
+	if err := ensureNoOverlap(ctx, q, in, 0); err != nil {
+		return sqlc.Appointment{}, httpx.NewError(http.StatusConflict, "это время уже занято, выберите другое")
+	}
+	return q.CreateOnlineAppointment(ctx, sqlc.CreateOnlineAppointmentParams{
+		ClinicID:    in.ClinicID,
+		PatientID:   in.PatientID,
+		DoctorID:    in.DoctorID,
+		StartTime:   in.StartTime,
+		EndTime:     in.EndTime,
+		NotifyPhone: text(notifyPhone),
+		PublicToken: text(publicToken),
+	})
+}
+
 // Update validates and updates an existing appointment.
 func (s *AppointmentService) Update(ctx context.Context, id int64, in AppointmentInput) (sqlc.Appointment, error) {
 	if !in.EndTime.After(in.StartTime) {
 		return sqlc.Appointment{}, httpx.NewError(http.StatusBadRequest, "время окончания должно быть позже начала")
 	}
-	if err := s.ensureRefsInClinic(ctx, in); err != nil {
+	if err := ensureRefsInClinic(ctx, s.q, in); err != nil {
 		return sqlc.Appointment{}, err
 	}
-	if err := s.ensureNoOverlap(ctx, in, id); err != nil {
+	if err := ensureNoOverlap(ctx, s.q, in, id); err != nil {
 		return sqlc.Appointment{}, err
 	}
 	return s.q.UpdateAppointment(ctx, sqlc.UpdateAppointmentParams{

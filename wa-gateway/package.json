@@ -1,0 +1,19 @@
+{
+  "name": "temart-wa-gateway",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Мини-шлюз WhatsApp для Temart: одна сессия на клинику, привязка по QR, отправка текста по HTTP.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "express": "^4.21.2",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4"
+  }
+}

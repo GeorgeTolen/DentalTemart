@@ -30,6 +30,9 @@ type clinicDTO struct {
 	// Срок доступа: nil — бессрочный. Frozen — срок истёк, клиника заморожена.
 	AccessExpiresAt *string `json:"access_expires_at"`
 	Frozen          bool    `json:"frozen"`
+	// Онлайн-запись: ссылка 2GIS для сообщений клиентам и выключатель.
+	MapURL        string `json:"map_url"`
+	OnlineBooking bool   `json:"online_booking"`
 }
 
 // clinicFrozen reports whether the access period has ended.
@@ -56,6 +59,8 @@ func toClinicDTO(c sqlc.Clinic) clinicDTO {
 		IsActive:        c.IsActive,
 		AccessExpiresAt: expires,
 		Frozen:          frozen,
+		MapURL:          textVal(c.MapUrl),
+		OnlineBooking:   c.OnlineBooking,
 	}
 }
 
@@ -85,6 +90,8 @@ func (h *Handlers) ListClinics(w http.ResponseWriter, r *http.Request) {
 			DoctorCount:     c.DoctorCount,
 			AccessExpiresAt: expires,
 			Frozen:          frozen,
+			MapURL:          textVal(c.MapUrl),
+			OnlineBooking:   c.OnlineBooking,
 		})
 	}
 	httpx.JSON(w, http.StatusOK, out)
@@ -222,6 +229,9 @@ type updateClinicRequest struct {
 	Address  string `json:"address"`
 	Phone    string `json:"phone"`
 	IsActive *bool  `json:"is_active"`
+	// Онлайн-запись: nil — оставить как есть.
+	MapURL        string `json:"map_url"`
+	OnlineBooking *bool  `json:"online_booking"`
 }
 
 func (req updateClinicRequest) active() bool {
@@ -257,13 +267,29 @@ func (h *Handlers) UpdateClinic(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, httpx.NewError(http.StatusBadRequest, "укажите идентификатор клиники латиницей (slug)"))
 		return
 	}
+	current, err := h.q.GetClinic(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.Fail(w, httpx.NewError(http.StatusNotFound, "клиника не найдена"))
+			return
+		}
+		httpx.Fail(w, err)
+		return
+	}
+	online := current.OnlineBooking
+	if req.OnlineBooking != nil {
+		online = *req.OnlineBooking
+	}
+	mapURL := strings.TrimSpace(req.MapURL)
 	clinic, err := h.q.UpdateClinic(r.Context(), sqlc.UpdateClinicParams{
-		ID:       id,
-		Name:     req.Name,
-		Slug:     slug,
-		Address:  pgtype.Text{String: req.Address, Valid: req.Address != ""},
-		Phone:    pgtype.Text{String: req.Phone, Valid: req.Phone != ""},
-		IsActive: req.active(),
+		ID:            id,
+		Name:          req.Name,
+		Slug:          slug,
+		Address:       pgtype.Text{String: req.Address, Valid: req.Address != ""},
+		Phone:         pgtype.Text{String: req.Phone, Valid: req.Phone != ""},
+		IsActive:      req.active(),
+		MapUrl:        pgtype.Text{String: mapURL, Valid: mapURL != ""},
+		OnlineBooking: online,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

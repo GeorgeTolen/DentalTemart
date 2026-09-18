@@ -1,5 +1,6 @@
-# Продакшен-стек Temart: PostgreSQL + backend (SPA внутри образа) + Caddy (HTTPS).
-# Разворачивается на VPS. Образ backend собирается в GitHub Actions и тянется с GHCR.
+# Продакшен-стек Temart: PostgreSQL + backend (SPA внутри образа) + wa-gateway
+# (WhatsApp-шлюз для онлайн-записи) + Caddy (HTTPS).
+# Разворачивается на VPS. Образы собираются в GitHub Actions и тянутся с GHCR.
 #
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d
 name: temart
@@ -20,12 +21,26 @@ services:
       timeout: 3s
       retries: 10
 
+  # Свой мини-шлюз WhatsApp: одна сессия на клинику, привязка по QR из CRM.
+  # Наружу не публикуется - только backend по внутренней сети.
+  wa-gateway:
+    image: ${WA_IMAGE:-ghcr.io/georgetolen/dentaltemart/wa-gateway:latest}
+    restart: unless-stopped
+    environment:
+      GATEWAY_TOKEN: ${WA_GATEWAY_TOKEN}
+    volumes:
+      - wa_auth:/data/auth
+    expose:
+      - "3001"
+
   backend:
     image: ${IMAGE:-ghcr.io/georgetolen/dentaltemart:latest}
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      wa-gateway:
+        condition: service_started
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       PORT: "8080"
@@ -34,11 +49,18 @@ services:
       REFRESH_TTL: 8760h
       # Сервер за HTTPS (Caddy) — куки помечаются Secure.
       COOKIE_SECURE: "true"
-      CORS_ORIGIN: https://temart.kz
+      CORS_ORIGIN: ${PUBLIC_BASE_URL:-https://temart.kz}
       SUPERADMIN_NAME: ${SUPERADMIN_NAME}
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
       WEB_DIR: /app/web
+      # Онлайн-запись: адрес сайта для ссылок в сообщениях и провайдер WhatsApp.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://temart.kz}
+      MESSENGER_PROVIDER: ${MESSENGER_PROVIDER:-baileys}
+      WA_GATEWAY_URL: http://wa-gateway:3001
+      WA_GATEWAY_TOKEN: ${WA_GATEWAY_TOKEN}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      BOOKING_DEBUG_CODE: "false"
     volumes:
       - uploads:/app/uploads
     expose:
@@ -60,5 +82,6 @@ services:
 volumes:
   pgdata:
   uploads:
+  wa_auth:
   caddy_data:
   caddy_config:

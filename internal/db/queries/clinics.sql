@@ -19,7 +19,20 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: UpdateClinic :one
-UPDATE clinics SET name = $2, slug = $3, address = $4, phone = $5, is_active = $6
+UPDATE clinics
+SET name = $2, slug = $3, address = $4, phone = $5, is_active = $6,
+    map_url = $7, online_booking = $8
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateClinicBookingSettings :one
+-- Настройки онлайн-записи, которые правит сам владелец клиники.
+UPDATE clinics SET map_url = $2, online_booking = $3
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateClinicGreenAPI :one
+UPDATE clinics SET greenapi_instance = $2, greenapi_token = $3
 WHERE id = $1
 RETURNING *;
 

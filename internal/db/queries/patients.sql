@@ -45,6 +45,13 @@ SELECT p.*, c.name AS clinic_name FROM patients p
 LEFT JOIN clinics c ON c.id = p.clinic_id
 WHERE p.iin = $1;
 
+-- name: GetPatientByPhone :one
+-- Онлайн-запись: клиент с тем же номером в этой клинике — та же карточка.
+SELECT * FROM patients
+WHERE clinic_id = $1 AND phone = $2
+ORDER BY id
+LIMIT 1;
+
 -- name: CreatePatient :one
 INSERT INTO patients (clinic_id, full_name, phone, birth_date, notes, iin, gender)
 VALUES ($1, $2, $3, $4, $5, $6, $7)

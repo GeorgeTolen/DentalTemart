@@ -66,11 +66,27 @@ else
 	log "том с файлами не найден — пропускаю (копия базы всё равно сделана)"
 fi
 
+# --- 2б. Сессии WhatsApp --------------------------------------------------------
+# Креды привязанных номеров клиник: без них после восстановления каждой клинике
+# пришлось бы сканировать QR заново.
+WA_VOL=$(docker volume ls -q | grep -E '(^|_)wa_auth$' | head -1 || true)
+if [ -n "$WA_VOL" ]; then
+	docker run --rm \
+		-v "$WA_VOL":/data:ro \
+		-v "$BACKUP_DIR":/backup \
+		alpine:3.20 \
+		tar czf "/backup/.wa-$STAMP.part" -C /data . \
+		&& mv "$BACKUP_DIR/.wa-$STAMP.part" "$BACKUP_DIR/wa-$STAMP.tgz" \
+		&& log "whatsapp: wa-$STAMP.tgz ($(du -h "$BACKUP_DIR/wa-$STAMP.tgz" | cut -f1))" \
+		|| log "не удалось упаковать сессии WhatsApp — пропускаю"
+fi
+
 # --- 3. Ротация --------------------------------------------------------------
 # Только после успешной записи новой копии: иначе неудачный запуск подчистил бы
 # историю, не оставив ничего взамен.
 find "$BACKUP_DIR" -maxdepth 1 -name 'db-*.dump' -mtime "+$KEEP_DAYS" -delete
 find "$BACKUP_DIR" -maxdepth 1 -name 'uploads-*.tgz' -mtime "+$KEEP_DAYS" -delete
+find "$BACKUP_DIR" -maxdepth 1 -name 'wa-*.tgz' -mtime "+$KEEP_DAYS" -delete
 find "$BACKUP_DIR" -maxdepth 1 -name '.*.part' -mtime +1 -delete
 
 log "готово; храним $KEEP_DAYS дней, сейчас копий: $(find "$BACKUP_DIR" -maxdepth 1 -name 'db-*.dump' | wc -l), занято $(du -sh "$BACKUP_DIR" | cut -f1)"

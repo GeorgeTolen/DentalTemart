@@ -312,6 +312,7 @@ function HistoryCard({ appointment: a }: { appointment: Appointment; index: numb
   const date = new Date(a.start_time);
 
   const dotColor: Record<AppointmentStatus, string> = {
+    pending: "bg-amber-400",
     completed: "bg-green-500",
     scheduled: "bg-brand",
     cancelled: "bg-slate-400",

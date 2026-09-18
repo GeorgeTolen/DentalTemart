@@ -42,7 +42,17 @@ const (
 	eventUserCreate        = "user.create"
 	eventUserUpdate        = "user.update"
 	eventUserDelete        = "user.delete"
+	// Онлайн-запись: заявка клиента и что с ней сделала клиника.
+	eventBookingRequest    = "booking.request"
+	eventBookingApprove    = "booking.approve"
+	eventBookingReschedule = "booking.reschedule"
+	eventBookingReject     = "booking.reject"
+	eventClinicSettings    = "clinic.settings"
 )
+
+// onlineActor — имя «автора» в журнале для действий клиента с публичной
+// страницы, у которых нет пользователя CRM.
+const onlineActor = "Онлайн-запись"
 
 // eventsPageSize is how many entries one "показать ещё" adds.
 const eventsPageSize = 50
@@ -59,10 +69,15 @@ func (h *Handlers) logEvent(ctx context.Context, clinicID int64, action, message
 			name = u.FullName
 		}
 	}
+	h.logEventAs(ctx, clinicID, userID, name, action, message)
+}
+
+// logEventAs пишет событие от имени явно названного автора. userID = 0 —
+// действие без пользователя CRM (клиент с публичной страницы).
+func (h *Handlers) logEventAs(ctx context.Context, clinicID, userID int64, name, action, message string) {
 	if name == "" {
 		name = "-"
 	}
-
 	if err := h.q.CreateEvent(ctx, sqlc.CreateEventParams{
 		ClinicID: clinicID,
 		UserID:   pgtype.Int8{Int64: userID, Valid: userID > 0},

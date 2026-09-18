@@ -17,6 +17,18 @@ services:
       timeout: 3s
       retries: 10
 
+  # Свой мини-шлюз WhatsApp (Baileys): одна сессия на клинику, привязка по QR.
+  # Порт опубликован только на localhost - для `make run` вне Docker.
+  wa-gateway:
+    build: ./wa-gateway
+    environment:
+      GATEWAY_TOKEN: ${WA_GATEWAY_TOKEN:-dev-gateway-token}
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - wa_auth:/data/auth
+    restart: unless-stopped
+
   backend:
     build: .
     depends_on:
@@ -34,6 +46,13 @@ services:
       SUPERADMIN_NAME: ${SUPERADMIN_NAME:-Администратор платформы}
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@temart.local}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-changeme123}
+      # Онлайн-запись и уведомления клиентам.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      MESSENGER_PROVIDER: ${MESSENGER_PROVIDER:-noop}
+      WA_GATEWAY_URL: http://wa-gateway:3001
+      WA_GATEWAY_TOKEN: ${WA_GATEWAY_TOKEN:-dev-gateway-token}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      BOOKING_DEBUG_CODE: ${BOOKING_DEBUG_CODE:-true}
     ports:
       - "8080:8080"
     volumes:
@@ -42,3 +61,4 @@ services:
 volumes:
   pgdata:
   uploads:
+  wa_auth:

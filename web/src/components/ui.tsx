@@ -108,12 +108,14 @@ export function Modal({
 export function StatusBadge({ status }: { status: string }) {
   const { t } = useT();
   const map: Record<string, string> = {
+    pending: "bg-amber-100 text-amber-700",
     scheduled: "bg-brand-light text-brand-dark",
     completed: "bg-green-100 text-green-700",
     cancelled: "bg-slate-200 text-slate-600",
     no_show: "bg-orange-100 text-orange-700",
   };
   const labels: Record<string, string> = {
+    pending: "Заявка",
     scheduled: "Запланирован",
     completed: "Завершён",
     cancelled: "Отменён",

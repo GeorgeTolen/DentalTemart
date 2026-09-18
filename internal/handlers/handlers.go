@@ -9,12 +9,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"temart/internal/auth"
+	"temart/internal/booking"
 	"temart/internal/config"
 	"temart/internal/db/sqlc"
 	"temart/internal/httpx"
 	"temart/internal/middleware"
+	"temart/internal/notify"
+	"temart/internal/notify/telegram"
+	"temart/internal/ratelimit"
 	"temart/internal/service"
 )
+
+// Deps — внешние зависимости хендлеров, которые собирает main: провайдер
+// WhatsApp, очередь уведомлений и (необязательно) Telegram-бот.
+type Deps struct {
+	Messenger notify.Messenger
+	Enqueuer  *notify.Enqueuer
+	// Telegram может быть nil — тогда канал выключен.
+	Telegram *telegram.Bot
+}
 
 // Handlers bundles all dependencies shared across HTTP handlers.
 type Handlers struct {
@@ -24,18 +37,42 @@ type Handlers struct {
 	appts    *service.AppointmentService
 	validate *validator.Validate
 	cfg      *config.Config
+
+	messenger notify.Messenger
+	// sessions — тот же провайдер, если он умеет привязывать номера по QR.
+	sessions notify.SessionManager
+	enq      *notify.Enqueuer
+	tg       *telegram.Bot
+	booking  *booking.Service
+	verifier *booking.Verifier
+	limiter  *ratelimit.Limiter
 }
 
 // New builds the Handlers value.
-func New(pool *pgxpool.Pool, tokens *auth.Manager, cfg *config.Config) *Handlers {
+func New(pool *pgxpool.Pool, tokens *auth.Manager, cfg *config.Config, deps Deps) *Handlers {
 	q := sqlc.New(pool)
+	appts := service.NewAppointmentService(q)
+	if deps.Messenger == nil {
+		deps.Messenger = notify.Noop{}
+	}
+	if deps.Enqueuer == nil {
+		deps.Enqueuer = notify.NewEnqueuer(cfg.PublicBaseURL)
+	}
+	sessions, _ := deps.Messenger.(notify.SessionManager)
 	return &Handlers{
-		pool:     pool,
-		q:        q,
-		tokens:   tokens,
-		appts:    service.NewAppointmentService(q),
-		validate: validator.New(validator.WithRequiredStructEnabled()),
-		cfg:      cfg,
+		pool:      pool,
+		q:         q,
+		tokens:    tokens,
+		appts:     appts,
+		validate:  validator.New(validator.WithRequiredStructEnabled()),
+		cfg:       cfg,
+		messenger: deps.Messenger,
+		sessions:  sessions,
+		enq:       deps.Enqueuer,
+		tg:        deps.Telegram,
+		booking:   booking.New(pool, q, appts, deps.Enqueuer),
+		verifier:  booking.NewVerifier(),
+		limiter:   ratelimit.New(),
 	}
 }
 

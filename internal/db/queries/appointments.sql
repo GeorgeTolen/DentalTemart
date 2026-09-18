@@ -79,6 +79,51 @@ INSERT INTO appointments (
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
+-- name: CreateOnlineAppointment :one
+-- Заявка с публичной страницы записи: статус pending, автора-пользователя нет.
+INSERT INTO appointments (
+    clinic_id, patient_id, doctor_id, start_time, end_time, status,
+    source, notify_phone, public_token
+) VALUES ($1, $2, $3, $4, $5, 'pending', 'online', $6, $7)
+RETURNING *;
+
+-- name: SetAppointmentStatus :one
+UPDATE appointments
+SET status = $2, updated_at = now()
+WHERE id = $1 AND clinic_id = $3
+RETURNING *;
+
+-- name: GetAppointmentByPublicToken :one
+-- Статусная страница клиента: по секретному токену, без авторизации.
+SELECT
+    a.*,
+    p.full_name AS patient_name,
+    d.full_name AS doctor_name,
+    c.name      AS clinic_name,
+    c.slug      AS clinic_slug,
+    c.address   AS clinic_address,
+    c.phone     AS clinic_phone,
+    c.map_url   AS clinic_map_url
+FROM appointments a
+JOIN patients p ON p.id = a.patient_id
+JOIN doctors  d ON d.id = a.doctor_id
+JOIN clinics  c ON c.id = a.clinic_id
+WHERE a.public_token = $1;
+
+-- name: BindTelegramChat :one
+UPDATE appointments
+SET notify_telegram_chat_id = $2, updated_at = now()
+WHERE public_token = $1
+RETURNING *;
+
+-- name: CountPendingAppointments :one
+SELECT count(*) FROM appointments WHERE clinic_id = $1 AND status = 'pending';
+
+-- name: LockDoctorForBooking :exec
+-- Сериализует параллельные онлайн-заявки к одному врачу внутри транзакции:
+-- проверка пересечений и вставка идут под этим замком.
+SELECT pg_advisory_xact_lock(sqlc.arg('doctor_id')::bigint);
+
 -- name: UpdateAppointment :one
 UPDATE appointments
 SET patient_id = $2,

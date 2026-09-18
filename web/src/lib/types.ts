@@ -38,6 +38,9 @@ export interface Clinic {
   // Срок доступа: null - бессрочный (оплачено); frozen - срок истёк.
   access_expires_at: string | null;
   frozen: boolean;
+  // Онлайн-запись: ссылка 2GIS и выключатель.
+  map_url: string;
+  online_booking: boolean;
 }
 
 // Администратор платформы (учётка уровня платформы, вне клиник).
@@ -197,11 +200,16 @@ export interface RevenueStats {
   by_doctor: { name: string; revenue: number; services_count: number }[];
 }
 
+// pending - заявка с онлайн-записи: слот занят, ждёт подтверждения клиники.
 export type AppointmentStatus =
+  | "pending"
   | "scheduled"
   | "completed"
   | "cancelled"
   | "no_show";
+
+// Откуда запись: создана персоналом или клиентом со страницы записи.
+export type AppointmentSource = "crm" | "online";
 
 export interface Appointment {
   id: number;
@@ -225,6 +233,97 @@ export interface Appointment {
   rating: number | null;
   clinic_name: string;
   is_own: boolean;
+  source: AppointmentSource;
+}
+
+export interface BookingRequests {
+  items: Appointment[];
+  count: number;
+}
+
+// Настройки своей клиники: ссылка на онлайн-запись, 2GIS, выключатель.
+export interface ClinicSettings {
+  name: string;
+  slug: string;
+  address: string;
+  phone: string;
+  map_url: string;
+  online_booking: boolean;
+  booking_url: string;
+  greenapi_instance: string;
+  has_greenapi_token: boolean;
+  messenger_provider: "noop" | "baileys" | "greenapi";
+}
+
+// Состояние WhatsApp-сессии клиники (наш шлюз или Green API).
+export interface WhatsAppStatus {
+  provider: string;
+  connected: boolean;
+  qr?: string;
+  me?: string;
+  error?: string;
+}
+
+export interface TelegramStatus {
+  enabled: boolean;
+  bot_username: string;
+}
+
+// --- Публичная страница записи (без авторизации) ---
+
+export interface PublicDoctor {
+  id: number;
+  full_name: string;
+  specialization: string;
+  avatar_url: string | null;
+}
+
+export interface PublicClinic {
+  name: string;
+  slug: string;
+  address: string;
+  phone: string;
+  map_url: string;
+  doctors: PublicDoctor[];
+  workday_start: number;
+  workday_end: number;
+  slot_minutes: number;
+  horizon_days: number;
+  whatsapp_connected: boolean;
+  telegram_bot: string;
+}
+
+export interface PublicSlot {
+  start: string;
+  end: string;
+  doctor_ids: number[];
+}
+
+export interface PublicSlots {
+  date: string;
+  slots: PublicSlot[];
+}
+
+export interface BookingResult {
+  id: number;
+  public_token: string;
+  status: AppointmentStatus;
+  start_time: string;
+  end_time: string;
+  doctor_name: string;
+  status_url: string;
+  telegram_link: string;
+}
+
+export interface BookingStatus {
+  status: AppointmentStatus;
+  start_time: string;
+  end_time: string;
+  doctor_name: string;
+  patient_name: string;
+  telegram_linked: boolean;
+  telegram_link: string;
+  clinic: { name: string; address: string; phone: string; map_url: string };
 }
 
 export interface ScheduleEntry {
@@ -240,6 +339,7 @@ export interface Dashboard {
 }
 
 export const STATUS_LABELS: Record<AppointmentStatus, string> = {
+  pending: "Заявка",
   scheduled: "Запланирован",
   completed: "Завершён",
   cancelled: "Отменён",

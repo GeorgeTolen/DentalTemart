@@ -20,6 +20,9 @@ func (h *Handlers) Router() http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(chimw.Recoverer)
+	// За Caddy реальный адрес клиента приходит в X-Forwarded-For; он нужен
+	// лимитам публичной страницы записи.
+	r.Use(chimw.RealIP)
 	r.Use(mw.Logger)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   h.cfg.CORSOrigins,
@@ -41,6 +44,17 @@ func (h *Handlers) Router() http.Handler {
 		r.Post("/auth/logout", h.Logout)
 		r.Post("/auth/refresh", h.Refresh)
 
+		// Онлайн-запись клиентов: без авторизации, клиника — по slug из ссылки,
+		// которой она делится сама. Защищено лимитами и кодом в WhatsApp.
+		r.Route("/public/clinics/{slug}", func(r chi.Router) {
+			r.Get("/", h.PublicClinic)
+			r.Get("/slots", h.PublicSlots)
+			r.Post("/verify", h.PublicVerify)
+			r.Post("/book", h.PublicBook)
+			r.Get("/bookings/{token}", h.PublicBookingStatus)
+			r.Get("/doctors/{id}/avatar", h.PublicDoctorAvatar)
+		})
+
 		// Everything below requires a valid access cookie.
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Authenticator(h.tokens))
@@ -58,6 +72,7 @@ func (h *Handlers) Router() http.Handler {
 				r.Delete("/clinics/{id}", h.DeleteClinic)
 				r.Post("/clinics/{id}/owner", h.AddClinicOwner)
 				r.Post("/clinics/{id}/access", h.SetClinicAccess)
+				r.Get("/clinics/{id}/whatsapp", h.PlatformClinicWhatsApp)
 
 				// Staff accounts of a clinic, as seen from the platform.
 				r.Get("/clinics/{id}/users", h.ListClinicUsers)
@@ -86,6 +101,11 @@ func (h *Handlers) Router() http.Handler {
 					r.Get("/archive", h.CountArchivedAppointments)
 					r.Delete("/archive", h.DeleteArchivedAppointments)
 					r.Get("/archive/list", h.ListArchivedAppointments)
+					// Заявки с онлайн-записи (владелец и менеджер).
+					r.Get("/requests", h.ListBookingRequests)
+					r.Post("/{id}/approve", h.ApproveBookingRequest)
+					r.Post("/{id}/reschedule", h.RescheduleBookingRequest)
+					r.Post("/{id}/reject", h.RejectBookingRequest)
 					r.Get("/{id}", h.GetAppointment)
 					r.Put("/{id}", h.UpdateAppointment)
 					r.Delete("/{id}", h.DeleteAppointment)
@@ -139,6 +159,16 @@ func (h *Handlers) Router() http.Handler {
 				r.Get("/dashboard", h.Dashboard)
 				r.Get("/admin/stats", h.AdminStats)
 				r.Get("/events", h.ListEvents)
+
+				// Настройки своей клиники и интеграции (онлайн-запись, WhatsApp).
+				r.Get("/clinic", h.GetClinicSettings)
+				r.Put("/clinic", h.UpdateClinicSettings)
+				r.Route("/integrations", func(r chi.Router) {
+					r.Get("/whatsapp", h.WhatsAppStatus)
+					r.Post("/whatsapp/start", h.WhatsAppStart)
+					r.Post("/whatsapp/logout", h.WhatsAppLogout)
+					r.Get("/telegram", h.TelegramStatus)
+				})
 			})
 
 			r.Route("/users", func(r chi.Router) {

@@ -11,21 +11,25 @@ import (
 )
 
 type Appointment struct {
-	ID              int64       `json:"id"`
-	PatientID       int64       `json:"patient_id"`
-	DoctorID        int64       `json:"doctor_id"`
-	StartTime       time.Time   `json:"start_time"`
-	EndTime         time.Time   `json:"end_time"`
-	Status          string      `json:"status"`
-	Diagnosis       pgtype.Text `json:"diagnosis"`
-	Description     pgtype.Text `json:"description"`
-	NextVisitDate   *time.Time  `json:"next_visit_date"`
-	CreatedBy       pgtype.Int8 `json:"created_by"`
-	CreatedAt       time.Time   `json:"created_at"`
-	UpdatedAt       time.Time   `json:"updated_at"`
-	ClinicID        int64       `json:"clinic_id"`
-	DiscountPercent int16       `json:"discount_percent"`
-	Rating          pgtype.Int2 `json:"rating"`
+	ID                   int64       `json:"id"`
+	PatientID            int64       `json:"patient_id"`
+	DoctorID             int64       `json:"doctor_id"`
+	StartTime            time.Time   `json:"start_time"`
+	EndTime              time.Time   `json:"end_time"`
+	Status               string      `json:"status"`
+	Diagnosis            pgtype.Text `json:"diagnosis"`
+	Description          pgtype.Text `json:"description"`
+	NextVisitDate        *time.Time  `json:"next_visit_date"`
+	CreatedBy            pgtype.Int8 `json:"created_by"`
+	CreatedAt            time.Time   `json:"created_at"`
+	UpdatedAt            time.Time   `json:"updated_at"`
+	ClinicID             int64       `json:"clinic_id"`
+	DiscountPercent      int16       `json:"discount_percent"`
+	Rating               pgtype.Int2 `json:"rating"`
+	Source               string      `json:"source"`
+	NotifyPhone          pgtype.Text `json:"notify_phone"`
+	NotifyTelegramChatID pgtype.Int8 `json:"notify_telegram_chat_id"`
+	PublicToken          pgtype.Text `json:"public_token"`
 }
 
 type AppointmentService struct {
@@ -41,14 +45,18 @@ type AppointmentService struct {
 }
 
 type Clinic struct {
-	ID              int64       `json:"id"`
-	Name            string      `json:"name"`
-	Slug            string      `json:"slug"`
-	Address         pgtype.Text `json:"address"`
-	Phone           pgtype.Text `json:"phone"`
-	IsActive        bool        `json:"is_active"`
-	CreatedAt       time.Time   `json:"created_at"`
-	AccessExpiresAt *time.Time  `json:"access_expires_at"`
+	ID               int64       `json:"id"`
+	Name             string      `json:"name"`
+	Slug             string      `json:"slug"`
+	Address          pgtype.Text `json:"address"`
+	Phone            pgtype.Text `json:"phone"`
+	IsActive         bool        `json:"is_active"`
+	CreatedAt        time.Time   `json:"created_at"`
+	AccessExpiresAt  *time.Time  `json:"access_expires_at"`
+	MapUrl           pgtype.Text `json:"map_url"`
+	OnlineBooking    bool        `json:"online_booking"`
+	GreenapiInstance pgtype.Text `json:"greenapi_instance"`
+	GreenapiToken    pgtype.Text `json:"greenapi_token"`
 }
 
 type Doctor struct {
@@ -85,6 +93,21 @@ type Event struct {
 	Action    string      `json:"action"`
 	Message   string      `json:"message"`
 	CreatedAt time.Time   `json:"created_at"`
+}
+
+type Notification struct {
+	ID            int64       `json:"id"`
+	ClinicID      int64       `json:"clinic_id"`
+	AppointmentID pgtype.Int8 `json:"appointment_id"`
+	Channel       string      `json:"channel"`
+	Recipient     string      `json:"recipient"`
+	Text          string      `json:"text"`
+	Status        string      `json:"status"`
+	Error         pgtype.Text `json:"error"`
+	Attempts      int32       `json:"attempts"`
+	NextAttemptAt time.Time   `json:"next_attempt_at"`
+	CreatedAt     time.Time   `json:"created_at"`
+	SentAt        *time.Time  `json:"sent_at"`
 }
 
 type Patient struct {

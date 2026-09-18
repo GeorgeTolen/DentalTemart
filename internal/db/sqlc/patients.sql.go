@@ -167,6 +167,37 @@ func (q *Queries) GetPatientByIIN(ctx context.Context, iin pgtype.Text) (GetPati
 	return i, err
 }
 
+const getPatientByPhone = `-- name: GetPatientByPhone :one
+SELECT id, full_name, phone, birth_date, notes, created_at, clinic_id, iin, gender, avatar_path FROM patients
+WHERE clinic_id = $1 AND phone = $2
+ORDER BY id
+LIMIT 1
+`
+
+type GetPatientByPhoneParams struct {
+	ClinicID int64       `json:"clinic_id"`
+	Phone    pgtype.Text `json:"phone"`
+}
+
+// Онлайн-запись: клиент с тем же номером в этой клинике — та же карточка.
+func (q *Queries) GetPatientByPhone(ctx context.Context, arg GetPatientByPhoneParams) (Patient, error) {
+	row := q.db.QueryRow(ctx, getPatientByPhone, arg.ClinicID, arg.Phone)
+	var i Patient
+	err := row.Scan(
+		&i.ID,
+		&i.FullName,
+		&i.Phone,
+		&i.BirthDate,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.ClinicID,
+		&i.Iin,
+		&i.Gender,
+		&i.AvatarPath,
+	)
+	return i, err
+}
+
 const listPatients = `-- name: ListPatients :many
 
 SELECT p.id, p.full_name, p.phone, p.birth_date, p.notes, p.created_at, p.clinic_id, p.iin, p.gender, p.avatar_path, c.name AS clinic_name FROM patients p

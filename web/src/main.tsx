@@ -1,8 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import App from "./App";
+import PublicBooking from "./pages/public/PublicBooking";
 import { AuthProvider } from "./auth/AuthContext";
 import { LanguageProvider } from "./lib/i18n";
 import { initTheme } from "./components/ThemeToggle";
@@ -19,11 +20,21 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthProvider>
-          <LanguageProvider>
-            <App />
-          </LanguageProvider>
-        </AuthProvider>
+        <LanguageProvider>
+          <Routes>
+            {/* Публичная запись клиентов живёт вне AuthProvider: клиент не
+                логинится, и дёргать /me на этой странице незачем. */}
+            <Route path="/book/:slug/*" element={<PublicBooking />} />
+            <Route
+              path="*"
+              element={
+                <AuthProvider>
+                  <App />
+                </AuthProvider>
+              }
+            />
+          </Routes>
+        </LanguageProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>

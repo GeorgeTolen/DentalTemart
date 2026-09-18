@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { useBookingRequests } from "../api/hooks";
 import { ROLE_LABELS } from "../lib/types";
 import { useT, type Lang } from "../lib/i18n";
 import ThemeToggle from "./ThemeToggle";
@@ -38,6 +39,17 @@ interface NavItem {
   to: string;
   label: string;
   end?: boolean;
+  // Счётчик рядом с пунктом (заявки, ждущие ответа).
+  badge?: number;
+}
+
+function Badge({ n }: { n?: number }) {
+  if (!n) return null;
+  return (
+    <span className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-semibold text-white">
+      {n}
+    </span>
+  );
 }
 
 // Календарь - главный экран: именно в нём администраторы и врачи ставят записи,
@@ -62,14 +74,23 @@ export default function Layout() {
   // управления - сервер всё равно ответит 403 на эти запросы.
   const canManage = isManager && !supportClinic;
 
+  // Заявки с онлайн-записи: бейдж в меню обновляется сам (см. хук).
+  const { data: requests } = useBookingRequests(canManage);
+  const pendingCount = requests?.count ?? 0;
+
   // Прайс и деньги менеджерские: /api/services закрыт requireManager.
   const mainLinks: NavItem[] = canManage
-    ? [...CLINIC_LINKS, { to: "/services", label: "Услуги" }]
+    ? [
+        ...CLINIC_LINKS,
+        { to: "/admin/requests", label: "Заявки", badge: pendingCount },
+        { to: "/services", label: "Услуги" },
+      ]
     : CLINIC_LINKS;
 
   const manageLinks: NavItem[] = canManage
     ? [
         { to: "/admin/new-appointment", label: "Создать запись" },
+        { to: "/admin/booking", label: "Онлайн-запись" },
         ...(isOwner ? [{ to: "/admin/users", label: "Пользователи" }] : []),
         { to: "/admin/stats", label: "Статистика" },
         { to: "/admin/archive", label: "Архив" },
@@ -167,6 +188,7 @@ export default function Layout() {
               }
             >
               {t(l.label)}
+              <Badge n={l.badge} />
             </NavLink>
           ))}
         </nav>
@@ -214,6 +236,7 @@ export default function Layout() {
                 }
               >
                 {t(l.label)}
+                <Badge n={l.badge} />
               </NavLink>
             ))}
           </nav>

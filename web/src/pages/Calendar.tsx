@@ -62,8 +62,10 @@ export default function CalendarPage() {
 
   function canMove(a: Appointment): boolean {
     if (readOnly) return false;
-    // Завершённый приём - уже история, отменённый двигать незачем.
-    if (a.status === "completed" || a.status === "cancelled") return false;
+    // Завершённый приём - уже история, отменённый двигать незачем, а заявку
+    // переносят через «Заявки» - клиенту при этом уходит сообщение.
+    if (a.status === "completed" || a.status === "cancelled" || a.status === "pending")
+      return false;
     if (isDoctor) return myDoctorId != null && a.doctor_id === myDoctorId;
     return true;
   }
@@ -71,6 +73,7 @@ export default function CalendarPage() {
   // Статус видно прямо на карточке: отменённые серые и перечёркнутые,
   // завершённые с галочкой и приглушены, «не пришёл» помечен крестом.
   const STATUS_MARK: Record<string, string> = {
+    pending: `⏳ ${t("заявка")} · `,
     completed: "✓ ",
     cancelled: `✕ ${t("отменён")} · `,
     no_show: `✕ ${t("не пришёл")} · `,
@@ -89,7 +92,9 @@ export default function CalendarPage() {
           ? ["appt-completed"]
           : a.status === "no_show"
             ? ["appt-no-show"]
-            : [],
+            : a.status === "pending"
+              ? ["appt-pending"]
+              : [],
     extendedProps: { appointment: a },
   }));
 

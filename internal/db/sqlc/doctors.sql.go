@@ -240,6 +240,46 @@ func (q *Queries) GetDoctorRating(ctx context.Context, doctorID int64) (GetDocto
 	return i, err
 }
 
+const listActiveDoctorsPublic = `-- name: ListActiveDoctorsPublic :many
+SELECT id, full_name, specialization, avatar_path
+FROM doctors
+WHERE clinic_id = $1 AND is_active
+ORDER BY full_name
+`
+
+type ListActiveDoctorsPublicRow struct {
+	ID             int64       `json:"id"`
+	FullName       string      `json:"full_name"`
+	Specialization pgtype.Text `json:"specialization"`
+	AvatarPath     pgtype.Text `json:"avatar_path"`
+}
+
+// Для публичной страницы записи: только то, что можно показать клиенту.
+func (q *Queries) ListActiveDoctorsPublic(ctx context.Context, clinicID int64) ([]ListActiveDoctorsPublicRow, error) {
+	rows, err := q.db.Query(ctx, listActiveDoctorsPublic, clinicID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveDoctorsPublicRow{}
+	for rows.Next() {
+		var i ListActiveDoctorsPublicRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FullName,
+			&i.Specialization,
+			&i.AvatarPath,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDoctorSchedules = `-- name: ListDoctorSchedules :many
 SELECT s.id, s.doctor_id, s.weekday, s.start_time, s.end_time FROM doctor_schedules s
 JOIN doctors d ON d.id = s.doctor_id
@@ -254,6 +294,40 @@ type ListDoctorSchedulesParams struct {
 
 func (q *Queries) ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedulesParams) ([]DoctorSchedule, error) {
 	rows, err := q.db.Query(ctx, listDoctorSchedules, arg.DoctorID, arg.ClinicID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DoctorSchedule{}
+	for rows.Next() {
+		var i DoctorSchedule
+		if err := rows.Scan(
+			&i.ID,
+			&i.DoctorID,
+			&i.Weekday,
+			&i.StartTime,
+			&i.EndTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDoctorSchedulesByClinic = `-- name: ListDoctorSchedulesByClinic :many
+SELECT s.id, s.doctor_id, s.weekday, s.start_time, s.end_time FROM doctor_schedules s
+JOIN doctors d ON d.id = s.doctor_id
+WHERE d.clinic_id = $1
+ORDER BY s.doctor_id, s.weekday, s.start_time
+`
+
+// Все рабочие окна врачей клиники одним запросом — для расчёта свободных слотов.
+func (q *Queries) ListDoctorSchedulesByClinic(ctx context.Context, clinicID int64) ([]DoctorSchedule, error) {
+	rows, err := q.db.Query(ctx, listDoctorSchedulesByClinic, clinicID)
 	if err != nil {
 		return nil, err
 	}

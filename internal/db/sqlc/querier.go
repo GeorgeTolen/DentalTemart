@@ -11,6 +11,9 @@ import (
 )
 
 type Querier interface {
+	BindTelegramChat(ctx context.Context, arg BindTelegramChatParams) (Appointment, error)
+	// Забираем пачку к отправке. SKIP LOCKED — на случай двух воркеров.
+	ClaimNotifications(ctx context.Context, batch int32) ([]Notification, error)
 	CountAppointmentsInRange(ctx context.Context, arg CountAppointmentsInRangeParams) (int64, error)
 	CountArchivedAppointments(ctx context.Context, clinicID int64) (int64, error)
 	// Guards against removing a clinic's last owner (nobody could administer it).
@@ -18,6 +21,7 @@ type Querier interface {
 	CountOverlappingAppointments(ctx context.Context, arg CountOverlappingAppointmentsParams) (int64, error)
 	// Тот же фильтр, что и в ListPatients — для счётчика страниц.
 	CountPatients(ctx context.Context, search pgtype.Text) (int64, error)
+	CountPendingAppointments(ctx context.Context, clinicID int64) (int64, error)
 	CountSuperadmins(ctx context.Context) (int64, error)
 	CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error)
 	CreateAppointmentService(ctx context.Context, arg CreateAppointmentServiceParams) (AppointmentService, error)
@@ -25,6 +29,12 @@ type Querier interface {
 	CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doctor, error)
 	CreateDoctorSchedule(ctx context.Context, arg CreateDoctorScheduleParams) (DoctorSchedule, error)
 	CreateEvent(ctx context.Context, arg CreateEventParams) error
+	// Очередь уведомлений клиентам (outbox). Строка кладётся в той же транзакции,
+	// что и действие (заявка создана / подтверждена / отклонена), а отправляет её
+	// фоновый воркер: недоступный WhatsApp не должен ронять работу в CRM.
+	CreateNotification(ctx context.Context, arg CreateNotificationParams) (Notification, error)
+	// Заявка с публичной страницы записи: статус pending, автора-пользователя нет.
+	CreateOnlineAppointment(ctx context.Context, arg CreateOnlineAppointmentParams) (Appointment, error)
 	CreatePatient(ctx context.Context, arg CreatePatientParams) (Patient, error)
 	CreatePatientRecord(ctx context.Context, arg CreatePatientRecordParams) (PatientRecord, error)
 	CreateService(ctx context.Context, arg CreateServiceParams) (Service, error)
@@ -48,6 +58,8 @@ type Querier interface {
 	// to validate the user_id a doctor profile is linked to.
 	DoctorUserInClinic(ctx context.Context, arg DoctorUserInClinicParams) (bool, error)
 	GetAppointment(ctx context.Context, arg GetAppointmentParams) (GetAppointmentRow, error)
+	// Статусная страница клиента: по секретному токену, без авторизации.
+	GetAppointmentByPublicToken(ctx context.Context, publicToken pgtype.Text) (GetAppointmentByPublicTokenRow, error)
 	GetClinic(ctx context.Context, id int64) (Clinic, error)
 	GetClinicBySlug(ctx context.Context, lower string) (Clinic, error)
 	// A single clinic user, scoped to their clinic (used by the platform panel to
@@ -65,12 +77,16 @@ type Querier interface {
 	// Дедупликация по ИИН в масштабах платформы: одна и та же карточка не должна
 	// заводиться в каждой клинике заново.
 	GetPatientByIIN(ctx context.Context, iin pgtype.Text) (GetPatientByIINRow, error)
+	// Онлайн-запись: клиент с тем же номером в этой клинике — та же карточка.
+	GetPatientByPhone(ctx context.Context, arg GetPatientByPhoneParams) (Patient, error)
 	// Файл отдаём любой клинике платформы (медкарта общая).
 	GetPatientRecord(ctx context.Context, id int64) (PatientRecord, error)
 	GetService(ctx context.Context, arg GetServiceParams) (Service, error)
 	// Platform admin login: superadmins are not attached to any clinic.
 	GetSuperadminByEmail(ctx context.Context, lower string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
+	// Для публичной страницы записи: только то, что можно показать клиенту.
+	ListActiveDoctorsPublic(ctx context.Context, clinicID int64) ([]ListActiveDoctorsPublicRow, error)
 	// --- Услуги, оказанные в приёме ---------------------------------------------
 	ListAppointmentServices(ctx context.Context, arg ListAppointmentServicesParams) ([]ListAppointmentServicesRow, error)
 	// Вся история пациента по всем клиникам платформы. Суммы — только по приёмам
@@ -92,6 +108,8 @@ type Querier interface {
 	// All clinics with quick aggregate counts, for the platform admin panel.
 	ListClinics(ctx context.Context) ([]ListClinicsRow, error)
 	ListDoctorSchedules(ctx context.Context, arg ListDoctorSchedulesParams) ([]DoctorSchedule, error)
+	// Все рабочие окна врачей клиники одним запросом — для расчёта свободных слотов.
+	ListDoctorSchedulesByClinic(ctx context.Context, clinicID int64) ([]DoctorSchedule, error)
 	// Includes the linked account's login (email) so the admin panel can show it,
 	// plus the doctor's average visit rating (1–10, from completed appointments;
 	// appointments of a doctor are always in the doctor's clinic by construction).
@@ -101,6 +119,7 @@ type Querier interface {
 	// cursor = 0 — первая страница. При sort=old листаем вперёд по возрастанию id,
 	// при sort=new (по умолчанию) — назад по убыванию.
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]Event, error)
+	ListNotificationsByAppointment(ctx context.Context, appointmentID pgtype.Int8) ([]Notification, error)
 	// Медкарта пациента общая для платформы: снимки и аллергии, заведённые одной
 	// клиникой, видит и лечащий врач другой. Название клиники показываем, чтобы
 	// было понятно, кто запись сделал; удалять и править можно только свои.
@@ -128,6 +147,17 @@ type Querier interface {
 	// Вход без выбора клиники: один email может быть заведён в нескольких клиниках
 	// (уникальность — в пределах клиники), поэтому берём все и сверяем пароль.
 	ListUsersByEmail(ctx context.Context, lower string) ([]User, error)
+	// Сериализует параллельные онлайн-заявки к одному врачу внутри транзакции:
+	// проверка пересечений и вставка идут под этим замком.
+	LockDoctorForBooking(ctx context.Context, doctorID int64) error
+	// Окончательная ошибка (номера нет в WhatsApp) — ретраи бессмысленны.
+	MarkNotificationFailed(ctx context.Context, arg MarkNotificationFailedParams) error
+	// Неудачная попытка: либо ставим обратно в очередь с задержкой, либо, когда
+	// попытки кончились, помечаем failed.
+	MarkNotificationRetry(ctx context.Context, arg MarkNotificationRetryParams) error
+	MarkNotificationSent(ctx context.Context, id int64) error
+	// Воркер упал посреди отправки: строки, зависшие в sending, возвращаем в очередь.
+	RequeueStaleSending(ctx context.Context) error
 	// Выработка врачей. Исполнитель берётся из позиции, а если он не указан — из
 	// врача приёма, иначе выработка «потерялась бы».
 	RevenueByDoctor(ctx context.Context, arg RevenueByDoctorParams) ([]RevenueByDoctorRow, error)
@@ -141,6 +171,7 @@ type Querier interface {
 	SetAppointmentDiscount(ctx context.Context, arg SetAppointmentDiscountParams) error
 	// Оценка посещения 1–10; повторный вызов перезаписывает её.
 	SetAppointmentRating(ctx context.Context, arg SetAppointmentRatingParams) error
+	SetAppointmentStatus(ctx context.Context, arg SetAppointmentStatusParams) (Appointment, error)
 	// Срок доступа: NULL — бессрочно, прошлое — заморожена.
 	SetClinicAccess(ctx context.Context, arg SetClinicAccessParams) (Clinic, error)
 	// Сводно по всем клиникам — для панели платформы.
@@ -154,6 +185,9 @@ type Querier interface {
 	SumRevenueInRange(ctx context.Context, arg SumRevenueInRangeParams) (SumRevenueInRangeRow, error)
 	UpdateAppointment(ctx context.Context, arg UpdateAppointmentParams) (Appointment, error)
 	UpdateClinic(ctx context.Context, arg UpdateClinicParams) (Clinic, error)
+	// Настройки онлайн-записи, которые правит сам владелец клиники.
+	UpdateClinicBookingSettings(ctx context.Context, arg UpdateClinicBookingSettingsParams) (Clinic, error)
+	UpdateClinicGreenAPI(ctx context.Context, arg UpdateClinicGreenAPIParams) (Clinic, error)
 	// Административные поля. Профильные (стаж, опыт, навыки) врач ведёт сам —
 	// см. UpdateDoctorProfile, чтобы правки владельца и врача не затирали друг друга.
 	UpdateDoctor(ctx context.Context, arg UpdateDoctorParams) (Doctor, error)

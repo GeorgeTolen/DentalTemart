@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import {
+  useApproveRequest,
   useDeleteAppointment,
   usePatients,
+  useRejectRequest,
   useSaveAppointment,
   useSavePatient,
 } from "../api/hooks";
@@ -84,6 +86,11 @@ function EditCard({
   const isManager = user?.role === "owner" || user?.role === "admin";
   const saveAppt = useSaveAppointment();
   const savePatient = useSavePatient();
+  const approveReq = useApproveRequest();
+  const rejectReq = useRejectRequest();
+  // Заявка с онлайн-записи: вместо статуса - «Подтвердить / Отклонить»,
+  // клиенту при этом уходит сообщение.
+  const isPending = existing?.status === "pending";
 
   const activeDoctors = useMemo(
     () => doctors.filter((d) => d.is_active || d.id === existing?.doctor_id),
@@ -130,8 +137,32 @@ function EditCard({
   const [error, setError] = useState("");
   const [billing, setBilling] = useState(false);
 
-  const busy = saveAppt.isPending || savePatient.isPending;
+  const busy =
+    saveAppt.isPending || savePatient.isPending || approveReq.isPending || rejectReq.isPending;
   const selectedDoctor = activeDoctors.find((d) => d.id === doctorId);
+
+  async function approve() {
+    if (!existing) return;
+    setError("");
+    try {
+      await approveReq.mutateAsync(existing.id);
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function reject() {
+    if (!existing) return;
+    if (!confirm(t("Отклонить заявку? Клиент получит сообщение."))) return;
+    setError("");
+    try {
+      await rejectReq.mutateAsync({ id: existing.id });
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
   // В мини-форме нет полей даты рождения и пола - берём их из ИИН и молча
   // отправляем вместе с новым пациентом.
   const newPatientInfo = parseIIN(newPatientIin);
@@ -240,25 +271,44 @@ function EditCard({
       title={t(existing ? "Карточка приёма" : "Новая запись")}
       onClose={onClose}
       footer={
-        <>
-          {existing && existing.status !== "cancelled" && (
-            <Button variant="secondary" onClick={onCancel} className="mr-auto">
-              {t("Отменить запись")}
+        isPending && isManager ? (
+          <>
+            <Button variant="danger" onClick={reject} disabled={busy} className="mr-auto">
+              {t("Отклонить")}
             </Button>
-          )}
-          {existing && existing.status !== "cancelled" && !readOnly && (
-            <Button variant="success" onClick={complete} disabled={busy}>
-              {t("Завершить")}
+            <Button variant="secondary" onClick={onSubmit} disabled={busy}>
+              {t("Сохранить")}
             </Button>
-          )}
-          <Button onClick={onSubmit} disabled={busy}>
-            {busy ? t("Сохранение…") : t("Сохранить")}
-          </Button>
-        </>
+            <Button variant="success" onClick={approve} disabled={busy}>
+              {t("Подтвердить заявку")}
+            </Button>
+          </>
+        ) : (
+          <>
+            {existing && existing.status !== "cancelled" && (
+              <Button variant="secondary" onClick={onCancel} className="mr-auto">
+                {t("Отменить запись")}
+              </Button>
+            )}
+            {existing && existing.status !== "cancelled" && !readOnly && (
+              <Button variant="success" onClick={complete} disabled={busy}>
+                {t("Завершить")}
+              </Button>
+            )}
+            <Button onClick={onSubmit} disabled={busy}>
+              {busy ? t("Сохранение…") : t("Сохранить")}
+            </Button>
+          </>
+        )
       }
     >
       <div className="space-y-4">
         {/* Шапка: время приёма и статус - самое главное, всегда сверху. */}
+        {isPending && (
+          <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {t("Заявка с онлайн-записи: клиент ждёт подтверждения. После ответа ему уйдёт сообщение в WhatsApp.")}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-brand-bg px-3 py-2.5">
           <button
             type="button"
@@ -341,6 +391,9 @@ function EditCard({
               value={status}
               onChange={(e) => setStatus(e.target.value as AppointmentStatus)}
             >
+              {isPending && (
+                <option value="pending">{t(STATUS_LABELS.pending)}</option>
+              )}
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {t(STATUS_LABELS[s])}

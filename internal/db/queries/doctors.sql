@@ -90,6 +90,20 @@ ORDER BY u.full_name;
 -- name: DeleteDoctor :exec
 DELETE FROM doctors WHERE id = $1 AND clinic_id = $2;
 
+-- name: ListActiveDoctorsPublic :many
+-- Для публичной страницы записи: только то, что можно показать клиенту.
+SELECT id, full_name, specialization, avatar_path
+FROM doctors
+WHERE clinic_id = $1 AND is_active
+ORDER BY full_name;
+
+-- name: ListDoctorSchedulesByClinic :many
+-- Все рабочие окна врачей клиники одним запросом — для расчёта свободных слотов.
+SELECT s.* FROM doctor_schedules s
+JOIN doctors d ON d.id = s.doctor_id
+WHERE d.clinic_id = $1
+ORDER BY s.doctor_id, s.weekday, s.start_time;
+
 -- name: ListDoctorSchedules :many
 SELECT s.* FROM doctor_schedules s
 JOIN doctors d ON d.id = s.doctor_id

@@ -8,6 +8,7 @@ import {
   useDeleteClinicUserByPlatform,
   useDeletePlatformAdmin,
   usePlatformAdmins,
+  usePlatformClinicWhatsApp,
   usePlatformStats,
   useResetClinicUserPassword,
   useSaveClinic,
@@ -212,6 +213,7 @@ export default function Platform() {
                             {c.is_active ? "Активна" : "Отключена"}
                           </span>
                           <AccessBadge clinic={c} />
+                          <WhatsAppBadge clinicId={c.id} />
                         </div>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{c.owner_count}</td>
@@ -299,6 +301,22 @@ export default function Platform() {
         <ChangePasswordModal onClose={() => setChangingPassword(false)} />
       )}
     </div>
+  );
+}
+
+// Подключила ли клиника свой WhatsApp-номер для онлайн-записи.
+function WhatsAppBadge({ clinicId }: { clinicId: number }) {
+  const { data } = usePlatformClinicWhatsApp(clinicId);
+  if (!data || data.provider === "noop") return null;
+  return (
+    <span
+      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+        data.connected ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"
+      }`}
+      title={data.error || undefined}
+    >
+      {data.connected ? "WhatsApp подключён" : "WhatsApp не подключён"}
+    </span>
   );
 }
 
@@ -842,6 +860,8 @@ function ClinicModal({
   const [address, setAddress] = useState(clinic?.address ?? "");
   const [phone, setPhone] = useState(clinic?.phone ?? "");
   const [isActive, setIsActive] = useState(clinic?.is_active ?? true);
+  const [mapUrl, setMapUrl] = useState(clinic?.map_url ?? "");
+  const [onlineBooking, setOnlineBooking] = useState(clinic?.online_booking ?? true);
   // Пробный период (только при создании): тумблер + число дней.
   const [trial, setTrial] = useState(false);
   const [trialDays, setTrialDays] = useState("7");
@@ -866,6 +886,8 @@ function ClinicModal({
       address: address.trim(),
       phone: phone.trim(),
       is_active: isActive,
+      map_url: mapUrl.trim(),
+      online_booking: onlineBooking,
     };
     if (!clinic && trial) payload.trial_days = days;
     if (!clinic && ownerEmail.trim()) {
@@ -928,6 +950,22 @@ function ClinicModal({
           />
           Активна (доступна для входа)
         </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={onlineBooking}
+            onChange={(e) => setOnlineBooking(e.target.checked)}
+            className="h-4 w-4"
+          />
+          Онлайн-запись клиентов включена
+        </label>
+        <Field label="Ссылка на клинику в 2GIS (для сообщений клиентам)">
+          <Input
+            value={mapUrl}
+            onChange={(e) => setMapUrl(e.target.value)}
+            placeholder="https://2gis.kz/…"
+          />
+        </Field>
 
         {/* Пробный период задаётся при создании; дальше срок управляется
             кнопкой «Доступ» у клиники. */}

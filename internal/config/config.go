@@ -28,6 +28,25 @@ type Config struct {
 	SuperadminName     string
 	SuperadminEmail    string
 	SuperadminPassword string
+
+	// PublicBaseURL — адрес, с которого открывается сайт (без завершающего
+	// слэша). Из него собираются ссылка на онлайн-запись клиники и ссылки в
+	// сообщениях клиентам.
+	PublicBaseURL string
+
+	// Уведомления клиентам в WhatsApp. MessengerProvider: noop (только лог),
+	// baileys (свой шлюз wa-gateway, одна сессия на клинику) или greenapi
+	// (реквизиты инстанса хранятся у каждой клиники).
+	MessengerProvider string
+	WAGatewayURL      string
+	WAGatewayToken    string
+
+	// Telegram-бот для уведомлений (пусто — канал выключен).
+	TelegramBotToken string
+
+	// BookingDebugCode — отдавать код подтверждения в ответе API. Только для
+	// разработки, когда реальной отправки нет.
+	BookingDebugCode bool
 }
 
 // Load reads configuration from the environment, optionally seeding it from a
@@ -46,6 +65,12 @@ func Load() (*Config, error) {
 		SuperadminName:     get("SUPERADMIN_NAME", get("OWNER_NAME", "")),
 		SuperadminEmail:    get("SUPERADMIN_EMAIL", get("OWNER_EMAIL", "")),
 		SuperadminPassword: get("SUPERADMIN_PASSWORD", get("OWNER_PASSWORD", "")),
+		PublicBaseURL:      trimRightSlash(get("PUBLIC_BASE_URL", "http://localhost:5173")),
+		MessengerProvider:  get("MESSENGER_PROVIDER", "noop"),
+		WAGatewayURL:       trimRightSlash(get("WA_GATEWAY_URL", "")),
+		WAGatewayToken:     get("WA_GATEWAY_TOKEN", ""),
+		TelegramBotToken:   get("TELEGRAM_BOT_TOKEN", ""),
+		BookingDebugCode:   get("BOOKING_DEBUG_CODE", "false") == "true",
 	}
 
 	var err error
@@ -62,6 +87,16 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
 
+	switch cfg.MessengerProvider {
+	case "noop", "greenapi":
+	case "baileys":
+		if cfg.WAGatewayURL == "" || cfg.WAGatewayToken == "" {
+			return nil, fmt.Errorf("MESSENGER_PROVIDER=baileys requires WA_GATEWAY_URL and WA_GATEWAY_TOKEN")
+		}
+	default:
+		return nil, fmt.Errorf("unknown MESSENGER_PROVIDER %q (noop|baileys|greenapi)", cfg.MessengerProvider)
+	}
+
 	return cfg, nil
 }
 
@@ -70,6 +105,13 @@ func get(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func trimRightSlash(s string) string {
+	for len(s) > 0 && s[len(s)-1] == '/' {
+		s = s[:len(s)-1]
+	}
+	return s
 }
 
 func splitAndTrim(s string) []string {
