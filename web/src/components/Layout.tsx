@@ -103,7 +103,11 @@ export default function Layout() {
   const [manageOpen, setManageOpen] = useState(inManage);
   const showManage = manageOpen || inManage;
 
-  const clinicName = supportClinic?.name ?? user?.clinic_name;
+  // Название клиники под логотипом. Если клиника называется так же, как
+  // платформа, подпись дублирует логотип - не показываем.
+  const rawClinicName = supportClinic?.name ?? user?.clinic_name;
+  const clinicName =
+    rawClinicName && rawClinicName.trim().toLowerCase() !== "temart" ? rawClinicName : undefined;
 
   // Выход из режима поддержки возвращает в панель платформы, а не разлогинивает.
   function onExit() {
