@@ -128,13 +128,22 @@ function Wizard({ slug, clinic }: { slug: string; clinic: PublicClinic }) {
     <div className="space-y-4">
       {/* Шапка клиники */}
       <Card>
-        <h1 className="text-xl font-bold text-ink">{clinic.name}</h1>
-        {clinic.address && <p className="mt-1 text-sm text-slate-500">{clinic.address}</p>}
-        {clinic.phone && (
-          <a href={`tel:${clinic.phone}`} className="mt-1 block text-sm text-brand">
-            {clinic.phone}
-          </a>
-        )}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <h1 className="text-xl font-bold text-ink">{clinic.name}</h1>
+              {clinic.address && (
+                <span className="truncate text-sm text-slate-500">{clinic.address}</span>
+              )}
+            </div>
+            {clinic.phone && (
+              <a href={`tel:${clinic.phone}`} className="mt-1 block text-sm text-brand">
+                {clinic.phone}
+              </a>
+            )}
+          </div>
+          <img src="/icons/icon-192.png" alt="Temart" className="h-11 w-11 shrink-0 rounded-xl" />
+        </div>
         {!clinic.whatsapp_connected && (
           <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
             {t("Клиника ещё не подключила WhatsApp: код подтверждения может не прийти. Позвоните по телефону клиники.")}

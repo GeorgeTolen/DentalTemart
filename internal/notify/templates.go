@@ -63,7 +63,7 @@ func Render(kind Kind, v View) string {
 	case KindReceived:
 		lines = []string{
 			v.ClinicName + ": заявка принята ✅",
-			v.date() + " в " + v.clock() + ", врач " + v.DoctorName + ".",
+			v.date() + " в " + v.clock() + ", вас ожидает врач " + v.DoctorName + ".",
 			"Мы подтвердим запись и пришлём сообщение.",
 			opt("Статус заявки: ", v.StatusURL),
 		}
