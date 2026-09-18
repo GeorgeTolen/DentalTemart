@@ -41,6 +41,10 @@ TMP_DUMP="$BACKUP_DIR/.db-$STAMP.part"
 if docker exec "$PG_CID" pg_dump -U "$DB_USER" -d "$DB_NAME" -Fc > "$TMP_DUMP"; then
 	mv "$TMP_DUMP" "$BACKUP_DIR/db-$STAMP.dump"
 	log "база: db-$STAMP.dump ($(du -h "$BACKUP_DIR/db-$STAMP.dump" | cut -f1))"
+	# Счётчики рядом с размером: по ним видно, что в дампе не пустота, и сколько
+	# вообще данных накопилось, не заходя в интерфейс.
+	COUNTS=$(docker exec "$PG_CID" psql -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT (SELECT count(*) FROM clinics)||' клиник, '||(SELECT count(*) FROM patients)||' пациентов, '||(SELECT count(*) FROM appointments)||' приёмов'" 2>/dev/null || true)
+	[ -n "$COUNTS" ] && log "в базе: $COUNTS"
 else
 	rm -f "$TMP_DUMP"
 	fail "pg_dump не отработал"
