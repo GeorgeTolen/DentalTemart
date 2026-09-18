@@ -142,7 +142,7 @@ function Wizard({ slug, clinic }: { slug: string; clinic: PublicClinic }) {
               </a>
             )}
           </div>
-          <img src="/icons/icon-192.png" alt="Temart" className="h-11 w-11 shrink-0 rounded-xl" />
+          <img src="/tooth.svg" alt="Temart" className="h-12 w-12 shrink-0" />
         </div>
         {!clinic.whatsapp_connected && (
           <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">

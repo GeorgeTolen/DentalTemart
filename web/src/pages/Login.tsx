@@ -123,7 +123,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm">
-        <div className="mb-1 text-center text-3xl font-bold text-brand">Temart</div>
+        <img src="/logo.svg" alt="Temart" className="mx-auto mb-2 h-28 w-auto" />
         <p className="mb-6 text-center text-sm text-slate-400">
           {t("CRM для стоматологических клиник")}
         </p>

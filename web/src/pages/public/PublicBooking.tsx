@@ -15,7 +15,8 @@ export default function PublicBooking() {
           <Route index element={<BookingPage slug={slug} />} />
           <Route path="status/:token" element={<BookingStatus slug={slug} />} />
         </Routes>
-        <p className="mt-8 text-center text-xs text-slate-400">
+        <p className="mt-8 flex items-center justify-center gap-1.5 text-xs text-slate-400">
+          <img src="/tooth.svg" alt="" className="h-4 w-4 opacity-70" />
           Temart · онлайн-запись
         </p>
       </div>

@@ -141,7 +141,7 @@ export default function Layout() {
         <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 md:hidden">
           <div className="flex min-w-0 items-center gap-2">
             <div className="min-w-0">
-              <div className="text-lg font-bold leading-none text-brand">Temart</div>
+              <img src="/logo.svg" alt="Temart" className="h-10 w-auto" />
               {clinicName && (
                 <div className="mt-0.5 truncate text-xs text-slate-400">{clinicName}</div>
               )}
@@ -198,9 +198,9 @@ export default function Layout() {
         <aside className="hidden shrink-0 flex-col gap-1 border-r border-slate-200 bg-white p-4 md:sticky md:top-0 md:flex md:h-screen md:w-64 md:overflow-y-auto">
           <div className="mb-6 flex items-start justify-between px-2">
             <div className="min-w-0">
-              <div className="text-2xl font-bold text-brand">Temart</div>
+              <img src="/logo.svg" alt="Temart" className="h-16 w-auto" />
               {clinicName && (
-                <div className="mt-0.5 truncate text-sm text-slate-400">{clinicName}</div>
+                <div className="mt-1 truncate text-sm text-slate-400">{clinicName}</div>
               )}
             </div>
             <ThemeToggle className="mt-1" />

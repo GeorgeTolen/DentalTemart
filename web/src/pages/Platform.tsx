@@ -90,8 +90,8 @@ export default function Platform() {
   return (
     <div className="min-h-screen bg-canvas">
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-        <div className="flex items-baseline gap-2">
-          <span className="text-xl font-bold text-brand">Temart</span>
+        <div className="flex items-center gap-2">
+          <img src="/logo.svg" alt="Temart" className="h-12 w-auto" />
           <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-medium text-white">
             Платформа
           </span>

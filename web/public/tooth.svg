@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke="#1e6066" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+  <!-- Знак Temart: контур зуба. Цвет задаётся через currentColor при инлайне. -->
+  <path d="M31 18 C21 18 14 27 15 39 C16 52 25 60 27 73 C29 86 34 92 39 92 C46 92 45 62 50 62 C55 62 54 92 61 92 C66 92 71 86 73 73 C75 60 84 52 85 39 C86 27 79 18 69 18 C61 18 57 24 50 24 C43 24 39 18 31 18 Z"/>
+</svg>
